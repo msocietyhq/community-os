@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
-import { auth } from "./auth";
+import { auth, authOpenAPI } from "./auth";
 import { healthRoutes } from "./routes/health";
 import { memberRoutes } from "./routes/members";
 import { eventRoutes } from "./routes/events";
@@ -21,6 +21,8 @@ const app = new Elysia()
           version: "0.1.0",
           description: "API for MSOCIETY community management",
         },
+        paths: await authOpenAPI.getPaths(),
+        components: await authOpenAPI.components,
       },
     })
   )
