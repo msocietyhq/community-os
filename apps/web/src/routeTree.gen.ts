@@ -9,42 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SignUpRouteImport } from './routes/sign-up'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as InfraRouteImport } from './routes/infra'
-import { Route as FundsRouteImport } from './routes/funds'
-import { Route as EventsRouteImport } from './routes/events'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedInfraRouteImport } from './routes/_authenticated/infra'
+import { Route as AuthenticatedFundsRouteImport } from './routes/_authenticated/funds'
+import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InfraRoute = InfraRouteImport.update({
-  id: '/infra',
-  path: '/infra',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FundsRoute = FundsRouteImport.update({
-  id: '/funds',
-  path: '/funds',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EventsRoute = EventsRouteImport.update({
-  id: '/events',
-  path: '/events',
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -52,117 +32,112 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedInfraRoute = AuthenticatedInfraRouteImport.update({
+  id: '/infra',
+  path: '/infra',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedFundsRoute = AuthenticatedFundsRouteImport.update({
+  id: '/funds',
+  path: '/funds',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/events': typeof EventsRoute
-  '/funds': typeof FundsRoute
-  '/infra': typeof InfraRoute
-  '/projects': typeof ProjectsRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
+  '/login': typeof LoginRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/events': typeof AuthenticatedEventsRoute
+  '/funds': typeof AuthenticatedFundsRoute
+  '/infra': typeof AuthenticatedInfraRoute
+  '/projects': typeof AuthenticatedProjectsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/events': typeof EventsRoute
-  '/funds': typeof FundsRoute
-  '/infra': typeof InfraRoute
-  '/projects': typeof ProjectsRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
+  '/login': typeof LoginRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/events': typeof AuthenticatedEventsRoute
+  '/funds': typeof AuthenticatedFundsRoute
+  '/infra': typeof AuthenticatedInfraRoute
+  '/projects': typeof AuthenticatedProjectsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/events': typeof EventsRoute
-  '/funds': typeof FundsRoute
-  '/infra': typeof InfraRoute
-  '/projects': typeof ProjectsRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/events': typeof AuthenticatedEventsRoute
+  '/_authenticated/funds': typeof AuthenticatedFundsRoute
+  '/_authenticated/infra': typeof AuthenticatedInfraRoute
+  '/_authenticated/projects': typeof AuthenticatedProjectsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
+    | '/dashboard'
     | '/events'
     | '/funds'
     | '/infra'
     | '/projects'
-    | '/sign-in'
-    | '/sign-up'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
+    | '/dashboard'
     | '/events'
     | '/funds'
     | '/infra'
     | '/projects'
-    | '/sign-in'
-    | '/sign-up'
   id:
     | '__root__'
     | '/'
-    | '/events'
-    | '/funds'
-    | '/infra'
-    | '/projects'
-    | '/sign-in'
-    | '/sign-up'
+    | '/_authenticated'
+    | '/login'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/events'
+    | '/_authenticated/funds'
+    | '/_authenticated/infra'
+    | '/_authenticated/projects'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  EventsRoute: typeof EventsRoute
-  FundsRoute: typeof FundsRoute
-  InfraRoute: typeof InfraRoute
-  ProjectsRoute: typeof ProjectsRoute
-  SignInRoute: typeof SignInRoute
-  SignUpRoute: typeof SignUpRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/projects': {
-      id: '/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/infra': {
-      id: '/infra'
-      path: '/infra'
-      fullPath: '/infra'
-      preLoaderRoute: typeof InfraRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/funds': {
-      id: '/funds'
-      path: '/funds'
-      fullPath: '/funds'
-      preLoaderRoute: typeof FundsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/events': {
-      id: '/events'
-      path: '/events'
-      fullPath: '/events'
-      preLoaderRoute: typeof EventsRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -172,17 +147,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/infra': {
+      id: '/_authenticated/infra'
+      path: '/infra'
+      fullPath: '/infra'
+      preLoaderRoute: typeof AuthenticatedInfraRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/funds': {
+      id: '/_authenticated/funds'
+      path: '/funds'
+      fullPath: '/funds'
+      preLoaderRoute: typeof AuthenticatedFundsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/events': {
+      id: '/_authenticated/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof AuthenticatedEventsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
+  AuthenticatedFundsRoute: typeof AuthenticatedFundsRoute
+  AuthenticatedInfraRoute: typeof AuthenticatedInfraRoute
+  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedEventsRoute: AuthenticatedEventsRoute,
+  AuthenticatedFundsRoute: AuthenticatedFundsRoute,
+  AuthenticatedInfraRoute: AuthenticatedInfraRoute,
+  AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  EventsRoute: EventsRoute,
-  FundsRoute: FundsRoute,
-  InfraRoute: InfraRoute,
-  ProjectsRoute: ProjectsRoute,
-  SignInRoute: SignInRoute,
-  SignUpRoute: SignUpRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

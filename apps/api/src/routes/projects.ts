@@ -1,5 +1,8 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { projects } from "../db/schema/projects";
+
+type Project = typeof projects.$inferSelect;
 
 export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
   .use(authMiddleware)
@@ -7,7 +10,7 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
     "/",
     async () => {
       // TODO: Implement project listing
-      return { projects: [], total: 0 };
+      return { projects: [] as Project[], total: 0 };
     },
     {
       detail: { tags: ["Projects"], summary: "List projects" },

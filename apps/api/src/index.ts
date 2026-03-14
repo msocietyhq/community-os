@@ -24,7 +24,7 @@ const app = new Elysia()
         paths: await authOpenAPI.getPaths(),
         components: await authOpenAPI.components,
       },
-    })
+    }),
   )
   .mount("/api/auth", auth.handler)
   .use(healthRoutes)
@@ -37,7 +37,7 @@ const app = new Elysia()
   .listen(env.PORT);
 
 console.log(
-  `community-os API running at ${app.server?.hostname}:${app.server?.port}`
+  `MSOCIETY community-os API running at ${app.server?.hostname}:${app.server?.port}`,
 );
 
 export type App = typeof app;
