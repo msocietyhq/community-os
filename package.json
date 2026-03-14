@@ -1,0 +1,18 @@
+{
+  "name": "community-os",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "build": "bun run --filter '*' build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "type-check": "bun run --filter '*' type-check",
+    "db:generate": "bun run --filter api db:generate",
+    "db:migrate": "bun run --filter api db:migrate",
+    "db:seed": "bun run --filter api db:seed"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260313.1"
+  }
+}
