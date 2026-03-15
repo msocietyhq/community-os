@@ -25,7 +25,7 @@ Thumbs.db
 bun.lockb
 
 # Drizzle
-drizzle/meta/
+# Migration files (drizzle/) must be committed — they're the source of truth
 
 # Logs
 *.log
