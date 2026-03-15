@@ -4,20 +4,10 @@ import { bot } from "../bot/bot";
 import { env } from "../env";
 import { loginLinkService } from "../services/login-link.service";
 
-const handleWebhook = webhookCallback(bot, "elysia", {
-  secretToken: env.WEBHOOK_SECRET,
-});
-
 export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
   .post(
     "/webhook",
-    (ctx) => {
-      console.log(
-        `[webhook] incoming update:`,
-        JSON.stringify(ctx.body, null, 2),
-      );
-      return handleWebhook(ctx);
-    },
+    webhookCallback(bot, "elysia", { secretToken: env.WEBHOOK_SECRET }),
     {
       detail: {
         tags: ["Bot"],

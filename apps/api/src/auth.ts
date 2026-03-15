@@ -10,7 +10,7 @@ export const auth = betterAuth({
     provider: "pg",
   }),
   secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL,
+  baseURL: env.API_URL,
   emailAndPassword: {
     enabled: true,
   },

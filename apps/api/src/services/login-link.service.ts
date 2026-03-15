@@ -31,7 +31,7 @@ export const loginLinkService = {
       telegramUser,
       expiresAt: Date.now() + CODE_TTL_MS,
     });
-    return `${env.BETTER_AUTH_URL}/api/v1/bot/login?code=${code}`;
+    return `${env.API_URL}/api/v1/bot/login?code=${code}`;
   },
 
   /**
@@ -66,7 +66,7 @@ export const loginLinkService = {
 
     // Call Better Auth handler directly to get proper Set-Cookie headers
     const authRequest = new Request(
-      `${env.BETTER_AUTH_URL}/api/auth/sign-in/telegram`,
+      `${env.API_URL}/api/auth/sign-in/telegram`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

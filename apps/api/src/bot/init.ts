@@ -43,7 +43,8 @@ export async function initBot(): Promise<void> {
 
   await bot.init();
 
-  await bot.api.setWebhook(env.WEBHOOK_URL, {
+  const webhookUrl = `${env.API_URL}/api/v1/bot/webhook`;
+  await bot.api.setWebhook(webhookUrl, {
     secret_token: env.WEBHOOK_SECRET,
     allowed_updates: [...ALLOWED_UPDATES],
   });

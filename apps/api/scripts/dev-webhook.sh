@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Starts a Cloudflare Tunnel for local bot webhook development.
-# Sets WEBHOOK_URL and WEBHOOK_SECRET env vars, then starts the API server.
+# Sets API_URL and WEBHOOK_SECRET env vars, then starts the API server.
 # Usage: ./scripts/dev-webhook.sh
 
 set -euo pipefail
@@ -54,12 +54,12 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-WEBHOOK_URL="${WEBHOOK_URL}/api/v1/bot/webhook"
-echo "Tunnel ready: $WEBHOOK_URL"
+API_URL="${WEBHOOK_URL}"
+echo "Tunnel ready: $API_URL"
 echo ""
 
-# Start the API server with webhook env vars
-WEBHOOK_URL="$WEBHOOK_URL" \
+# Start the API server with tunnel env vars
+API_URL="$API_URL" \
 WEBHOOK_SECRET="$SECRET" \
 PORT="$PORT" \
 exec bun run --watch src/index.ts

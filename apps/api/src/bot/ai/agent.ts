@@ -22,13 +22,18 @@ Keep responses short — this is a chat bot, not an essay writer.`;
 interface AgentParams {
   query: string;
   telegramId: string;
+  previousBotMessage?: string;
 }
 
-export async function runAgent({ query, telegramId }: AgentParams): Promise<string> {
+export async function runAgent({ query, telegramId, previousBotMessage }: AgentParams): Promise<string> {
+  const replyContext = previousBotMessage
+    ? `[The user is replying to your previous message: "${previousBotMessage}"]\n\n`
+    : "";
+
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
-      content: `[User telegram_id: ${telegramId}]\n\n${query}`,
+      content: `[User telegram_id: ${telegramId}]\n\n${replyContext}${query}`,
     },
   ];
 
