@@ -1,8 +1,10 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { reputationModel } from "./models/reputation";
 
 export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
   .use(authMiddleware)
+  .use(reputationModel)
   .get(
     "/:userId",
     async ({ params: { userId } }) => {
@@ -31,6 +33,7 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
     },
     {
       auth: true,
+      body: "reputation.event.create",
       detail: { tags: ["Reputation"], summary: "Record reputation event" },
     }
   );

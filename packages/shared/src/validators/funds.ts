@@ -6,14 +6,14 @@ export const createTransactionSchema = z.object({
   amount: z.number().positive(),
   currency: z.string().default("SGD"),
   description: z.string().min(1),
-  category_id: z.string().uuid(),
-  reference_type: z.enum(["event", "project", "provisioned_resource"]).optional(),
-  reference_id: z.string().uuid().optional(),
-  pledge_id: z.string().uuid().optional(),
-  paid_by: z.string().optional(),
-  received_by: z.string().optional(),
-  receipt_url: z.string().url().optional(),
-  occurred_at: z.string().datetime(),
+  categoryId: z.string().uuid(),
+  referenceType: z.enum(["event", "project", "provisioned_resource"]).optional(),
+  referenceId: z.string().uuid().optional(),
+  pledgeId: z.string().uuid().optional(),
+  paidBy: z.string().optional(),
+  receivedBy: z.string().optional(),
+  receiptUrl: z.string().url().optional(),
+  occurredAt: z.string().datetime(),
 });
 
 export const updateTransactionSchema = createTransactionSchema.partial();

@@ -1,11 +1,13 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { db } from "../db";
 import { members } from "../db/schema";
 import { eq } from "drizzle-orm";
+import { memberModel } from "./models/member";
 
 export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   .use(authMiddleware)
+  .use(memberModel)
   .get(
     "/me",
     async ({ user }) => {
@@ -31,21 +33,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
     },
     {
       auth: true,
-      body: t.Partial(
-        t.Object({
-          telegram_username: t.String(),
-          github_handle: t.String(),
-          phone_number: t.String(),
-          bio: t.String(),
-          skills: t.Array(t.String()),
-          interests: t.Array(t.String()),
-          current_company: t.String(),
-          current_title: t.String(),
-          education: t.String(),
-          linkedin_url: t.String(),
-          website_url: t.String(),
-        })
-      ),
+      body: "member.update",
       detail: { tags: ["Members"], summary: "Update current member profile" },
     }
   )

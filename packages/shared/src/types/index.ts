@@ -43,3 +43,5 @@ export type {
   CreateReputationEventInput,
   CreateReputationTriggerInput,
 } from "../validators/reputation";
+
+export type { PaginationInput } from "../validators/common";

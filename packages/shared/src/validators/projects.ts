@@ -12,8 +12,8 @@ export const createProjectSchema = z.object({
   nature: z.enum(PROJECT_NATURES),
   platforms: z.array(z.enum(PROJECT_PLATFORMS)).default([]),
   url: z.string().url().optional(),
-  repo_url: z.string().url().optional(),
-  thumbnail_url: z.string().url().optional(),
+  repoUrl: z.string().url().optional(),
+  thumbnailUrl: z.string().url().optional(),
 });
 
 export const updateProjectSchema = createProjectSchema.partial().extend({
@@ -21,7 +21,7 @@ export const updateProjectSchema = createProjectSchema.partial().extend({
 });
 
 export const addProjectMemberSchema = z.object({
-  user_id: z.string(),
+  userId: z.string(),
   role: z.enum(PROJECT_MEMBER_ROLES),
 });
 
