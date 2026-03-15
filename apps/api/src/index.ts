@@ -13,6 +13,7 @@ import { botRoutes } from "./routes/bot";
 import { initBot, shutdownBot } from "./bot/init";
 import { env } from "./env";
 import { AppError } from "./lib/errors";
+import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
 
 function extractValidationDetails(error: Error): string {
   return error.message;
@@ -70,6 +71,8 @@ const app = new Elysia()
     };
   })
   .use(cors())
+  .use(generalRateLimit)
+  .use(authRateLimit)
   .use(
     openapi({
       documentation: {
