@@ -3,10 +3,8 @@ import { auth } from "../auth";
 
 export const authMiddleware = new Elysia({ name: "auth-middleware" }).macro({
   auth: {
-    async resolve({ headers, status }) {
-      const session = await auth.api.getSession({
-        headers: new Headers(headers as Record<string, string>),
-      });
+    async resolve({ status, request: { headers } }) {
+      const session = await auth.api.getSession({ headers });
 
       if (!session) {
         return status(401, {
