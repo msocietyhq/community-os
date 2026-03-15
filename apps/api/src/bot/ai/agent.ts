@@ -1,4 +1,10 @@
-import { generateText, hasToolCall, tool, type ModelMessage } from "ai";
+import {
+  generateText,
+  hasToolCall,
+  stepCountIs,
+  tool,
+  type ModelMessage,
+} from "ai";
 import { z } from "zod";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { treaty } from "@elysiajs/eden";
@@ -9,7 +15,7 @@ import { env } from "../../env";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-const MAX_HISTORY = 10;
+const MAX_HISTORY = 30;
 
 function getSystemPrompt(): string {
   const today = new Date().toISOString().split("T")[0];
@@ -34,8 +40,8 @@ When presenting any kind of search results, display pertinent information in one
 Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
 If a user message is short, vague or cryptic, NEVER assume, always ask to clarify what they meant or intend to do.
 
-IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks. 
-After performing a write operation, you MUST call the "finish" tool with a summary of what was done. 
+IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks.
+After performing a write operation, you MUST call the "send_message" tool with your response to the user.
 Never repeat a write operation.
 `;
 }
@@ -93,33 +99,37 @@ export async function runAgent({
     messages,
     tools: {
       ...tools,
-      finish: tool({
+      send_message: tool({
         description:
-          "Call this tool after completing a write operation (create, update, delete) to signal you are done.",
+          "Send a message to the user. Call this after completing a write operation (create, update, delete) to deliver your response.",
         inputSchema: z.object({
-          summary: z.string().describe("Brief summary of what was done"),
+          message: z
+            .string()
+            .min(1)
+            .describe("The message to send to the user"),
         }),
         // No execute — stops the agentic loop
       }),
     },
-    stopWhen: hasToolCall("finish"),
+    stopWhen: [hasToolCall("send_message"), stepCountIs(10)],
     maxOutputTokens: 1024,
   });
 
-  // If the loop stopped due to a finish tool call, use its summary as fallback
-  const finishCall = result.steps
+  // Extract response text: prefer send_message (explicit), then model text, then fallback
+  const sendMessageCall = result.steps
     .flatMap((s) => s.toolCalls)
-    .find((tc) => tc.toolName === "finish") as
-    | { args: { summary?: string } }
+    .find((tc) => tc.toolName === "send_message") as
+    | { args: { message: string } }
     | undefined;
   const text =
+    sendMessageCall?.args?.message ||
     result.text ||
-    finishCall?.args?.summary ||
     "I couldn't generate a response. Please try again.";
 
+  // Preserve full conversation context (tool calls + results) for multi-turn
   const updatedHistory: ModelMessage[] = [
     ...messages,
-    { role: "assistant", content: text },
+    ...(result.response.messages as ModelMessage[]),
   ];
 
   // Trim to last N messages to keep context manageable
