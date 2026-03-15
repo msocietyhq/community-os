@@ -6,15 +6,27 @@ import { db } from "./db";
 import { env } from "./env";
 import { createAuditEntry } from "./middleware/audit";
 
+const webHost = new URL(env.WEB_URL).hostname;
+const isLocalhost = webHost === "localhost" || webHost === "127.0.0.1";
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.API_URL,
+  trustedOrigins: [env.WEB_URL],
   emailAndPassword: {
     enabled: true,
   },
+  ...(!isLocalhost && {
+    advanced: {
+      crossSubDomainCookies: {
+        enabled: true,
+        domain: `.${webHost}`,
+      },
+    },
+  }),
   plugins: [
     openAPI(),
     bearer(),
