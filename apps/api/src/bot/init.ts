@@ -9,6 +9,7 @@ import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
 import { registerHandler } from "./handlers/register";
 import { loginHandler } from "./handlers/login";
+import { PostgresSessionStorage } from "./session-storage";
 import { env } from "../env";
 
 const ALLOWED_UPDATES = [
@@ -52,7 +53,7 @@ export async function initBot(): Promise<void> {
   });
 
   // Session must be registered before conversations and handlers
-  bot.use(session({ initial: () => ({}) }));
+  bot.use(session({ initial: () => ({}), storage: new PostgresSessionStorage() }));
   // Conversations plugin must be registered before conversation handlers
   bot.use(conversations());
 

@@ -7,3 +7,4 @@ export * from "./infra";
 export * from "./funds";
 export * from "./reputation";
 export * from "./audit";
+export * from "./bot";

@@ -59,6 +59,111 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
+    create_event: tool({
+      description: "Create a new community event. Only available to admins.",
+      inputSchema: z.object({
+        title: z.string().describe("Event title"),
+        description: z.string().optional().describe("Event description"),
+        event_type: z
+          .enum(["meetup", "workshop", "hackathon", "talk", "social", "other"])
+          .describe("Type of event"),
+        venue_id: z.string().optional().describe("Venue ID to host the event at"),
+        is_online: z.boolean().default(false).describe("Whether the event is online"),
+        online_url: z.string().optional().describe("URL for online event"),
+        starts_at: z.string().describe("Start date/time in ISO 8601 format"),
+        ends_at: z.string().optional().describe("End date/time in ISO 8601 format"),
+        max_attendees: z.number().optional().describe("Maximum number of attendees"),
+      }),
+      execute: async ({
+        title,
+        description,
+        event_type,
+        venue_id,
+        is_online,
+        online_url,
+        starts_at,
+        ends_at,
+        max_attendees,
+      }) => {
+        const { data, error } = await ctx.api.api.v1.events.post({
+          title,
+          description,
+          eventType: event_type,
+          venueId: venue_id,
+          isOnline: is_online,
+          onlineUrl: online_url,
+          startsAt: starts_at,
+          endsAt: ends_at,
+          maxAttendees: max_attendees,
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    update_event: tool({
+      description: "Update an existing event. Only available to admins.",
+      inputSchema: z.object({
+        event_id: z.string().describe("The event ID"),
+        title: z.string().optional().describe("Event title"),
+        description: z.string().optional().describe("Event description"),
+        event_type: z
+          .enum(["meetup", "workshop", "hackathon", "talk", "social", "other"])
+          .optional()
+          .describe("Type of event"),
+        venue_id: z.string().optional().describe("Venue ID"),
+        is_online: z.boolean().optional().describe("Whether the event is online"),
+        online_url: z.string().optional().describe("URL for online event"),
+        starts_at: z.string().optional().describe("Start date/time in ISO 8601 format"),
+        ends_at: z.string().optional().describe("End date/time in ISO 8601 format"),
+        max_attendees: z.number().optional().describe("Maximum number of attendees"),
+        status: z
+          .enum(["draft", "published", "cancelled", "completed"])
+          .optional()
+          .describe("Event status"),
+      }),
+      execute: async ({
+        event_id,
+        title,
+        description,
+        event_type,
+        venue_id,
+        is_online,
+        online_url,
+        starts_at,
+        ends_at,
+        max_attendees,
+        status,
+      }) => {
+        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).patch({
+          title,
+          description,
+          eventType: event_type,
+          venueId: venue_id,
+          isOnline: is_online,
+          onlineUrl: online_url,
+          startsAt: starts_at,
+          endsAt: ends_at,
+          maxAttendees: max_attendees,
+          status,
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    delete_event: tool({
+      description: "Cancel/delete an event. Only available to admins.",
+      inputSchema: z.object({
+        event_id: z.string().describe("The event ID"),
+      }),
+      execute: async ({ event_id }) => {
+        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).delete();
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
     list_projects: tool({
       description: "List community projects",
       inputSchema: z.object({
@@ -215,6 +320,106 @@ export function createTools(ctx: ToolContext) {
         const { data, error } = await ctx.api.api.v1.venues.get({
           query: { q, page: 1, limit: limit ?? 20 },
         });
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    create_venue: tool({
+      description: "Create a new venue/location. Only available to admins.",
+      inputSchema: z.object({
+        name: z.string().describe("Venue name"),
+        address: z.string().optional().describe("Street address"),
+        city: z.string().optional().describe("City"),
+        country: z.string().optional().describe("2-letter country code (e.g. 'AE')"),
+        postal_code: z.string().optional().describe("Postal/ZIP code"),
+        maps_url: z.string().optional().describe("Google Maps or similar URL"),
+        capacity: z.number().optional().describe("Maximum capacity"),
+        cost_per_day: z.number().optional().describe("Cost per day in base currency"),
+        cost_notes: z.string().optional().describe("Notes about cost (e.g. discounts)"),
+        notes: z.string().optional().describe("General notes about the venue"),
+      }),
+      execute: async ({
+        name,
+        address,
+        city,
+        country,
+        postal_code,
+        maps_url,
+        capacity,
+        cost_per_day,
+        cost_notes,
+        notes,
+      }) => {
+        const { data, error } = await ctx.api.api.v1.venues.post({
+          name,
+          address,
+          city,
+          country,
+          postalCode: postal_code,
+          mapsUrl: maps_url,
+          capacity,
+          costPerDay: cost_per_day,
+          costNotes: cost_notes,
+          notes,
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    update_venue: tool({
+      description: "Update an existing venue. Only available to admins.",
+      inputSchema: z.object({
+        venue_id: z.string().describe("The venue ID"),
+        name: z.string().optional().describe("Venue name"),
+        address: z.string().optional().describe("Street address"),
+        city: z.string().optional().describe("City"),
+        country: z.string().optional().describe("2-letter country code"),
+        postal_code: z.string().optional().describe("Postal/ZIP code"),
+        maps_url: z.string().optional().describe("Google Maps or similar URL"),
+        capacity: z.number().optional().describe("Maximum capacity"),
+        cost_per_day: z.number().optional().describe("Cost per day in base currency"),
+        cost_notes: z.string().optional().describe("Notes about cost"),
+        notes: z.string().optional().describe("General notes about the venue"),
+      }),
+      execute: async ({
+        venue_id,
+        name,
+        address,
+        city,
+        country,
+        postal_code,
+        maps_url,
+        capacity,
+        cost_per_day,
+        cost_notes,
+        notes,
+      }) => {
+        const { data, error } = await ctx.api.api.v1.venues({ id: venue_id }).patch({
+          name,
+          address,
+          city,
+          country,
+          postalCode: postal_code,
+          mapsUrl: maps_url,
+          capacity,
+          costPerDay: cost_per_day,
+          costNotes: cost_notes,
+          notes,
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    delete_venue: tool({
+      description: "Delete a venue. Only available to admins.",
+      inputSchema: z.object({
+        venue_id: z.string().describe("The venue ID"),
+      }),
+      execute: async ({ venue_id }) => {
+        const { data, error } = await ctx.api.api.v1.venues({ id: venue_id }).delete();
         if (error) return { status: error.status, value: error.value };
         return data;
       },
