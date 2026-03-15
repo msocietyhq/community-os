@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { checkPermission } from "../middleware/permissions";
 import { projects } from "../db/schema/projects";
 import { projectModel } from "./models/project";
 
@@ -15,6 +16,8 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
       return { projects: [] as Project[], total: 0 };
     },
     {
+      auth: true,
+      beforeHandle: checkPermission("read", "Project"),
       detail: { tags: ["Projects"], summary: "List projects" },
     }
   )
@@ -25,6 +28,8 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
       return { id };
     },
     {
+      auth: true,
+      beforeHandle: checkPermission("read", "Project"),
       detail: { tags: ["Projects"], summary: "Get project by ID" },
     }
   )
@@ -36,6 +41,7 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("create", "Project"),
       body: "project.create",
       detail: { tags: ["Projects"], summary: "Create project" },
     }
@@ -48,6 +54,7 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("update", "Project"),
       body: "project.member.add",
       detail: { tags: ["Projects"], summary: "Add project member" },
     }
@@ -60,6 +67,7 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("endorse", "Project"),
       detail: { tags: ["Projects"], summary: "Endorse project" },
     }
   );

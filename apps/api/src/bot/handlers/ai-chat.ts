@@ -58,6 +58,7 @@ aiChatHandler.on("message:text", async (ctx) => {
     const { text: responseText, updatedHistory } = await runAgent({
       query,
       telegramId,
+      telegramUser: ctx.from!,
       chatHistory,
     });
 

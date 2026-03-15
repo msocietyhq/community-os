@@ -1,12 +1,18 @@
 export const ROLES = ["member", "admin", "superadmin"] as const;
 export type Role = (typeof ROLES)[number];
 
+export function isRole(value: string): value is Role {
+  return (ROLES as readonly string[]).includes(value);
+}
+
 export const ROLE_HIERARCHY: Record<Role, number> = {
   member: 0,
   admin: 1,
   superadmin: 2,
 };
 
+// NOTE: CASL abilities (see abilities.ts) are the runtime source of truth for
+// authorization. This map is kept as documentation and for reference.
 export const PERMISSIONS = {
   // Members
   "members:read": ["member", "admin", "superadmin"],

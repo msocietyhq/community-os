@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { checkPermission } from "../middleware/permissions";
 import { db } from "../db";
 import { members } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -18,6 +19,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("read", "Member"),
       detail: { tags: ["Members"], summary: "Get current member profile" },
     }
   )
@@ -33,6 +35,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("update", "Member"),
       body: "member.update",
       detail: { tags: ["Members"], summary: "Update current member profile" },
     }
@@ -45,6 +48,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("read", "Member"),
       detail: { tags: ["Members"], summary: "List all members" },
     }
   );

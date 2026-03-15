@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { checkPermission } from "../middleware/permissions";
 import { reputationModel } from "./models/reputation";
 
 export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
@@ -12,6 +13,8 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
       return { userId, score: 0, events: [] };
     },
     {
+      auth: true,
+      beforeHandle: checkPermission("read", "Reputation"),
       detail: { tags: ["Reputation"], summary: "Get user reputation" },
     }
   )
@@ -22,6 +25,8 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
       return { leaderboard: [] };
     },
     {
+      auth: true,
+      beforeHandle: checkPermission("read", "Reputation"),
       detail: { tags: ["Reputation"], summary: "Get reputation leaderboard" },
     }
   )
@@ -33,6 +38,7 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
     },
     {
       auth: true,
+      beforeHandle: checkPermission("create", "Reputation"),
       body: "reputation.event.create",
       detail: { tags: ["Reputation"], summary: "Record reputation event" },
     }

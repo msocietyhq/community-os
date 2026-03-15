@@ -1,11 +1,10 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { eventsService } from "../../services/events.service";
-import { membersService } from "../../services/members.service";
-import { AppError } from "../../lib/errors";
+import type { treaty } from "@elysiajs/eden";
+import type { App } from "../../app";
 
 export interface ToolContext {
-  userId: string;
+  api: ReturnType<typeof treaty<App>>;
 }
 
 export function createTools(ctx: ToolContext) {
@@ -23,15 +22,11 @@ export function createTools(ctx: ToolContext) {
           .describe("Number of events to return (default: 5)"),
       }),
       execute: async ({ status, limit }) => {
-        try {
-          return await eventsService.list(
-            { status, page: 1, limit: limit ?? 5 },
-            "member",
-          );
-        } catch (e) {
-          if (e instanceof AppError) return { error: e.message };
-          return { error: "Something went wrong." };
-        }
+        const { data, error } = await ctx.api.api.v1.events.get({
+          query: { status, page: 1, limit: limit ?? 5 },
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -41,12 +36,9 @@ export function createTools(ctx: ToolContext) {
         event_id: z.string().describe("The event ID or slug"),
       }),
       execute: async ({ event_id }) => {
-        try {
-          return await eventsService.getById(event_id);
-        } catch (e) {
-          if (e instanceof AppError) return { error: e.message };
-          return { error: "Something went wrong." };
-        }
+        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -59,12 +51,11 @@ export function createTools(ctx: ToolContext) {
           .describe("RSVP status"),
       }),
       execute: async ({ event_id, status }) => {
-        try {
-          return await eventsService.rsvp(event_id, ctx.userId, status);
-        } catch (e) {
-          if (e instanceof AppError) return { error: e.message };
-          return { error: "Something went wrong." };
-        }
+        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).rsvp.post({
+          rsvpStatus: status,
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -77,7 +68,9 @@ export function createTools(ctx: ToolContext) {
           .describe("Filter by project status"),
       }),
       execute: async () => {
-        return { message: "Projects feature is not yet available." };
+        const { data, error } = await ctx.api.api.v1.projects.get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -86,15 +79,10 @@ export function createTools(ctx: ToolContext) {
       inputSchema: z.object({
         user_id: z.string().describe("The user ID of the member"),
       }),
-      execute: async ({ user_id }) => {
-        try {
-          const member = await membersService.findByUserId(user_id);
-          if (!member) return { error: "Member not found." };
-          return member;
-        } catch (e) {
-          if (e instanceof AppError) return { error: e.message };
-          return { error: "Something went wrong." };
-        }
+      execute: async () => {
+        const { data, error } = await ctx.api.api.v1.members.get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -123,20 +111,15 @@ export function createTools(ctx: ToolContext) {
         current_company,
         current_title,
       }) => {
-        try {
-          const updated = await membersService.update(ctx.userId, {
-            bio,
-            skills,
-            interests,
-            currentCompany: current_company,
-            currentTitle: current_title,
-          });
-          if (!updated) return { error: "Profile not found." };
-          return updated;
-        } catch (e) {
-          if (e instanceof AppError) return { error: e.message };
-          return { error: "Something went wrong." };
-        }
+        const { data, error } = await ctx.api.api.v1.members.me.patch({
+          bio,
+          skills,
+          interests,
+          currentCompany: current_company,
+          currentTitle: current_title,
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -144,14 +127,9 @@ export function createTools(ctx: ToolContext) {
       description: "Get the requesting user's own community profile",
       inputSchema: z.object({}),
       execute: async () => {
-        try {
-          const member = await membersService.findByUserId(ctx.userId);
-          if (!member) return { error: "You don't have a profile yet." };
-          return member;
-        } catch (e) {
-          if (e instanceof AppError) return { error: e.message };
-          return { error: "Something went wrong." };
-        }
+        const { data, error } = await ctx.api.api.v1.members.me.get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -172,7 +150,9 @@ export function createTools(ctx: ToolContext) {
           .describe("Number of entries to return (default: 10)"),
       }),
       execute: async () => {
-        return { message: "Leaderboard feature is not yet available." };
+        const { data, error } = await ctx.api.api.v1.reputation.leaderboard.get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -180,7 +160,9 @@ export function createTools(ctx: ToolContext) {
       description: "Get community fund summary. Only available to admins.",
       inputSchema: z.object({}),
       execute: async () => {
-        return { message: "Fund overview feature is not yet available." };
+        const { data, error } = await ctx.api.api.v1.funds.overview.get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 
@@ -189,7 +171,9 @@ export function createTools(ctx: ToolContext) {
         "Get what the community owes the requesting user or vice versa",
       inputSchema: z.object({}),
       execute: async () => {
-        return { message: "Balance feature is not yet available." };
+        const { data, error } = await ctx.api.api.v1.funds.balances.get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
   };

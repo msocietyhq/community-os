@@ -1,7 +1,9 @@
 import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { treaty } from "@elysiajs/eden";
+import { app } from "../../app";
 import { createTools } from "./tools";
-import { resolveUser } from "../lib/auth";
+import { resolveUser, getBotToken, type TelegramUser } from "../lib/auth";
 import { env } from "../../env";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
@@ -24,6 +26,7 @@ Keep responses short — this is a chat bot, not an essay writer.`;
 interface AgentParams {
   query: string;
   telegramId: string;
+  telegramUser: TelegramUser;
   chatHistory: ModelMessage[];
 }
 
@@ -35,6 +38,7 @@ interface AgentResult {
 export async function runAgent({
   query,
   telegramId,
+  telegramUser,
   chatHistory,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
@@ -45,7 +49,21 @@ export async function runAgent({
     };
   }
 
-  const tools = createTools({ userId: resolved.user.id });
+  // Create a bearer token for this user's session
+  const token = await getBotToken(telegramUser);
+  if (!token) {
+    return {
+      text: "I'm having trouble authenticating you. Please try again later.",
+      updatedHistory: chatHistory,
+    };
+  }
+
+  // In-process API client with the user's auth token
+  const api = treaty(app, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  const tools = createTools({ api });
 
   const messages: ModelMessage[] = [
     ...chatHistory,
