@@ -4,6 +4,11 @@ import type { BotContext } from "../types";
 export const helpHandler = new Composer<BotContext>();
 
 helpHandler.command("start", async (ctx) => {
+  if (ctx.match === "register") {
+    await ctx.conversation.enter("registerConversation");
+    return;
+  }
+
   await ctx.reply(
     `Welcome to the MSOCIETY Bot! 🤖\n\n` +
       `I help manage the MSOCIETY community. Here's what I can do:\n\n` +
