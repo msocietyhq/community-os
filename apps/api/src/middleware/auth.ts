@@ -10,8 +10,10 @@ export const authMiddleware = new Elysia({ name: "auth-middleware" }).macro({
 
       if (!session) {
         return status(401, {
-          error: "Unauthorized",
-          message: "Valid session required",
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Valid session required",
+          },
         });
       }
 
