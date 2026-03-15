@@ -1,6 +1,7 @@
 import { eq, and, isNull, gt, lte, count, desc, asc, sql } from "drizzle-orm";
 import { db } from "../db";
 import { events, eventAttendees } from "../db/schema/events";
+import { venues } from "../db/schema/venues";
 import { account } from "../db/schema/auth";
 import { user } from "../db/schema/auth";
 import { AppError } from "../lib/errors";
@@ -103,6 +104,66 @@ export const eventsService = {
       );
 
     return { ...event, attendeeCount: countResult[0]?.attendeeCount ?? 0 };
+  },
+
+  async getBySlug(slug: string) {
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.slug, slug), isNull(events.deletedAt)));
+
+    if (!event) {
+      throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
+    }
+
+    const countResult = await db
+      .select({ attendeeCount: count() })
+      .from(eventAttendees)
+      .where(
+        and(
+          eq(eventAttendees.eventId, event.id),
+          eq(eventAttendees.rsvpStatus, "going"),
+        ),
+      );
+
+    return { ...event, attendeeCount: countResult[0]?.attendeeCount ?? 0 };
+  },
+
+  async listUpcoming(limit = 5) {
+    const attendeeCountSq = db
+      .select({
+        eventId: eventAttendees.eventId,
+        attendeeCount: count().as("attendee_count"),
+      })
+      .from(eventAttendees)
+      .where(eq(eventAttendees.rsvpStatus, "going"))
+      .groupBy(eventAttendees.eventId)
+      .as("attendee_counts");
+
+    const rows = await db
+      .select({
+        event: events,
+        venueName: venues.name,
+        attendeeCount: sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(Number),
+      })
+      .from(events)
+      .leftJoin(venues, eq(events.venueId, venues.id))
+      .leftJoin(attendeeCountSq, eq(events.id, attendeeCountSq.eventId))
+      .where(
+        and(
+          eq(events.status, "published"),
+          gt(events.startsAt, new Date()),
+          isNull(events.deletedAt),
+        ),
+      )
+      .orderBy(asc(events.startsAt))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      ...row.event,
+      venueName: row.venueName,
+      attendeeCount: row.attendeeCount,
+    }));
   },
 
   async update(id: string, input: UpdateEventInput) {

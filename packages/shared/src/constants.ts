@@ -51,6 +51,12 @@ export const PERMISSIONS = {
   "reputation:read": ["member", "admin", "superadmin"],
   "reputation:create": ["member", "admin", "superadmin"],
 
+  // Venues
+  "venues:read": ["member", "admin", "superadmin"],
+  "venues:create": ["admin", "superadmin"],
+  "venues:update": ["admin", "superadmin"],
+  "venues:delete": ["admin", "superadmin"],
+
   // Audit
   "audit:read": ["admin", "superadmin"],
 } as const satisfies Record<string, readonly Role[]>;
@@ -149,6 +155,7 @@ export const AUDIT_ENTITY_TYPES = [
   "fund",
   "member",
   "subdomain",
+  "venue",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

@@ -22,6 +22,7 @@ export type Subjects =
   | "Project"
   | ProjectSubject
   | "Infra"
+  | "Venue"
   | "Fund"
   | "Reputation"
   | "Audit"
@@ -68,6 +69,11 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("update", "Project");
     can("delete", "Project");
     can("endorse", "Project");
+    // Venues
+    can("read", "Venue");
+    can("create", "Venue");
+    can("update", "Venue");
+    can("delete", "Venue");
     // Infra
     can("read", "Infra");
     can("provision", "Infra");
@@ -90,6 +96,7 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("read", "Project");
     can("create", "Project");
     can("update", "Project", { ownerId: user.id });
+    can("read", "Venue");
     can("read", "Reputation");
     can("create", "Reputation");
   }

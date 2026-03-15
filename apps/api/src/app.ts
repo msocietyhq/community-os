@@ -9,6 +9,7 @@ import { projectRoutes } from "./routes/projects";
 import { infraRoutes } from "./routes/infra";
 import { fundRoutes } from "./routes/funds";
 import { reputationRoutes } from "./routes/reputation";
+import { venueRoutes } from "./routes/venues";
 import { botRoutes } from "./routes/bot";
 import { authLoginRoutes } from "./routes/auth-login";
 import { AppError } from "./lib/errors";
@@ -102,6 +103,7 @@ export const app = new Elysia()
   .use(projectRoutes)
   .use(infraRoutes)
   .use(fundRoutes)
+  .use(venueRoutes)
   .use(reputationRoutes)
   .use(botRoutes);
 
