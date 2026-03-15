@@ -1,12 +1,13 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { db } from "../db";
 import { members } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { updateMemberSchema } from "@community-os/shared/validators";
+import { memberModel } from "./models/member";
 
 export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   .use(authMiddleware)
+  .use(memberModel)
   .get(
     "/me",
     async ({ user }) => {
@@ -32,7 +33,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
     },
     {
       auth: true,
-      body: updateMemberSchema,
+      body: "member.update",
       detail: { tags: ["Members"], summary: "Update current member profile" },
     }
   )

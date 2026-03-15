@@ -1,9 +1,10 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
-import { createReputationEventSchema } from "@community-os/shared/validators";
+import { reputationModel } from "./models/reputation";
 
 export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
   .use(authMiddleware)
+  .use(reputationModel)
   .get(
     "/:userId",
     async ({ params: { userId } }) => {
@@ -32,7 +33,7 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
     },
     {
       auth: true,
-      body: createReputationEventSchema,
+      body: "reputation.event.create",
       detail: { tags: ["Reputation"], summary: "Record reputation event" },
     }
   );

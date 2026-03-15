@@ -1,12 +1,13 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { projects } from "../db/schema/projects";
-import { createProjectSchema, addProjectMemberSchema } from "@community-os/shared/validators";
+import { projectModel } from "./models/project";
 
 type Project = typeof projects.$inferSelect;
 
 export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
   .use(authMiddleware)
+  .use(projectModel)
   .get(
     "/",
     async () => {
@@ -35,7 +36,7 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
     },
     {
       auth: true,
-      body: createProjectSchema,
+      body: "project.create",
       detail: { tags: ["Projects"], summary: "Create project" },
     }
   )
@@ -47,7 +48,7 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
     },
     {
       auth: true,
-      body: addProjectMemberSchema,
+      body: "project.member.add",
       detail: { tags: ["Projects"], summary: "Add project member" },
     }
   )
