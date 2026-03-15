@@ -39,8 +39,7 @@
 ```
 community-os/
 ├── apps/
-│   ├── api/          # ElysiaJS API server
-│   ├── bot/          # Telegram bot (grammY + Claude AI)
+│   ├── api/          # ElysiaJS API server + Telegram bot
 │   └── web/          # TanStack Router SPA
 ├── packages/
 │   └── shared/       # Zod validators, types, constants
@@ -49,10 +48,13 @@ community-os/
 
 ### Package Purposes
 
-- **`apps/api`** — REST API with OpenAPI docs, Better Auth, Drizzle ORM. All business logic lives here.
-- **`apps/bot`** — Telegram bot that calls the API via Eden Treaty. Handles reputation tracking, AI chat, commands.
+- **`apps/api`** — REST API with OpenAPI docs, Better Auth, Drizzle ORM. All business logic lives here. Includes the Telegram bot (`src/bot/`) which runs in-process and calls services directly (see ADR-005).
 - **`apps/web`** — SPA portal at `hub.msociety.dev`. Consumes API via Eden Treaty for end-to-end type safety.
 - **`packages/shared`** — Shared Zod validators, TypeScript types, and constants used by all apps.
+
+### Bot Architecture
+
+The Telegram bot lives at `apps/api/src/bot/` and runs inside the API process. Key rule: **bot code must only call services (`src/services/`), never import from `src/db/` directly**. The bot is a presentation layer — like HTTP routes, but for Telegram.
 
 ## Documentation
 
@@ -67,10 +69,8 @@ See `/docs/README.md` for the full documentation structure. Key locations:
 
 ```bash
 bun install              # Install all workspace dependencies
-bun dev                  # Start all apps in dev mode
-bun run --filter api dev # Start API only
-bun run --filter web dev # Start web only
-bun run --filter bot dev # Start bot only
+bun dev                  # Start all apps in dev mode (API + web)
+bun run --filter api dev # Start API only (includes bot)
 bun build                # Build all apps
 bun lint                 # Run Biome linter
 bun lint:fix             # Auto-fix lint issues
@@ -86,6 +86,17 @@ bun db:seed              # Seed database with initial data
 - **ALWAYS** use `drizzle-kit generate` to create migration files, then `drizzle-kit migrate` to apply them.
 - Migration files MUST be committed to git — they are the source of truth for schema changes.
 - All schema definitions live in `apps/api/src/db/schema/`.
+
+## ElysiaJS Conventions
+
+Follow the patterns from the [ElysiaJS best practices](https://elysiajs.com/essential/best-practice.html):
+
+- **Zod is the single source of truth** for all validation schemas — defined in `packages/shared`, never duplicated
+- **Register Zod schemas as Elysia models** via `.model()` in per-module `model.ts` files, then reference by name in routes (`body: 'event.create'`)
+- **Derive TypeScript types from Zod** (`z.infer<typeof schema>`) — never create standalone interfaces or classes for request/response shapes
+- **Define `response` schemas** on every route so OpenAPI docs are accurate
+- **Deconstruct context** in route handlers — don't pass the entire Elysia `Context` to service functions
+- **Service layer is framework-agnostic** — services receive plain typed args, not Elysia-specific objects
 
 ## Auth Architecture
 

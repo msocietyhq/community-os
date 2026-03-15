@@ -12,10 +12,11 @@ community-os consists of multiple applications (API, web portal, Telegram bot) t
 
 Use a **Bun workspace monorepo** with the following structure:
 
-- `apps/api` — ElysiaJS API server
-- `apps/bot` — grammY Telegram bot
+- `apps/api` — ElysiaJS API server (includes Telegram bot, see ADR-005)
 - `apps/web` — TanStack Router SPA
 - `packages/shared` — Shared Zod validators, types, constants
+
+> **Note**: `apps/bot` was merged into `apps/api` per [ADR-005](ADR-005-merge-bot-into-api.md). The monorepo now has 2 apps instead of 3.
 
 **Tooling choices:**
 - **Runtime**: Bun (fast, built-in TypeScript, built-in test runner, workspace support)

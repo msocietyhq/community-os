@@ -1,11 +1,9 @@
-import { apiClient } from "./api-client";
-
 /**
  * Resolve a Telegram user ID to a community-os user.
- * Used by the bot to authenticate API calls on behalf of users.
+ * Used by the bot to authenticate actions on behalf of users.
  */
 export async function resolveUser(telegramId: string) {
-  // TODO: Call API to resolve telegram_id → user
+  // TODO: Call member service to resolve telegram_id → user
   // This will look up the members table by telegram_id
   // and return the associated user + member data
   return null;
@@ -13,7 +11,7 @@ export async function resolveUser(telegramId: string) {
 
 /**
  * Get or create a bearer token for a Telegram user.
- * Used for authenticated API calls from the bot.
+ * Used for authenticated service calls from the bot.
  */
 export async function getBotToken(telegramId: string): Promise<string | null> {
   // TODO: Implement bot token resolution

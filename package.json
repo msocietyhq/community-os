@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "concurrently -n api,bot,web -c blue,magenta,cyan --kill-others-on-fail \"bun run --cwd apps/api dev\" \"bun run --cwd apps/bot dev\" \"bun run --cwd apps/web dev\"",
+    "dev": "concurrently -n api,web -c blue,cyan --kill-others-on-fail \"bun run --cwd apps/api dev\" \"bun run --cwd apps/web dev\"",
     "build": "bun run --filter '*' build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

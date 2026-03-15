@@ -1,11 +1,10 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../types";
-import { apiClient } from "../lib/api-client";
 
 export const eventsHandler = new Composer<BotContext>();
 
 eventsHandler.command("events", async (ctx) => {
-  // TODO: Fetch upcoming events from API
+  // TODO: Call events service directly to fetch upcoming events
   await ctx.reply(
     "📅 *Upcoming Events*\n\nNo upcoming events right now. Check back soon!",
     { parse_mode: "Markdown" }
@@ -19,6 +18,6 @@ eventsHandler.command("rsvp", async (ctx) => {
     return;
   }
 
-  // TODO: RSVP via API
+  // TODO: Call events service directly to RSVP
   await ctx.reply(`RSVP functionality coming soon for: ${args}`);
 });

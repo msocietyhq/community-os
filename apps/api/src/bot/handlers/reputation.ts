@@ -44,6 +44,6 @@ reputationHandler.on("message:text", async (ctx, next) => {
 
 // /reputation command
 reputationHandler.command("reputation", async (ctx) => {
-  // TODO: Fetch reputation from API and display
+  // TODO: Call reputation service directly to fetch score
   await ctx.reply("Your reputation score: coming soon!");
 });

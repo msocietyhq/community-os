@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { tools } from "./tools";
-import { env } from "../env";
+import { env } from "../../env";
 
 const anthropic = new Anthropic({
   apiKey: env.ANTHROPIC_API_KEY,
@@ -49,7 +49,7 @@ export async function runAgent({ query, telegramId }: AgentParams): Promise<stri
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
     for (const toolUse of toolUseBlocks) {
-      // TODO: Execute tool calls against community-os API
+      // TODO: Execute tool calls against services directly
       const result = await executeToolCall(toolUse.name, toolUse.input as Record<string, unknown>);
       toolResults.push({
         type: "tool_result",
@@ -81,6 +81,6 @@ async function executeToolCall(
   name: string,
   input: Record<string, unknown>
 ): Promise<unknown> {
-  // TODO: Route tool calls to community-os API via Eden Treaty
+  // TODO: Route tool calls to services directly (no more Eden Treaty)
   return { error: "Tool execution not yet implemented" };
 }

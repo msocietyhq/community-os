@@ -9,9 +9,11 @@ const envSchema = z.object({
   CLOUDFLARE_ZONE_ID: z.string().optional(),
   NEON_API_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
-  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_BOT_USERNAME: z.string().default("msocietybot"),
-  API_URL: z.string().url().default("http://localhost:3000"),
+  ANTHROPIC_API_KEY: z.string().min(1),
+  WEBHOOK_URL: z.string().url(),
+  WEBHOOK_SECRET: z.string().min(32),
   PORT: z.coerce.number().default(3000),
 });
 

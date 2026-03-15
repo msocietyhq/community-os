@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Starts the bot in webhook mode with a Cloudflare Tunnel for local development.
+# Starts a Cloudflare Tunnel for local bot webhook development.
+# Sets WEBHOOK_URL and WEBHOOK_SECRET env vars, then starts the API server.
 # Usage: ./scripts/dev-webhook.sh
 
 set -euo pipefail
 
-PORT="${PORT:-3001}"
+PORT="${PORT:-3000}"
 SECRET="${WEBHOOK_SECRET:-$(openssl rand -hex 32)}"
 
 # Start cloudflared tunnel in background, capture the URL
@@ -53,12 +54,11 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-WEBHOOK_URL="${WEBHOOK_URL}/webhook"
+WEBHOOK_URL="${WEBHOOK_URL}/api/v1/bot/webhook"
 echo "Tunnel ready: $WEBHOOK_URL"
 echo ""
 
-# Start the bot in webhook mode
-BOT_MODE=webhook \
+# Start the API server with webhook env vars
 WEBHOOK_URL="$WEBHOOK_URL" \
 WEBHOOK_SECRET="$SECRET" \
 PORT="$PORT" \

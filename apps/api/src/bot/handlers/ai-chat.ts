@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../types";
 import { runAgent } from "../ai/agent";
-import { env } from "../env";
+import { env } from "../../env";
 
 export const aiChatHandler = new Composer<BotContext>();
 

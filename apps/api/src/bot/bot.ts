@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { env } from "./env";
+import { env } from "../env";
 import type { BotContext } from "./types";
 
 export const bot = new Bot<BotContext>(env.TELEGRAM_BOT_TOKEN);
