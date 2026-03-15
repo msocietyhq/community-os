@@ -8,6 +8,7 @@ import { db } from "../../db";
 import { account } from "../../db/schema/auth";
 import { and, eq } from "drizzle-orm";
 import type { CreateMemberInput } from "@community-os/shared/validators";
+import { env } from "../../env";
 
 function isSkip(text: string): boolean {
   return text.trim().toLowerCase() === "skip";
@@ -33,6 +34,26 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
   if (!from) {
     await ctx.reply("Could not identify your Telegram account.");
     return;
+  }
+
+  // Verify user is a member of the MSOCIETY Telegram group
+  if (env.TELEGRAM_GROUP_ID) {
+    const member = await conversation.external(async () => {
+      try {
+        return await ctx.api.getChatMember(env.TELEGRAM_GROUP_ID!, from.id);
+      } catch {
+        return null;
+      }
+    });
+
+    const allowed = member && !["left", "kicked"].includes(member.status);
+    if (!allowed) {
+      await ctx.reply(
+        "You must be a member of the MSOCIETY Telegram group to register.\n\n" +
+          "MSOCIETY is invite-only — ask an existing member to add you to the group, then come back and send /register again.",
+      );
+      return;
+    }
   }
 
   // Auto-create auth user (or get existing session)
