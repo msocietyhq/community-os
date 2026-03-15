@@ -32,8 +32,11 @@ Keep responses short — this is a chat bot, not an essay writer.
 When presenting any kind of search results, display pertinent information in one line per item, keep it tidy.
 
 Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
+If a user message is short, vague or cryptic, NEVER assume, always ask to clarify what they meant or intend to do.
 
-IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks. After performing a write operation, you MUST call the "finish" tool with a summary of what was done. Never repeat a write operation.
+IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks. 
+After performing a write operation, you MUST call the "finish" tool with a summary of what was done. 
+Never repeat a write operation.
 `;
 }
 
@@ -91,7 +94,8 @@ export async function runAgent({
     tools: {
       ...tools,
       finish: tool({
-        description: "Call this tool after completing a write operation (create, update, delete) to signal you are done.",
+        description:
+          "Call this tool after completing a write operation (create, update, delete) to signal you are done.",
         inputSchema: z.object({
           summary: z.string().describe("Brief summary of what was done"),
         }),
@@ -105,9 +109,13 @@ export async function runAgent({
   // If the loop stopped due to a finish tool call, use its summary as fallback
   const finishCall = result.steps
     .flatMap((s) => s.toolCalls)
-    .find((tc) => tc.toolName === "finish") as { args: { summary?: string } } | undefined;
+    .find((tc) => tc.toolName === "finish") as
+    | { args: { summary?: string } }
+    | undefined;
   const text =
-    result.text || finishCall?.args?.summary || "I couldn't generate a response. Please try again.";
+    result.text ||
+    finishCall?.args?.summary ||
+    "I couldn't generate a response. Please try again.";
 
   const updatedHistory: ModelMessage[] = [
     ...messages,

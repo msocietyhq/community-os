@@ -92,7 +92,15 @@ export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
       .post(
         "/:id/rsvp",
         async ({ params: { id }, body, user }) => {
-          return eventsService.rsvp(id, user.id, body.rsvpStatus);
+          const result = await eventsService.rsvp(id, user.id, body.rsvpStatus);
+          createAuditEntry({
+            entityType: "event",
+            entityId: id,
+            action: "update",
+            newValue: { rsvpStatus: body.rsvpStatus, userId: user.id },
+            performedBy: user.id,
+          }).catch(console.error);
+          return result;
         },
         {
           beforeHandle: checkPermission("rsvp", "Event"),

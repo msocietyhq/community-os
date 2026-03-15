@@ -4,6 +4,7 @@ import { telegram } from "better-auth-telegram";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import { env } from "./env";
+import { createAuditEntry } from "./middleware/audit";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -31,6 +32,32 @@ export const auth = betterAuth({
       banned: {
         type: "boolean",
         defaultValue: false,
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          createAuditEntry({
+            entityType: "member",
+            entityId: user.id,
+            action: "create",
+            newValue: user,
+          }).catch(console.error);
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session) => {
+          createAuditEntry({
+            entityType: "member",
+            entityId: session.userId,
+            action: "approve",
+            newValue: { type: "login", sessionToken: session.token },
+          }).catch(console.error);
+        },
       },
     },
   },

@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission } from "../middleware/permissions";
+import { createAuditEntry } from "../middleware/audit";
 import { reputationModel } from "./models/reputation";
 import { reputationService } from "../services/reputation.service";
 
@@ -36,11 +37,18 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
   )
   .post(
     "/events",
-    async ({ body }) => {
+    async ({ body, user }) => {
       const event = await reputationService.recordEvent(body);
       if (!event) {
         return { message: "Duplicate event or recording failed" };
       }
+      createAuditEntry({
+        entityType: "reputation",
+        entityId: event.id,
+        action: "create",
+        newValue: event,
+        performedBy: user.id,
+      }).catch(console.error);
       return { message: "Reputation event recorded", event };
     },
     {

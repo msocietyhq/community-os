@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission } from "../middleware/permissions";
+import { createAuditEntry } from "../middleware/audit";
 import { membersService } from "../services/members.service";
 import { memberModel } from "./models/member";
 
@@ -22,7 +23,16 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   .patch(
     "/me",
     async ({ user, body }) => {
+      const oldMember = await membersService.findByUserId(user.id);
       const updated = await membersService.update(user.id, body);
+      createAuditEntry({
+        entityType: "member",
+        entityId: user.id,
+        action: "update",
+        oldValue: oldMember,
+        newValue: updated,
+        performedBy: user.id,
+      }).catch(console.error);
       return updated;
     },
     {
