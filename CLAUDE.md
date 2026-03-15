@@ -49,7 +49,7 @@ community-os/
 ### Package Purposes
 
 - **`apps/api`** — REST API with OpenAPI docs, Better Auth, Drizzle ORM. All business logic lives here. Includes the Telegram bot (`src/bot/`) which runs in-process and calls services directly (see ADR-005).
-- **`apps/web`** — SPA portal at `hub.msociety.dev`. Consumes API via Eden Treaty for end-to-end type safety.
+- **`apps/web`** — SPA portal at `msociety.dev`. Consumes API via Eden Treaty for end-to-end type safety.
 - **`packages/shared`** — Shared Zod validators, TypeScript types, and constants used by all apps.
 
 ### Bot Architecture

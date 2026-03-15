@@ -1,3 +1,4 @@
+import { conversations } from "@grammyjs/conversations";
 import { bot } from "./bot";
 import { helpHandler } from "./handlers/help";
 import { eventsHandler } from "./handlers/events";
@@ -5,6 +6,8 @@ import { reputationHandler } from "./handlers/reputation";
 import { welcomeHandler } from "./handlers/welcome";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
+import { registerHandler } from "./handlers/register";
+import { loginHandler } from "./handlers/login";
 import { env } from "../env";
 
 const ALLOWED_UPDATES = [
@@ -19,12 +22,18 @@ const ALLOWED_UPDATES = [
  * and set up the webhook. Call this after the HTTP server is listening.
  */
 export async function initBot(): Promise<void> {
+  // Conversations plugin must be registered before conversation handlers
+  bot.use(conversations());
+
   // Register handlers
   bot.use(helpHandler);
   bot.use(tokenHandler);
+  bot.use(loginHandler);
+  bot.use(registerHandler);
   bot.use(eventsHandler);
   bot.use(reputationHandler);
   bot.use(welcomeHandler);
+  // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);
 
   // Error handling

@@ -11,9 +11,9 @@ helpHandler.command("start", async (ctx) => {
       `/rsvp <event> — RSVP to an event\n` +
       `/reputation — Check your reputation score\n` +
       `/register — Set up your community profile\n` +
-      `/token — Get an API bearer token\n` +
+      `/login — Get a login link for the web portal\n` +
       `/help — Show this help message\n\n` +
-      `You can also mention @msocietybot with any question about the community!`
+      `You can also mention @msocietybot with any question about the community!`,
   );
 });
 
@@ -24,18 +24,9 @@ helpHandler.command("help", async (ctx) => {
       `✅ /rsvp <event> — RSVP to an event\n` +
       `⭐ /reputation — Check your reputation score\n` +
       `👤 /register — Set up your community profile\n` +
-      `🔑 /token — Get an API bearer token\n` +
+      `🔗 /login — Get a login link for the web portal\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-helpHandler.command("register", async (ctx) => {
-  // TODO: Generate registration link to web portal
-  await ctx.reply(
-    `To complete your registration, visit the community portal:\n\n` +
-      `🔗 https://msociety.dev\n\n` +
-      `Log in with your Telegram account to set up your profile.`
+    { parse_mode: "Markdown" },
   );
 });

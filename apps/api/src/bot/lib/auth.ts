@@ -5,7 +5,7 @@ import { account, members, user } from "../../db/schema";
 import { auth } from "../../auth";
 import { env } from "../../env";
 
-interface TelegramUser {
+export interface TelegramUser {
   id: number;
   first_name: string;
   last_name?: string;
@@ -40,7 +40,7 @@ export async function resolveUser(telegramId: string) {
  * Compute the HMAC hash that Telegram Login Widget uses for verification.
  * This lets us call signInWithTelegram from the bot (trusted context).
  */
-function computeTelegramHash(
+export function computeTelegramHash(
   data: Record<string, string | number>,
   botToken: string,
 ): string {

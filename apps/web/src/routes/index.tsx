@@ -1,12 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
+import { useAuth } from "../lib/auth";
 
 export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
 function LandingPage() {
+  const { user, isLoading } = useAuth();
+
   return (
     <div className="min-h-screen bg-gray-950 text-white relative overflow-hidden">
       {/* Animated gradient orbs */}
@@ -29,18 +32,29 @@ function LandingPage() {
           <div className="flex justify-between h-16 items-center">
             <span className="text-xl font-bold tracking-tight">MSOCIETY</span>
             <div className="flex items-center gap-3">
-              <Link
-                to="/login"
-                className="text-sm text-gray-300 hover:text-white transition-colors px-4 py-2"
-              >
-                Login
-              </Link>
-              <Link
-                to="/login"
-                className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Join
-              </Link>
+              {!isLoading && user ? (
+                <Link
+                  to="/dashboard"
+                  className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="text-sm text-gray-300 hover:text-white transition-colors px-4 py-2"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/login"
+                    className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    Join
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

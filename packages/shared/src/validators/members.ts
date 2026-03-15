@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+export const createMemberSchema = z.object({
+  bio: z.string().max(500).optional(),
+  currentTitle: z.string().optional(),
+  currentCompany: z.string().optional(),
+  skills: z.array(z.string()).optional(),
+  interests: z.array(z.string()).optional(),
+  githubHandle: z.string().optional(),
+});
+
+export type CreateMemberInput = z.infer<typeof createMemberSchema>;
+
 export const updateMemberSchema = z.object({
   githubHandle: z.string().optional(),
   phoneNumber: z.string().optional(),

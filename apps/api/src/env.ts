@@ -13,6 +13,7 @@ const envSchema = z.object({
   TELEGRAM_BOT_USERNAME: z.string().default("msocietybot"),
   ANTHROPIC_API_KEY: z.string().min(1),
   WEBHOOK_URL: z.string().url(),
+  WEB_URL: z.string().url().default("http://localhost:5173"),
   WEBHOOK_SECRET: z.string().min(32),
   PORT: z.coerce.number().default(3000),
 });
