@@ -20,6 +20,7 @@ interface AuthContext {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContext | null>(null);
@@ -83,8 +84,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshSession = useCallback(async () => {
+    const res = await fetch("/api/auth/get-session", {
+      credentials: "include",
+    });
+    const data = await res.json();
+    setUser(data?.user ?? null);
+  }, []);
+
   return (
-    <AuthContext value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext value={{ user, isLoading, login, signup, logout, refreshSession }}>
       {children}
     </AuthContext>
   );

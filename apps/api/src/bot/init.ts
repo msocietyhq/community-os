@@ -4,6 +4,7 @@ import { eventsHandler } from "./handlers/events";
 import { reputationHandler } from "./handlers/reputation";
 import { welcomeHandler } from "./handlers/welcome";
 import { aiChatHandler } from "./handlers/ai-chat";
+import { tokenHandler } from "./handlers/token";
 import { env } from "../env";
 
 const ALLOWED_UPDATES = [
@@ -20,6 +21,7 @@ const ALLOWED_UPDATES = [
 export async function initBot(): Promise<void> {
   // Register handlers
   bot.use(helpHandler);
+  bot.use(tokenHandler);
   bot.use(eventsHandler);
   bot.use(reputationHandler);
   bot.use(welcomeHandler);

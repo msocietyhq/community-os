@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const updateMemberSchema = z.object({
-  telegramUsername: z.string().optional(),
   githubHandle: z.string().optional(),
   phoneNumber: z.string().optional(),
   bio: z.string().max(500).optional(),

@@ -1,7 +1,7 @@
 import { eq, and, isNull, gt, lte, count, desc, asc, sql } from "drizzle-orm";
 import { db } from "../db";
 import { events, eventAttendees } from "../db/schema/events";
-import { members } from "../db/schema/members";
+import { account } from "../db/schema/auth";
 import { user } from "../db/schema/auth";
 import { AppError } from "../lib/errors";
 import type {
@@ -250,16 +250,21 @@ export const eventsService = {
     let userId = input.userId;
 
     if (input.telegramId && !userId) {
-      const [member] = await db
-        .select({ userId: members.userId })
-        .from(members)
-        .where(eq(members.telegramId, input.telegramId));
+      const [acct] = await db
+        .select({ userId: account.userId })
+        .from(account)
+        .where(
+          and(
+            eq(account.providerId, "telegram"),
+            eq(account.accountId, input.telegramId),
+          ),
+        );
 
-      if (!member) {
-        throw new AppError(404, "MEMBER_NOT_FOUND", "No member found with that Telegram ID");
+      if (!acct) {
+        throw new AppError(404, "MEMBER_NOT_FOUND", "No user found with that Telegram ID");
       }
 
-      userId = member.userId;
+      userId = acct.userId;
     }
 
     if (!userId) {

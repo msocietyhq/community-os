@@ -11,6 +11,7 @@ helpHandler.command("start", async (ctx) => {
       `/rsvp <event> — RSVP to an event\n` +
       `/reputation — Check your reputation score\n` +
       `/register — Set up your community profile\n` +
+      `/token — Get an API bearer token\n` +
       `/help — Show this help message\n\n` +
       `You can also mention @msocietybot with any question about the community!`
   );
@@ -23,6 +24,7 @@ helpHandler.command("help", async (ctx) => {
       `✅ /rsvp <event> — RSVP to an event\n` +
       `⭐ /reputation — Check your reputation score\n` +
       `👤 /register — Set up your community profile\n` +
+      `🔑 /token — Get an API bearer token\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
     { parse_mode: "Markdown" }

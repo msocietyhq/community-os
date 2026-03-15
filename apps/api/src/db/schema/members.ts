@@ -12,8 +12,6 @@ export const members = pgTable("members", {
     .notNull()
     .unique()
     .references(() => user.id, { onDelete: "cascade" }),
-  telegramId: text("telegram_id").unique(),
-  telegramUsername: text("telegram_username"),
   githubHandle: text("github_handle"),
   phoneNumber: text("phone_number"),
   bio: text("bio"),

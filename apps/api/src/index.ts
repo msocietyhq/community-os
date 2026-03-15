@@ -82,7 +82,16 @@ const app = new Elysia()
           description: "API for MSOCIETY community management",
         },
         paths: await authOpenAPI.getPaths(),
-        components: await authOpenAPI.components,
+        components: {
+          ...(await authOpenAPI.components),
+          securitySchemes: {
+            bearerAuth: {
+              type: "http",
+              scheme: "bearer",
+            },
+          },
+        },
+        security: [{ bearerAuth: [] }],
       },
     }),
   )

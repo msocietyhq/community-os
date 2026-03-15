@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
-import { openAPI } from "better-auth/plugins";
+import { bearer, openAPI } from "better-auth/plugins";
+import { telegram } from "better-auth-telegram";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import { env } from "./env";
@@ -13,7 +14,14 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  plugins: [openAPI()],
+  plugins: [
+    openAPI(),
+    bearer(),
+    telegram({
+      botToken: env.TELEGRAM_BOT_TOKEN,
+      botUsername: env.TELEGRAM_BOT_USERNAME,
+    }),
+  ],
   user: {
     additionalFields: {
       role: {
@@ -36,9 +44,11 @@ export const authOpenAPI = {
     getSchema().then(({ paths }) => {
       const reference: typeof paths = Object.create(null);
       for (const path of Object.keys(paths)) {
+        const entry = paths[path];
+        if (!entry) continue;
         const key = prefix + path;
-        reference[key] = paths[path];
-        for (const method of Object.keys(paths[path])) {
+        reference[key] = entry;
+        for (const method of Object.keys(entry)) {
           const operation = (reference[key] as any)[method];
           operation.tags = ["Auth"];
         }

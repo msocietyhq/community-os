@@ -8,11 +8,13 @@ import {
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").unique(),
   emailVerified: boolean("email_verified").default(false),
   image: text("image"),
   role: text("role").default("member"),
   banned: boolean("banned").default(false),
+  telegramId: text("telegram_id"),
+  telegramUsername: text("telegram_username"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -44,6 +46,8 @@ export const account = pgTable("account", {
   refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
   scope: text("scope"),
   password: text("password"),
+  telegramId: text("telegram_id"),
+  telegramUsername: text("telegram_username"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

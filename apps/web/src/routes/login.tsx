@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import { useAuth } from "../lib/auth";
 
 export const Route = createFileRoute("/login")({
@@ -7,7 +7,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { user, isLoading, login, signup } = useAuth();
+  const { user, isLoading, login, signup, refreshSession } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -15,12 +15,65 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const telegramRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && user) {
       navigate({ to: "/dashboard" });
     }
   }, [user, isLoading, navigate]);
+
+  const handleTelegramAuth = useCallback(
+    async (authData: Record<string, unknown>) => {
+      setError("");
+      setSubmitting(true);
+      try {
+        const res = await fetch("/api/auth/telegram/signin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(authData),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.message ?? "Telegram sign in failed");
+        }
+        await refreshSession();
+        navigate({ to: "/dashboard" });
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Telegram sign in failed",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [navigate, refreshSession],
+  );
+
+  useEffect(() => {
+    const container = telegramRef.current;
+    if (!container) return;
+
+    (window as any).onTelegramAuth = (user: Record<string, unknown>) => {
+      handleTelegramAuth(user);
+    };
+
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.async = true;
+    script.setAttribute("data-telegram-login", "msocietybot");
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "8");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-request-access", "write");
+    container.appendChild(script);
+
+    return () => {
+      delete (window as any).onTelegramAuth;
+      container.innerHTML = "";
+    };
+  }, [handleTelegramAuth]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -97,16 +150,11 @@ function LoginPage() {
               </button>
             </div>
 
-            {/* Telegram button */}
-            <button
-              type="button"
-              className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors font-medium mb-6"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
-              </svg>
-              Continue with Telegram
-            </button>
+            {/* Telegram Login Widget */}
+            <div
+              ref={telegramRef}
+              className="flex justify-center mb-6 min-h-[40px]"
+            />
 
             {/* Divider */}
             <div className="relative mb-6">
