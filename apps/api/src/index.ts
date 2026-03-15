@@ -12,9 +12,12 @@ import { reputationRoutes } from "./routes/reputation";
 import { botRoutes } from "./routes/bot";
 import { initBot, shutdownBot } from "./bot/init";
 import { env } from "./env";
+import { authRateLimit, rateLimit } from "./middleware/rate-limit";
 
 const app = new Elysia()
   .use(cors())
+  .use(rateLimit({ max: 100, windowMs: 60_000 }))
+  .use(authRateLimit({ max: 10, windowMs: 60_000 }))
   .use(
     openapi({
       documentation: {
