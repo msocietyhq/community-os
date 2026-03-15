@@ -1,4 +1,14 @@
 import { z } from "zod";
+import { paginationSchema } from "./common";
+
+export const memberListQuerySchema = paginationSchema.extend({
+  q: z.string().optional(),
+  role: z.string().optional(),
+  skills: z.string().optional(),
+  interests: z.string().optional(),
+});
+
+export type MemberListQuery = z.infer<typeof memberListQuerySchema>;
 
 export const createMemberSchema = z.object({
   bio: z.string().max(500).optional(),

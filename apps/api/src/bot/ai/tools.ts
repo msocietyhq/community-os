@@ -75,12 +75,55 @@ export function createTools(ctx: ToolContext) {
     }),
 
     get_member_profile: tool({
-      description: "Get a community member's profile",
+      description: "Get a community member's profile by their user ID",
       inputSchema: z.object({
         user_id: z.string().describe("The user ID of the member"),
       }),
-      execute: async () => {
-        const { data, error } = await ctx.api.api.v1.members.get();
+      execute: async ({ user_id }) => {
+        const { data, error } = await ctx.api.api.v1
+          .members({ userId: user_id })
+          .get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    search_members: tool({
+      description:
+        "Search for community members by name, skills, interests, bio, title, company, education, github handle, or telegram username",
+      inputSchema: z.object({
+        q: z
+          .string()
+          .optional()
+          .describe("Free-text search across name, bio, title, company, etc."),
+        skills: z
+          .array(z.string())
+          .optional()
+          .describe("Filter by skills (e.g. ['python', 'react'])"),
+        interests: z
+          .array(z.string())
+          .optional()
+          .describe("Filter by interests (e.g. ['ai', 'web3'])"),
+        role: z
+          .string()
+          .optional()
+          .describe("Filter by role (e.g. 'admin', 'member')"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Number of results to return (default: 20)"),
+      }),
+      execute: async ({ q, skills, interests, role, limit }) => {
+        const { data, error } = await ctx.api.api.v1.members.get({
+          query: {
+            q,
+            role,
+            skills: skills?.join(",") as string | undefined,
+            interests: interests?.join(",") as string | undefined,
+            page: 1,
+            limit: limit ?? 20,
+          },
+        });
         if (error) return { status: error.status, value: error.value };
         return data;
       },

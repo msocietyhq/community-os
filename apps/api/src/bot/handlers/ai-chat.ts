@@ -29,7 +29,7 @@ aiChatHandler.on("message:text", async (ctx) => {
 
     if (!query) {
       await ctx.reply("How can I help? Mention me with a question!", {
-        reply_to_message_id: ctx.message.message_id,
+        reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
       });
       return;
     }
@@ -66,14 +66,14 @@ aiChatHandler.on("message:text", async (ctx) => {
     ctx.session.lastMessageAt = now;
 
     await ctx.reply(responseText, {
-      reply_to_message_id: ctx.message.message_id,
+      reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
       parse_mode: "Markdown",
     });
   } catch (error) {
     console.error("AI chat error:", error);
     await ctx.reply(
       "Sorry, I encountered an error. Please try again later.",
-      { reply_to_message_id: ctx.message.message_id },
+      { reply_to_message_id: isGroup ? ctx.message.message_id : undefined },
     );
   }
 });

@@ -1,9 +1,7 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission } from "../middleware/permissions";
-import { db } from "../db";
-import { members } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { membersService } from "../services/members.service";
 import { memberModel } from "./models/member";
 
 export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
@@ -12,9 +10,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   .get(
     "/me",
     async ({ user }) => {
-      const member = await db.query.members.findFirst({
-        where: eq(members.userId, user.id),
-      });
+      const member = await membersService.findByUserId(user.id);
       return { user, member };
     },
     {
@@ -26,11 +22,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   .patch(
     "/me",
     async ({ user, body }) => {
-      const [updated] = await db
-        .update(members)
-        .set({ ...body, updatedAt: new Date() })
-        .where(eq(members.userId, user.id))
-        .returning();
+      const updated = await membersService.update(user.id, body);
       return updated;
     },
     {
@@ -42,13 +34,29 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   )
   .get(
     "/",
-    async () => {
-      const allMembers = await db.query.members.findMany();
-      return allMembers;
+    async ({ query }) => {
+      return membersService.list(query);
     },
     {
       auth: true,
       beforeHandle: checkPermission("read", "Member"),
-      detail: { tags: ["Members"], summary: "List all members" },
+      query: "member.listQuery",
+      detail: { tags: ["Members"], summary: "Search and list members" },
+    }
+  )
+  .get(
+    "/:userId",
+    async ({ params: { userId }, set }) => {
+      const member = await membersService.findByUserId(userId);
+      if (!member) {
+        set.status = 404;
+        return { message: "Member not found" };
+      }
+      return member;
+    },
+    {
+      auth: true,
+      beforeHandle: checkPermission("read", "Member"),
+      detail: { tags: ["Members"], summary: "Get member by user ID" },
     }
   );
