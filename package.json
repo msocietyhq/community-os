@@ -8,9 +8,9 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "type-check": "bun run --filter '*' type-check",
-    "db:generate": "bun run --filter api db:generate",
-    "db:migrate": "bun run --filter api db:migrate",
-    "db:seed": "bun run --filter api db:seed"
+    "db:generate": "bun run --filter @community-os/api db:generate",
+    "db:migrate": "bun run --filter @community-os/api db:migrate",
+    "db:seed": "bun run --filter @community-os/api db:seed"
   },
   "devDependencies": {
     "@typescript/native-preview": "^7.0.0-dev.20260313.1",
