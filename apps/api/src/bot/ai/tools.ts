@@ -199,6 +199,27 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
+    list_venues: tool({
+      description: "List community venues/locations for events",
+      inputSchema: z.object({
+        q: z
+          .string()
+          .optional()
+          .describe("Search by venue name or address"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Number of venues to return (default: 20)"),
+      }),
+      execute: async ({ q, limit }) => {
+        const { data, error } = await ctx.api.api.v1.venues.get({
+          query: { q, page: 1, limit: limit ?? 20 },
+        });
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
     get_fund_overview: tool({
       description: "Get community fund summary. Only available to admins.",
       inputSchema: z.object({}),
