@@ -27,6 +27,23 @@ export const rsvpSchema = z.object({
   rsvpStatus: z.enum(RSVP_STATUSES),
 });
 
+export const checkInSchema = z
+  .object({
+    userId: z.string().optional(),
+    telegramId: z.string().optional(),
+  })
+  .refine((data) => data.userId || data.telegramId, {
+    message: "Either userId or telegramId is required",
+  });
+
+export const eventListQuerySchema = z.object({
+  status: z.enum(EVENT_STATUSES).optional(),
+  eventType: z.enum(EVENT_TYPES).optional(),
+  upcoming: z.coerce.boolean().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
 export const createPledgeSchema = z.object({
   amount: z.number().positive(),
   notes: z.string().optional(),
@@ -39,4 +56,6 @@ export const updatePledgeStatusSchema = z.object({
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type RsvpInput = z.infer<typeof rsvpSchema>;
+export type CheckInInput = z.infer<typeof checkInSchema>;
+export type EventListQuery = z.infer<typeof eventListQuerySchema>;
 export type CreatePledgeInput = z.infer<typeof createPledgeSchema>;
