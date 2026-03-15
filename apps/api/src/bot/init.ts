@@ -15,6 +15,7 @@ const ALLOWED_UPDATES = [
   "message",
   "callback_query",
   "chat_member",
+  "my_chat_member",
   "message_reaction",
 ] as const;
 
@@ -23,6 +24,33 @@ const ALLOWED_UPDATES = [
  * and set up the webhook. Call this after the HTTP server is listening.
  */
 export async function initBot(): Promise<void> {
+  // Auto-leave unauthorized groups when bot is added
+  const allowedGroupId = env.TELEGRAM_GROUP_ID;
+  bot.on("my_chat_member", async (ctx) => {
+    const chatId = ctx.myChatMember.chat.id;
+    const chatType = ctx.myChatMember.chat.type;
+    if (
+      allowedGroupId &&
+      (chatType === "group" || chatType === "supergroup") &&
+      String(chatId) !== allowedGroupId
+    ) {
+      await ctx.api.leaveChat(chatId);
+    }
+  });
+
+  // Group guard: drop updates from unauthorized groups
+  bot.use(async (ctx, next) => {
+    const chatType = ctx.chat?.type;
+    if (
+      allowedGroupId &&
+      (chatType === "group" || chatType === "supergroup") &&
+      String(ctx.chat!.id) !== allowedGroupId
+    ) {
+      return; // silently drop
+    }
+    await next();
+  });
+
   // Session must be registered before conversations and handlers
   bot.use(session({ initial: () => ({}) }));
   // Conversations plugin must be registered before conversation handlers

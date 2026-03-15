@@ -10,6 +10,7 @@ const envSchema = z.object({
   NEON_API_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
+  TELEGRAM_GROUP_ID: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().default("msocietybot"),
   ANTHROPIC_API_KEY: z.string().min(1),
   WEB_URL: z.string().url().default("http://localhost:5173"),
