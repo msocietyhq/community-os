@@ -37,6 +37,23 @@ export async function resolveUser(telegramId: string) {
 }
 
 /**
+ * Resolve a Telegram username to a community-os user.
+ */
+export async function resolveUserByUsername(username: string) {
+  const result = await db
+    .select({
+      user: user,
+      member: members,
+    })
+    .from(user)
+    .innerJoin(members, eq(members.userId, user.id))
+    .where(eq(user.telegramUsername, username))
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+/**
  * Compute the HMAC hash that Telegram Login Widget uses for verification.
  * This lets us call signInWithTelegram from the bot (trusted context).
  */

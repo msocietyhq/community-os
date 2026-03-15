@@ -152,6 +152,9 @@ export const AUDIT_ENTITY_TYPES = [
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
+export const VOTE_QUOTA = 5;
+export const VOTE_QUOTA_DURATION_HOURS = 24;
+
 export const DEFAULT_REPUTATION_TRIGGERS = [
   { type: "reaction" as const, value: "👍", points: 1 },
   { type: "reaction" as const, value: "❤️", points: 1 },
@@ -160,4 +163,6 @@ export const DEFAULT_REPUTATION_TRIGGERS = [
   { type: "keyword" as const, value: "thanks", points: 1 },
   { type: "keyword" as const, value: "thank you", points: 1 },
   { type: "keyword" as const, value: "jazakallah", points: 1 },
+  { type: "keyword" as const, value: "boo", points: -1 },
+  { type: "keyword" as const, value: "eww", points: -1 },
 ] as const;
