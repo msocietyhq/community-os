@@ -3,9 +3,11 @@ import type {
   ConversationFlavor,
   Conversation,
 } from "@grammyjs/conversations";
+import type { ModelMessage } from "ai";
 
 export interface SessionData {
-  // Session data for conversation state
+  chatHistory?: ModelMessage[];
+  lastMessageAt?: number; // epoch ms
 }
 
 type BaseContext = Context & SessionFlavor<SessionData>;

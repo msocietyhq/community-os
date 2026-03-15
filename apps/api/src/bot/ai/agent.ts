@@ -1,10 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { tools } from "./tools";
+import { generateText, stepCountIs, type ModelMessage } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createTools } from "./tools";
+import { resolveUser } from "../lib/auth";
 import { env } from "../../env";
 
-const anthropic = new Anthropic({
-  apiKey: env.ANTHROPIC_API_KEY,
-});
+const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+
+const MAX_HISTORY = 10;
 
 const SYSTEM_PROMPT = `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
 
@@ -22,70 +24,55 @@ Keep responses short — this is a chat bot, not an essay writer.`;
 interface AgentParams {
   query: string;
   telegramId: string;
-  previousBotMessage?: string;
+  chatHistory: ModelMessage[];
 }
 
-export async function runAgent({ query, telegramId, previousBotMessage }: AgentParams): Promise<string> {
-  const replyContext = previousBotMessage
-    ? `[The user is replying to your previous message: "${previousBotMessage}"]\n\n`
-    : "";
+interface AgentResult {
+  text: string;
+  updatedHistory: ModelMessage[];
+}
 
-  const messages: Anthropic.MessageParam[] = [
-    {
-      role: "user",
-      content: `[User telegram_id: ${telegramId}]\n\n${replyContext}${query}`,
-    },
-  ];
-
-  let response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    tools,
-    messages,
-  });
-
-  // Tool use loop
-  while (response.stop_reason === "tool_use") {
-    const toolUseBlocks = response.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
-    );
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-    for (const toolUse of toolUseBlocks) {
-      // TODO: Execute tool calls against services directly
-      const result = await executeToolCall(toolUse.name, toolUse.input as Record<string, unknown>);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: toolUse.id,
-        content: JSON.stringify(result),
-      });
-    }
-
-    messages.push({ role: "assistant", content: response.content });
-    messages.push({ role: "user", content: toolResults });
-
-    response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      tools,
-      messages,
-    });
+export async function runAgent({
+  query,
+  telegramId,
+  chatHistory,
+}: AgentParams): Promise<AgentResult> {
+  const resolved = await resolveUser(telegramId);
+  if (!resolved) {
+    return {
+      text: "You're not registered yet. Please use /register first to join the community!",
+      updatedHistory: chatHistory,
+    };
   }
 
-  const textBlock = response.content.find(
-    (block): block is Anthropic.TextBlock => block.type === "text"
-  );
+  const tools = createTools({ userId: resolved.user.id });
 
-  return textBlock?.text ?? "I couldn't generate a response. Please try again.";
-}
+  const messages: ModelMessage[] = [
+    ...chatHistory,
+    { role: "user", content: query },
+  ];
 
-async function executeToolCall(
-  name: string,
-  input: Record<string, unknown>
-): Promise<unknown> {
-  // TODO: Route tool calls to services directly (no more Eden Treaty)
-  return { error: "Tool execution not yet implemented" };
+  const result = await generateText({
+    model: anthropic("claude-sonnet-4-20250514"),
+    system: SYSTEM_PROMPT,
+    messages,
+    tools,
+    stopWhen: stepCountIs(5),
+    maxOutputTokens: 1024,
+  });
+
+  const text =
+    result.text || "I couldn't generate a response. Please try again.";
+
+  const updatedHistory: ModelMessage[] = [
+    ...messages,
+    { role: "assistant", content: text },
+  ];
+
+  // Trim to last N messages to keep context manageable
+  if (updatedHistory.length > MAX_HISTORY) {
+    updatedHistory.splice(0, updatedHistory.length - MAX_HISTORY);
+  }
+
+  return { text, updatedHistory };
 }

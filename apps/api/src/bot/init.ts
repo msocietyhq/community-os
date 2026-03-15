@@ -1,3 +1,4 @@
+import { session } from "grammy";
 import { conversations } from "@grammyjs/conversations";
 import { bot } from "./bot";
 import { helpHandler } from "./handlers/help";
@@ -22,6 +23,8 @@ const ALLOWED_UPDATES = [
  * and set up the webhook. Call this after the HTTP server is listening.
  */
 export async function initBot(): Promise<void> {
+  // Session must be registered before conversations and handlers
+  bot.use(session({ initial: () => ({}) }));
   // Conversations plugin must be registered before conversation handlers
   bot.use(conversations());
 

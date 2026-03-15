@@ -16,10 +16,11 @@
     "db:seed": "bun run src/db/seed.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@ai-sdk/anthropic": "^3.0.58",
     "@community-os/shared": "workspace:*",
     "@elysiajs/cors": "^1.3.0",
     "@elysiajs/openapi": "^1.2.0",
+    "ai": "^6.0.116",
     "better-auth": "^1.2.0",
     "better-auth-telegram": "^1.5.0",
     "drizzle-orm": "^0.40.0",

@@ -11,6 +11,24 @@ export const membersService = {
     return member ?? null;
   },
 
+  async update(
+    userId: string,
+    data: {
+      bio?: string;
+      skills?: string[];
+      interests?: string[];
+      currentTitle?: string;
+      currentCompany?: string;
+    },
+  ) {
+    const [updated] = await db
+      .update(members)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(members.userId, userId))
+      .returning();
+    return updated ?? null;
+  },
+
   async create(userId: string, data: CreateMemberInput) {
     const [member] = await db
       .insert(members)
