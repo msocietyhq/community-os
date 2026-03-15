@@ -40,20 +40,12 @@ function LandingPage() {
                   Dashboard
                 </Link>
               ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="text-sm text-gray-300 hover:text-white transition-colors px-4 py-2"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/login"
-                    className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                  >
-                    Join
-                  </Link>
-                </>
+                <Link
+                  to="/login"
+                  className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  Login
+                </Link>
               )}
             </div>
           </div>
@@ -66,26 +58,13 @@ function LandingPage() {
           Muslim Tech Professionals
         </div>
         <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
+          <span className="block text-white">MSOCIETY</span>
           <span className="gradient-text">Build. Connect. Grow.</span>
         </h1>
         <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10">
           A community of Muslim tech professionals in Singapore building
           together, learning from each other, and making an impact.
         </p>
-        <div className="flex items-center justify-center gap-4">
-          <Link
-            to="/login"
-            className="bg-white text-gray-900 font-medium px-8 py-3 rounded-lg hover:bg-gray-100 transition-colors text-base"
-          >
-            Get Started
-          </Link>
-          <a
-            href="#features"
-            className="border border-white/20 text-white font-medium px-8 py-3 rounded-lg hover:bg-white/5 transition-colors text-base"
-          >
-            Learn More
-          </a>
-        </div>
       </section>
 
       {/* Features */}
@@ -271,25 +250,56 @@ type Project = NonNullable<
 
 function ProjectCard({ project }: { project: Project }) {
   const content = (
-    <div className="p-6 rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors h-full flex flex-col">
-      <h4 className="text-lg font-semibold mb-2">{project.name}</h4>
-      {project.description && (
-        <p className="text-gray-400 text-sm leading-relaxed mb-4 flex-1">
-          {project.description}
-        </p>
-      )}
-      {project.platforms && project.platforms.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-auto">
-          {project.platforms.map((p) => (
-            <span
-              key={p}
-              className="text-xs px-2 py-1 rounded-full border border-white/10 bg-white/5 text-gray-300"
-            >
-              {PLATFORM_LABELS[p] ?? p}
-            </span>
-          ))}
+    <div className="group relative rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.05] shadow-xl hover:shadow-2xl transition-all duration-500 overflow-hidden h-full flex flex-col">
+      {/* Gradient glow on hover */}
+      <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-blue-600/20 via-indigo-600/20 to-cyan-500/20 blur-xl -z-10" />
+      {/* Shine sweep */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+
+      <div className="relative p-6 flex flex-col flex-1">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <h4 className="font-bold text-xl leading-tight text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-400 group-hover:to-cyan-400 group-hover:bg-clip-text transition-all duration-300">
+            {project.name}
+          </h4>
+          {(project as any).members?.length > 0 && (
+            <div className="flex -space-x-2 flex-shrink-0">
+              {((project as any).members as string[]).slice(0, (project as any).members.length > 3 ? 2 : 3).map((initials: string, i: number) => (
+                <div
+                  key={i}
+                  className="relative z-0 hover:z-10 transition-all duration-300 rounded-full ring-2 ring-white/10 hover:ring-blue-400/50 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 w-8 h-8 bg-gradient-to-br from-blue-500/30 to-indigo-500/30 flex items-center justify-center text-[10px] font-medium text-white/70"
+                >
+                  {initials}
+                </div>
+              ))}
+              {(project as any).members.length > 3 && (
+                <div className="relative z-0 hover:z-10 transition-all duration-300 rounded-full ring-2 ring-white/10 hover:ring-blue-400/50 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 w-8 h-8 bg-white/10 flex items-center justify-center text-[10px] font-medium text-white/70">
+                  +{(project as any).members.length - 2}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        {project.description && (
+          <p className="text-gray-400 text-sm leading-relaxed mb-4 flex-1">
+            {project.description}
+          </p>
+        )}
+        {project.platforms && project.platforms.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-auto">
+            {project.platforms.map((p) => (
+              <span
+                key={p}
+                className="text-xs px-2 py-1 rounded-full border border-white/10 bg-white/5 text-gray-300"
+              >
+                {PLATFORM_LABELS[p] ?? p}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom gradient line */}
+      <div className="h-[2px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
     </div>
   );
 
