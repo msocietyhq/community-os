@@ -35,9 +35,10 @@ function formatVenue(event: { isOnline: boolean | null; venueName?: string | nul
   return "📍 TBD";
 }
 
-function formatCapacity(attendeeCount: number, maxAttendees: number | null): string {
-  if (maxAttendees) return `${attendeeCount} / ${maxAttendees} going`;
-  return `${attendeeCount} going`;
+function formatCapacity(attendeeCount: number, maxAttendees: number | null, maybeCount?: number): string {
+  const going = maxAttendees ? `${attendeeCount} / ${maxAttendees} going` : `${attendeeCount} going`;
+  if (maybeCount) return `${going} · ${maybeCount} maybe`;
+  return going;
 }
 
 // /events — list upcoming events
@@ -60,7 +61,7 @@ eventsHandler.command("events", async (ctx) => {
       `*${i + 1}. ${escapeMarkdown(e.title)}*`,
       `🗓 ${formatEventDate(e.startsAt)}`,
       formatVenue(e),
-      `👥 ${formatCapacity(e.attendeeCount, e.maxAttendees)}`,
+      `👥 ${formatCapacity(e.attendeeCount, e.maxAttendees, e.maybeCount)}`,
       "",
     );
     keyboard.text(`RSVP: ${e.title.slice(0, 20)}`, `rsvp:${e.id}`);
@@ -129,8 +130,39 @@ eventsHandler.command("rsvp", async (ctx) => {
   }
 });
 
-// Callback query handler for inline RSVP buttons
+// Callback: Back button — restore original RSVP buttons
+eventsHandler.callbackQuery("rsvp_back", async (ctx) => {
+  const upcoming = await eventsService.listUpcoming(5);
+  const keyboard = new InlineKeyboard();
+  for (const [i, e] of upcoming.entries()) {
+    keyboard.text(`RSVP: ${e.title.slice(0, 20)}`, `rsvp:${e.id}`);
+    if (i < upcoming.length - 1) keyboard.row();
+  }
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+});
+
+// Callback: RSVP button pressed — show status options
 eventsHandler.callbackQuery(/^rsvp:(.+)$/, async (ctx) => {
+  const eventId = ctx.match?.[1];
+  if (!eventId) {
+    await ctx.answerCallbackQuery({ text: "Invalid event.", show_alert: true });
+    return;
+  }
+
+  const keyboard = new InlineKeyboard()
+    .text("✅ Going", `rsvp_status:${eventId}:going`)
+    .text("🤔 Maybe", `rsvp_status:${eventId}:maybe`)
+    .text("❌ Not Going", `rsvp_status:${eventId}:not_going`)
+    .row()
+    .text("« Back", "rsvp_back");
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+});
+
+// Callback: RSVP status selected — perform the RSVP
+eventsHandler.callbackQuery(/^rsvp_status:(.+):(going|maybe|not_going)$/, async (ctx) => {
   const telegramId = ctx.from?.id;
   if (!telegramId) {
     await ctx.answerCallbackQuery({ text: "Could not identify you.", show_alert: true });
@@ -147,19 +179,30 @@ eventsHandler.callbackQuery(/^rsvp:(.+)$/, async (ctx) => {
   }
 
   const eventId = ctx.match?.[1];
-  if (!eventId) {
-    await ctx.answerCallbackQuery({ text: "Invalid event.", show_alert: true });
+  const status = ctx.match?.[2];
+  if (!eventId || !status) {
+    await ctx.answerCallbackQuery({ text: "Invalid selection.", show_alert: true });
     return;
   }
 
   try {
-    const event = await eventsService.getById(eventId);
-    await eventsService.rsvp(eventId, resolved.user.id, "going");
+    await eventsService.rsvp(eventId, resolved.user.id, status);
     const fresh = await eventsService.getById(eventId);
 
-    await ctx.answerCallbackQuery({ text: `You're going to ${event.title}!` });
+    const statusLabels: Record<string, string> = {
+      going: "going to",
+      maybe: "a maybe for",
+      not_going: "not going to",
+    };
+    const statusEmojis: Record<string, string> = {
+      going: "✅",
+      maybe: "🤔",
+      not_going: "❌",
+    };
+
+    await ctx.answerCallbackQuery({ text: `You're ${statusLabels[status]} ${fresh.title}!` });
     await ctx.reply(
-      `✅ *${escapeMarkdown(resolved.user.name ?? "You")}* is going to *${escapeMarkdown(fresh.title)}*!\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
+      `${statusEmojis[status]} *${escapeMarkdown(resolved.user.name ?? "You")}* is ${statusLabels[status]} *${escapeMarkdown(fresh.title)}*\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
       { parse_mode: "Markdown" },
     );
   } catch (err) {

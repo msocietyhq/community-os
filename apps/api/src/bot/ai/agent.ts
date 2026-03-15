@@ -1,4 +1,5 @@
-import { generateText, stepCountIs, type ModelMessage } from "ai";
+import { generateText, hasToolCall, tool, type ModelMessage } from "ai";
+import { z } from "zod";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
@@ -10,7 +11,11 @@ const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 const MAX_HISTORY = 10;
 
-const SYSTEM_PROMPT = `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
+function getSystemPrompt(): string {
+  const today = new Date().toISOString().split("T")[0];
+  return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
+
+Today's date is ${today}. Use this when creating events or interpreting relative dates.
 
 You help members with:
 - Finding information about upcoming events
@@ -19,14 +24,18 @@ You help members with:
 - Viewing project information
 - Checking reputation scores
 - Viewing community fund summaries (admin only)
+- Managing events and venues (admin only)
 
-Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group. 
+Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group.
 Format responses for Telegram (use Markdown).
 Keep responses short — this is a chat bot, not an essay writer.
 When presenting any kind of search results, display pertinent information in one line per item, keep it tidy.
 
 Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
+
+IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks. After performing a write operation, you MUST call the "finish" tool with a summary of what was done. Never repeat a write operation.
 `;
+}
 
 interface AgentParams {
   query: string;
@@ -77,15 +86,28 @@ export async function runAgent({
 
   const result = await generateText({
     model: anthropic("claude-sonnet-4-20250514"),
-    system: SYSTEM_PROMPT,
+    system: getSystemPrompt(),
     messages,
-    tools,
-    stopWhen: stepCountIs(5),
+    tools: {
+      ...tools,
+      finish: tool({
+        description: "Call this tool after completing a write operation (create, update, delete) to signal you are done.",
+        inputSchema: z.object({
+          summary: z.string().describe("Brief summary of what was done"),
+        }),
+        // No execute — stops the agentic loop
+      }),
+    },
+    stopWhen: hasToolCall("finish"),
     maxOutputTokens: 1024,
   });
 
+  // If the loop stopped due to a finish tool call, use its summary as fallback
+  const finishCall = result.steps
+    .flatMap((s) => s.toolCalls)
+    .find((tc) => tc.toolName === "finish") as { args: { summary?: string } } | undefined;
   const text =
-    result.text || "I couldn't generate a response. Please try again.";
+    result.text || finishCall?.args?.summary || "I couldn't generate a response. Please try again.";
 
   const updatedHistory: ModelMessage[] = [
     ...messages,

@@ -1,4 +1,4 @@
-import { eq, and, isNull, gt, lte, count, desc, asc, sql } from "drizzle-orm";
+import { eq, and, isNull, gt, lte, count, desc, asc, sql, or } from "drizzle-orm";
 import { db } from "../db";
 import { events, eventAttendees } from "../db/schema/events";
 import { venues } from "../db/schema/venues";
@@ -12,6 +12,8 @@ import type {
   CheckInInput,
 } from "@community-os/shared/validators";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function generateSlug(title: string): string {
   const base = title
     .toLowerCase()
@@ -21,6 +23,23 @@ function generateSlug(title: string): string {
     .slice(0, 60);
   const suffix = Math.random().toString(36).slice(2, 8);
   return `${base}-${suffix}`;
+}
+
+/** Resolve an ID-or-slug to a UUID. */
+async function resolveEventId(idOrSlug: string): Promise<string> {
+  const condition = UUID_RE.test(idOrSlug)
+    ? eq(events.id, idOrSlug)
+    : eq(events.slug, idOrSlug);
+
+  const [row] = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(and(condition, isNull(events.deletedAt)));
+
+  if (!row) {
+    throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
+  }
+  return row.id;
 }
 
 export const eventsService = {
@@ -83,11 +102,15 @@ export const eventsService = {
     return { events: eventList, total: totalResult[0]?.total ?? 0 };
   },
 
-  async getById(id: string) {
+  async getById(idOrSlug: string) {
+    const condition = UUID_RE.test(idOrSlug)
+      ? eq(events.id, idOrSlug)
+      : eq(events.slug, idOrSlug);
+
     const [event] = await db
       .select()
       .from(events)
-      .where(and(eq(events.id, id), isNull(events.deletedAt)));
+      .where(and(condition, isNull(events.deletedAt)));
 
     if (!event) {
       throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
@@ -98,7 +121,7 @@ export const eventsService = {
       .from(eventAttendees)
       .where(
         and(
-          eq(eventAttendees.eventId, id),
+          eq(eventAttendees.eventId, event.id),
           eq(eventAttendees.rsvpStatus, "going"),
         ),
       );
@@ -140,15 +163,27 @@ export const eventsService = {
       .groupBy(eventAttendees.eventId)
       .as("attendee_counts");
 
+    const maybeCountSq = db
+      .select({
+        eventId: eventAttendees.eventId,
+        maybeCount: count().as("maybe_count"),
+      })
+      .from(eventAttendees)
+      .where(eq(eventAttendees.rsvpStatus, "maybe"))
+      .groupBy(eventAttendees.eventId)
+      .as("maybe_counts");
+
     const rows = await db
       .select({
         event: events,
         venueName: venues.name,
         attendeeCount: sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(Number),
+        maybeCount: sql<number>`coalesce(${maybeCountSq.maybeCount}, 0)`.mapWith(Number),
       })
       .from(events)
       .leftJoin(venues, eq(events.venueId, venues.id))
       .leftJoin(attendeeCountSq, eq(events.id, attendeeCountSq.eventId))
+      .leftJoin(maybeCountSq, eq(events.id, maybeCountSq.eventId))
       .where(
         and(
           eq(events.status, "published"),
@@ -163,18 +198,12 @@ export const eventsService = {
       ...row.event,
       venueName: row.venueName,
       attendeeCount: row.attendeeCount,
+      maybeCount: row.maybeCount,
     }));
   },
 
-  async update(id: string, input: UpdateEventInput) {
-    const [existing] = await db
-      .select({ id: events.id })
-      .from(events)
-      .where(and(eq(events.id, id), isNull(events.deletedAt)));
-
-    if (!existing) {
-      throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
-    }
+  async update(idOrSlug: string, input: UpdateEventInput) {
+    const id = await resolveEventId(idOrSlug);
 
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -203,15 +232,8 @@ export const eventsService = {
     return updated;
   },
 
-  async cancel(id: string) {
-    const [existing] = await db
-      .select({ id: events.id })
-      .from(events)
-      .where(and(eq(events.id, id), isNull(events.deletedAt)));
-
-    if (!existing) {
-      throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
-    }
+  async cancel(idOrSlug: string) {
+    const id = await resolveEventId(idOrSlug);
 
     const [cancelled] = await db
       .update(events)
@@ -222,11 +244,13 @@ export const eventsService = {
     return cancelled;
   },
 
-  async rsvp(eventId: string, userId: string, rsvpStatus: string) {
+  async rsvp(eventIdOrSlug: string, userId: string, rsvpStatus: string) {
+    const eventId = await resolveEventId(eventIdOrSlug);
+
     const [event] = await db
       .select({ id: events.id, status: events.status, maxAttendees: events.maxAttendees })
       .from(events)
-      .where(and(eq(events.id, eventId), isNull(events.deletedAt)));
+      .where(eq(events.id, eventId));
 
     if (!event) {
       throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
@@ -294,11 +318,13 @@ export const eventsService = {
     return attendees;
   },
 
-  async checkIn(eventId: string, input: CheckInInput) {
+  async checkIn(eventIdOrSlug: string, input: CheckInInput) {
+    const eventId = await resolveEventId(eventIdOrSlug);
+
     const [event] = await db
       .select({ id: events.id, status: events.status })
       .from(events)
-      .where(and(eq(events.id, eventId), isNull(events.deletedAt)));
+      .where(eq(events.id, eventId));
 
     if (!event) {
       throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");

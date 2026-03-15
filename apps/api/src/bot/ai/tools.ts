@@ -33,7 +33,7 @@ export function createTools(ctx: ToolContext) {
     get_event: tool({
       description: "Get details of a specific event including attendees",
       inputSchema: z.object({
-        event_id: z.string().describe("The event ID or slug"),
+        event_id: z.string().describe("The event ID (UUID) or slug"),
       }),
       execute: async ({ event_id }) => {
         const { data, error } = await ctx.api.api.v1.events({ id: event_id }).get();
@@ -45,7 +45,7 @@ export function createTools(ctx: ToolContext) {
     rsvp_event: tool({
       description: "RSVP to an event for the requesting user",
       inputSchema: z.object({
-        event_id: z.string().describe("The event ID or slug"),
+        event_id: z.string().describe("The event ID (UUID) or slug"),
         status: z
           .enum(["going", "maybe", "not_going"])
           .describe("RSVP status"),
@@ -104,7 +104,7 @@ export function createTools(ctx: ToolContext) {
     update_event: tool({
       description: "Update an existing event. Only available to admins.",
       inputSchema: z.object({
-        event_id: z.string().describe("The event ID"),
+        event_id: z.string().describe("The event ID (UUID) or slug"),
         title: z.string().optional().describe("Event title"),
         description: z.string().optional().describe("Event description"),
         event_type: z
@@ -155,7 +155,7 @@ export function createTools(ctx: ToolContext) {
     delete_event: tool({
       description: "Cancel/delete an event. Only available to admins.",
       inputSchema: z.object({
-        event_id: z.string().describe("The event ID"),
+        event_id: z.string().describe("The event ID (UUID) or slug"),
       }),
       execute: async ({ event_id }) => {
         const { data, error } = await ctx.api.api.v1.events({ id: event_id }).delete();
