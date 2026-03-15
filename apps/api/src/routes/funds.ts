@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { createTransactionSchema } from "@community-os/shared/validators";
 
 export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
   .use(authMiddleware)
@@ -44,6 +45,7 @@ export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
     },
     {
       auth: true,
+      body: createTransactionSchema,
       detail: { tags: ["Funds"], summary: "Create transaction" },
     }
   );

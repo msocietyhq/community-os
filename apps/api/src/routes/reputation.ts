@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { createReputationEventSchema } from "@community-os/shared/validators";
 
 export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
   .use(authMiddleware)
@@ -31,6 +32,7 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
     },
     {
       auth: true,
+      body: createReputationEventSchema,
       detail: { tags: ["Reputation"], summary: "Record reputation event" },
     }
   );

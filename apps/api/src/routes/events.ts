@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../middleware/auth";
+import { createEventSchema, rsvpSchema, createPledgeSchema } from "@community-os/shared/validators";
 
 export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
   .use(authMiddleware)
@@ -31,6 +32,7 @@ export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
     },
     {
       auth: true,
+      body: createEventSchema,
       detail: { tags: ["Events"], summary: "Create event" },
     }
   )
@@ -42,6 +44,7 @@ export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
     },
     {
       auth: true,
+      body: rsvpSchema,
       detail: { tags: ["Events"], summary: "RSVP to event" },
     }
   )
@@ -64,6 +67,7 @@ export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
     },
     {
       auth: true,
+      body: createPledgeSchema,
       detail: { tags: ["Events"], summary: "Create pledge for event" },
     }
   );

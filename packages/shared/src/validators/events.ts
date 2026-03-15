@@ -9,14 +9,14 @@ import {
 export const createEventSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
-  event_type: z.enum(EVENT_TYPES),
-  venue_id: z.string().uuid().optional(),
-  is_online: z.boolean().default(false),
-  online_url: z.string().url().optional(),
-  starts_at: z.string().datetime(),
-  ends_at: z.string().datetime().optional(),
-  max_attendees: z.number().int().positive().optional(),
-  budget_target: z.number().positive().optional(),
+  eventType: z.enum(EVENT_TYPES),
+  venueId: z.string().uuid().optional(),
+  isOnline: z.boolean().default(false),
+  onlineUrl: z.string().url().optional(),
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime().optional(),
+  maxAttendees: z.number().int().positive().optional(),
+  budgetTarget: z.number().positive().optional(),
 });
 
 export const updateEventSchema = createEventSchema.partial().extend({
@@ -24,7 +24,7 @@ export const updateEventSchema = createEventSchema.partial().extend({
 });
 
 export const rsvpSchema = z.object({
-  rsvp_status: z.enum(RSVP_STATUSES),
+  rsvpStatus: z.enum(RSVP_STATUSES),
 });
 
 export const createPledgeSchema = z.object({
