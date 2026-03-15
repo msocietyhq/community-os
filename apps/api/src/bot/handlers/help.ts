@@ -35,7 +35,7 @@ helpHandler.command("register", async (ctx) => {
   // TODO: Generate registration link to web portal
   await ctx.reply(
     `To complete your registration, visit the community portal:\n\n` +
-      `🔗 https://hub.msociety.dev\n\n` +
+      `🔗 https://msociety.dev\n\n` +
       `Log in with your Telegram account to set up your profile.`
   );
 });
