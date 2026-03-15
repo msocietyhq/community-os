@@ -17,8 +17,6 @@ interface User {
 interface AuthContext {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -43,39 +41,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch("/api/auth/sign-in/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      throw new Error(data?.message ?? "Sign in failed");
-    }
-    const data = await res.json();
-    setUser(data?.user ?? null);
-  }, []);
-
-  const signup = useCallback(
-    async (name: string, email: string, password: string) => {
-      const res = await fetch("/api/auth/sign-up/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name, email, password }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.message ?? "Sign up failed");
-      }
-      const data = await res.json();
-      setUser(data?.user ?? null);
-    },
-    [],
-  );
-
   const logout = useCallback(async () => {
     await fetch("/api/auth/sign-out", {
       method: "POST",
@@ -93,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext value={{ user, isLoading, login, signup, logout, refreshSession }}>
+    <AuthContext value={{ user, isLoading, logout, refreshSession }}>
       {children}
     </AuthContext>
   );

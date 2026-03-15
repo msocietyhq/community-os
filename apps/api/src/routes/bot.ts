@@ -1,10 +1,12 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { webhookCallback } from "grammy";
 import { bot } from "../bot/bot";
 import { env } from "../env";
 import { loginLinkService } from "../services/login-link.service";
+import { authModel } from "./models/auth";
 
 export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
+  .use(authModel)
   .post(
     "/webhook",
     webhookCallback(bot, "elysia", { secretToken: env.WEBHOOK_SECRET }),
@@ -35,7 +37,7 @@ export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
       return response;
     },
     {
-      query: t.Object({ code: t.String() }),
+      query: "auth.loginCodeQuery",
       detail: {
         tags: ["Bot"],
         summary: "One-time bot login",

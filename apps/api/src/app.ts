@@ -10,6 +10,7 @@ import { infraRoutes } from "./routes/infra";
 import { fundRoutes } from "./routes/funds";
 import { reputationRoutes } from "./routes/reputation";
 import { botRoutes } from "./routes/bot";
+import { authLoginRoutes } from "./routes/auth-login";
 import { AppError } from "./lib/errors";
 import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
 
@@ -93,6 +94,7 @@ export const app = new Elysia()
       },
     }),
   )
+  .use(authLoginRoutes)
   .mount("/api/auth", auth.handler)
   .use(healthRoutes)
   .use(memberRoutes)

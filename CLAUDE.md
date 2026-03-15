@@ -87,6 +87,10 @@ bun db:seed              # Seed database with initial data
 - Migration files MUST be committed to git — they are the source of truth for schema changes.
 - All schema definitions live in `apps/api/src/db/schema/`.
 
+## TypeScript Rules
+
+- **NEVER use `any`** — always use proper types, `unknown` + narrowing, or explicit interfaces
+
 ## ElysiaJS Conventions
 
 Follow the patterns from the [ElysiaJS best practices](https://elysiajs.com/essential/best-practice.html):
