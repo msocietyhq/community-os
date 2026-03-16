@@ -14,6 +14,7 @@ import { botRoutes } from "./routes/bot";
 import { authLoginRoutes } from "./routes/auth-login";
 import { AppError } from "./lib/errors";
 import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
+import { env } from "./env";
 
 function extractValidationDetails(error: Error): string {
   return error.message;
@@ -70,7 +71,7 @@ export const app = new Elysia()
       },
     };
   })
-  .use(cors())
+  .use(cors({ origin: env.WEB_URL, credentials: true }))
   .use(generalRateLimit)
   .use(authRateLimit)
   .use(

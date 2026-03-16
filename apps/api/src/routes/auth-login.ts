@@ -42,13 +42,30 @@ export const authLoginRoutes = new Elysia({ prefix: "/api/v1/auth" })
         };
       }
 
-      // Delegate to Better Auth SDK — returns Response with Set-Cookie headers.
-      // Body type assertion needed: better-auth-telegram doesn't declare body
-      // types in its endpoint definition, but reads them at runtime.
-      return auth.api.signInWithTelegram!({
-        asResponse: true,
-        body: { ...hashData, hash: body.hash },
-      } as { asResponse: true });
+      // Call Better Auth's handler to get a Response with Set-Cookie headers,
+      // then extract cookies and body so the response goes through Elysia's
+      // CORS middleware instead of being returned as a raw Response.
+      const authRequest = new Request(
+        `${env.API_URL}/api/auth/sign-in/telegram`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...hashData, hash: body.hash }),
+        },
+      );
+      const authResponse = await auth.handler(authRequest);
+
+      // Forward session cookies from Better Auth
+      const cookies = authResponse.headers.getSetCookie();
+      if (cookies.length === 1) {
+        set.headers["set-cookie"] = cookies[0];
+      } else if (cookies.length > 1) {
+        (set.headers as Record<string, string | string[]>)["set-cookie"] =
+          cookies;
+      }
+
+      set.status = authResponse.status;
+      return authResponse.json();
     },
     {
       body: "auth.telegramLogin",

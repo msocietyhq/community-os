@@ -1,11 +1,10 @@
 import {
   createContext,
   useContext,
-  useState,
-  useEffect,
   useCallback,
   type ReactNode,
 } from "react";
+import { authClient } from "./auth-client";
 
 interface User {
   id: string;
@@ -24,41 +23,27 @@ interface AuthContext {
 const AuthContext = createContext<AuthContext | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/get-session", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        setUser(data?.user ?? null);
-      })
-      .catch(() => {
-        setUser(null);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, []);
+  const { data: session, isPending, refetch } = authClient.useSession();
 
   const logout = useCallback(async () => {
-    await fetch("/api/auth/sign-out", {
-      method: "POST",
-      credentials: "include",
-    });
-    setUser(null);
+    await authClient.signOut();
   }, []);
 
   const refreshSession = useCallback(async () => {
-    const res = await fetch("/api/auth/get-session", {
-      credentials: "include",
-    });
-    const data = await res.json();
-    setUser(data?.user ?? null);
-  }, []);
+    await refetch();
+  }, [refetch]);
+
+  const user = session?.user
+    ? {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image,
+      }
+    : null;
 
   return (
-    <AuthContext value={{ user, isLoading, logout, refreshSession }}>
+    <AuthContext value={{ user, isLoading: isPending, logout, refreshSession }}>
       {children}
     </AuthContext>
   );
