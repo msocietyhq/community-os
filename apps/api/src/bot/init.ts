@@ -10,6 +10,7 @@ import { tokenHandler } from "./handlers/token";
 import { registerHandler } from "./handlers/register";
 import { loginHandler } from "./handlers/login";
 import { PostgresSessionStorage } from "./session-storage";
+import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { env } from "../env";
 
 const ALLOWED_UPDATES = [
@@ -52,6 +53,9 @@ export async function initBot(): Promise<void> {
     await next();
   });
 
+  // Auto-register group members before session/handlers
+  bot.use(autoRegisterMiddleware);
+
   // Session must be registered before conversations and handlers
   bot.use(session({ initial: () => ({}), storage: new PostgresSessionStorage() }));
   // Conversations plugin must be registered before conversation handlers
@@ -73,6 +77,7 @@ export async function initBot(): Promise<void> {
     console.error("Bot error:", err);
   });
 
+  await warmUpKnownIds();
   await bot.init();
 
   // Delete webhook first to reset Telegram's delivery state.

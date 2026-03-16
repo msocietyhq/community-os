@@ -138,4 +138,14 @@ export const membersService = {
 
     return member;
   },
+
+  async createIfNotExists(userId: string): Promise<{ created: boolean }> {
+    const [member] = await db
+      .insert(members)
+      .values({ userId })
+      .onConflictDoNothing({ target: members.userId })
+      .returning();
+
+    return { created: !!member };
+  },
 };
