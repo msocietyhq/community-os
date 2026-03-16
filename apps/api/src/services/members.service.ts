@@ -187,14 +187,14 @@ export const membersService = {
     return result[0] ?? null;
   },
 
-  async ban(userId: string) {
+  async ban(userId: string, opts?: { skipTelegram?: boolean }) {
     const [updated] = await db
       .update(user)
       .set({ banned: true, updatedAt: new Date() })
       .where(eq(user.id, userId))
       .returning();
 
-    if (updated?.telegramId && env.TELEGRAM_GROUP_ID) {
+    if (!opts?.skipTelegram && updated?.telegramId && env.TELEGRAM_GROUP_ID) {
       await bot.api
         .banChatMember(env.TELEGRAM_GROUP_ID, Number(updated.telegramId))
         .catch(console.error);
@@ -203,14 +203,14 @@ export const membersService = {
     return updated ?? null;
   },
 
-  async unban(userId: string) {
+  async unban(userId: string, opts?: { skipTelegram?: boolean }) {
     const [updated] = await db
       .update(user)
       .set({ banned: false, updatedAt: new Date() })
       .where(eq(user.id, userId))
       .returning();
 
-    if (updated?.telegramId && env.TELEGRAM_GROUP_ID) {
+    if (!opts?.skipTelegram && updated?.telegramId && env.TELEGRAM_GROUP_ID) {
       await bot.api
         .unbanChatMember(env.TELEGRAM_GROUP_ID, Number(updated.telegramId))
         .catch(console.error);

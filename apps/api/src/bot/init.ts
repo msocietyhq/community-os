@@ -4,7 +4,7 @@ import { bot } from "./bot";
 import { helpHandler } from "./handlers/help";
 import { eventsHandler } from "./handlers/events";
 import { reputationHandler } from "./handlers/reputation";
-import { welcomeHandler } from "./handlers/welcome";
+import { membershipHandler } from "./handlers/membership";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
 import { registerHandler } from "./handlers/register";
@@ -68,7 +68,7 @@ export async function initBot(): Promise<void> {
   bot.use(registerHandler);
   bot.use(eventsHandler);
   bot.use(reputationHandler);
-  bot.use(welcomeHandler);
+  bot.use(membershipHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);
 
