@@ -20,16 +20,39 @@ interface RecordEventInput {
   telegramChatId?: string;
 }
 
+type TriggerRow = typeof reputationTriggers.$inferSelect;
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+let triggerCache: TriggerRow[] = [];
+let cacheLoadedAt = 0;
+
+async function loadTriggers(): Promise<TriggerRow[]> {
+  if (Date.now() - cacheLoadedAt < CACHE_TTL_MS && triggerCache.length > 0) {
+    return triggerCache;
+  }
+  triggerCache = await db
+    .select()
+    .from(reputationTriggers)
+    .where(eq(reputationTriggers.isActive, true));
+  cacheLoadedAt = Date.now();
+  return triggerCache;
+}
+
 export const reputationService = {
+  /** Returns all active keyword trigger values from cache. */
+  async getKeywordValues(): Promise<string[]> {
+    const triggers = await loadTriggers();
+    return triggers
+      .filter((t) => t.triggerType === "keyword")
+      .map((t) => t.triggerValue);
+  },
+
   async findTrigger(type: "reaction" | "keyword", value: string) {
-    const trigger = await db.query.reputationTriggers.findFirst({
-      where: and(
-        eq(reputationTriggers.triggerType, type),
-        eq(reputationTriggers.triggerValue, value),
-        eq(reputationTriggers.isActive, true),
-      ),
-    });
-    return trigger ?? null;
+    const triggers = await loadTriggers();
+    return triggers.find(
+      (t) => t.triggerType === type && t.triggerValue === value,
+    ) ?? null;
   },
 
   async recordEvent(input: RecordEventInput) {

@@ -3,14 +3,6 @@ import { getMessageAuthor } from "./message-cache";
 import { reputationService } from "../../services/reputation.service";
 import { VOTE_QUOTA } from "@community-os/shared/constants";
 
-const REPUTATION_KEYWORDS = [
-  "thanks",
-  "thank you",
-  "jazakallah",
-  "boo",
-  "eww",
-];
-
 export type ReputationResult =
   | {
       status: "recorded";
@@ -117,7 +109,8 @@ export async function processKeyword(
 ): Promise<ReputationResult> {
   const lowerText = event.text.toLowerCase();
 
-  const matchedKeyword = REPUTATION_KEYWORDS.find((kw) =>
+  const keywords = await reputationService.getKeywordValues();
+  const matchedKeyword = keywords.find((kw) =>
     lowerText.includes(kw),
   );
   if (!matchedKeyword) return { status: "no_trigger" };
