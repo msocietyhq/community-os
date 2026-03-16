@@ -29,70 +29,47 @@ When adding backlog items, use this format:
 
 ## Current Backlog
 
-### P0 — Critical (MVP)
+### P0 — Critical
 
-#### [P0] Auth — Telegram Login + Better Auth setup
+#### [P0] Projects — CRUD, endorsement workflow
 **Status**: todo
 
-#### [P0] Member profiles — CRUD with Telegram linking
+#### [P0] Funds — Transaction tracking, balance derivation
 **Status**: todo
 
-#### [P0] Events — CRUD, RSVP, attendance
+#### [P0] Event pledges
 **Status**: todo
 
-#### [P0] Reputation — Emoji reaction + keyword tracking
+#### [P0] Web portal — Auth pages, dashboard, events, projects
 **Status**: todo
 
-#### [P0] Bot — grammY setup, event commands, AI chat
-**Status**: todo
-
-#### [P0] API — OpenAPI docs, health check, CORS
-**Status**: todo
-
-#### [P0] Audit logging
+#### [P0] Bot AI agent — Claude tool-use
 **Status**: todo
 
 ### P1 — Important
 
-#### [P1] Projects — CRUD, endorsement workflow
+#### [P1] Infra provisioning — Railway, Neon, Cloudflare
 **Status**: todo
 
-#### [P1] Funds — Transaction tracking, balance derivation
+#### [P1] Subdomain management
 **Status**: todo
 
-#### [P1] Event pledges
+#### [P1] Email notifications — Resend integration
 **Status**: todo
 
-#### [P1] Web portal — Auth pages, dashboard, events, projects
-**Status**: todo
-
-#### [P1] Bot AI agent — Claude tool-use
+#### [P1] Reputation leaderboard
 **Status**: todo
 
 ### P2 — Nice to Have
 
-#### [P2] Infra provisioning — Railway, Neon, Cloudflare
+#### [P2] Admin CLI tool
 **Status**: todo
 
-#### [P2] Subdomain management
+#### [P2] Webhooks for external integrations
 **Status**: todo
 
-#### [P2] Email notifications — Resend integration
+#### [P2] Advanced analytics and reporting
 **Status**: todo
 
-#### [P2] Reputation leaderboard
-**Status**: todo
-
-### P3 — Future
-
-#### [P3] Admin CLI tool
-**Status**: todo
-
-#### [P3] Webhooks for external integrations
-**Status**: todo
-
-#### [P3] Advanced analytics and reporting
-**Status**: todo
-
-#### [P3] Member skills matching
+#### [P2] Member skills matching
 **Status**: todo
