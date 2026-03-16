@@ -85,28 +85,33 @@ export async function runAgent({
     { role: "user", content: query },
   ];
 
-  const result = await generateText({
-    model: anthropic("claude-sonnet-4-20250514"),
-    system: getSystemPrompt(),
-    messages,
-    tools,
-    stopWhen: stepCountIs(10),
-    maxOutputTokens: 1024,
-  });
+  try {
+    const result = await generateText({
+      model: anthropic("claude-sonnet-4-20250514"),
+      system: getSystemPrompt(),
+      messages,
+      tools,
+      stopWhen: stepCountIs(10),
+      maxOutputTokens: 1024,
+    });
 
-  const text =
-    result.text || "I couldn't generate a response. Please try again.";
+    const text =
+      result.text || "I couldn't generate a response. Please try again.";
 
-  // Preserve full conversation context (tool calls + results) for multi-turn
-  const updatedHistory: ModelMessage[] = [
-    ...messages,
-    ...(result.response.messages as ModelMessage[]),
-  ];
+    // Preserve full conversation context (tool calls + results) for multi-turn
+    const updatedHistory: ModelMessage[] = [
+      ...messages,
+      ...(result.response.messages as ModelMessage[]),
+    ];
 
-  // Trim to last N messages to keep context manageable
-  if (updatedHistory.length > MAX_HISTORY) {
-    updatedHistory.splice(0, updatedHistory.length - MAX_HISTORY);
+    return { text, updatedHistory };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("rate limit")) {
+      return {
+        text: "I'm being rate-limited right now. Please try again in a minute or two 🙏",
+        updatedHistory: [...messages],
+      };
+    }
+    throw error;
   }
-
-  return { text, updatedHistory };
 }

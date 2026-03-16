@@ -2,6 +2,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
+import { defineAbilityFor, type Actions, type Subjects } from "@community-os/shared/abilities";
+import { isRole } from "@community-os/shared/constants";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -449,6 +451,56 @@ export function createTools(ctx: ToolContext) {
         const { data, error } = await ctx.api.api.v1.funds.balances.get();
         if (error) return { status: error.status, value: error.value };
         return data;
+      },
+    }),
+
+    check_permissions: tool({
+      description:
+        "Check if the current user has permission to perform an action. Use this before attempting any write or admin operation.",
+      inputSchema: z.object({
+        action: z.enum([
+          "create",
+          "read",
+          "update",
+          "delete",
+          "rsvp",
+          "check_in",
+          "endorse",
+          "provision",
+          "deprovision",
+          "ban",
+          "manage_role",
+        ]),
+        subject: z.enum([
+          "Event",
+          "Member",
+          "Project",
+          "Venue",
+          "Fund",
+          "Reputation",
+          "Infra",
+          "Audit",
+        ]),
+      }),
+      execute: async ({ action, subject }) => {
+        const { data, error } = await ctx.api.api.v1.members.me.get();
+        if (error) return { allowed: false, reason: "Could not retrieve user profile" };
+
+        const { id, role } = data.user;
+        if (!isRole(role)) return { allowed: false, reason: "Unrecognized user role" };
+        const ability = defineAbilityFor({ id, role });
+
+        let subjectArg: Subjects;
+        if (subject === "Member") {
+          subjectArg = { __caslSubjectType__: "Member", userId: id } as Subjects;
+        } else if (subject === "Project") {
+          subjectArg = { __caslSubjectType__: "Project", ownerId: id } as Subjects;
+        } else {
+          subjectArg = subject;
+        }
+
+        const allowed = ability.can(action as Actions, subjectArg);
+        return { allowed, role };
       },
     }),
   };

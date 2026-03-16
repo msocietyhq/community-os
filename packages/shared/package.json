@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./constants": "./src/constants.ts",
     "./validators": "./src/validators/index.ts",
-    "./types": "./src/types/index.ts"
+    "./types": "./src/types/index.ts",
+    "./abilities": "./src/abilities.ts"
   },
   "scripts": {
     "type-check": "tsgo --noEmit"
