@@ -1,5 +1,8 @@
-import { Composer } from "grammy";
+import { Composer, InlineKeyboard } from "grammy";
 import type { BotContext } from "../types";
+import { resolveUser } from "../lib/auth";
+import { eventsService } from "../../services/events.service";
+import { isAppError } from "../../lib/errors";
 
 export const helpHandler = new Composer<BotContext>();
 
@@ -9,11 +12,45 @@ helpHandler.command("start", async (ctx) => {
     return;
   }
 
+  const rsvpMatch = ctx.match?.match(/^rsvp_(.+)$/);
+  if (rsvpMatch) {
+    const eventId = rsvpMatch[1]!;
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const resolved = await resolveUser(String(telegramId));
+    if (!resolved) {
+      await ctx.reply("You need to set up your profile first. Send /profile to get started.");
+      return;
+    }
+
+    let event: Awaited<ReturnType<typeof eventsService.getById>>;
+    try {
+      event = await eventsService.getById(eventId);
+    } catch (err) {
+      if (isAppError(err) && err.code === "EVENT_NOT_FOUND") {
+        await ctx.reply("Event not found.");
+        return;
+      }
+      throw err;
+    }
+
+    const keyboard = new InlineKeyboard()
+      .text("✅ Going", `rsvp_status:${eventId}:going`)
+      .text("🤔 Maybe", `rsvp_status:${eventId}:maybe`)
+      .text("❌ Not Going", `rsvp_status:${eventId}:not_going`);
+
+    await ctx.reply(`RSVP to *${event.title.replace(/[_*`[\]]/g, "\\$&")}*:`, {
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    });
+    return;
+  }
+
   await ctx.reply(
     `Welcome to the MSOCIETY Bot! 🤖\n\n` +
       `I help manage the MSOCIETY community. Here's what I can do:\n\n` +
       `/events — View upcoming events\n` +
-      `/rsvp <event> — RSVP to an event\n` +
       `/reputation — Check your reputation score\n` +
       `/profile — View or edit your community profile\n` +
       `/login — Get a login link for the web portal\n` +
@@ -26,7 +63,6 @@ helpHandler.command("help", async (ctx) => {
   await ctx.reply(
     `*MSOCIETY Bot Commands*\n\n` +
       `📅 /events — View upcoming events\n` +
-      `✅ /rsvp <event> — RSVP to an event\n` +
       `⭐ /reputation — Check your reputation score\n` +
       `👤 /profile — View or edit your community profile\n` +
       `🔗 /login — Get a login link for the web portal\n` +

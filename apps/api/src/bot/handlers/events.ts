@@ -3,6 +3,7 @@ import type { BotContext } from "../types";
 import { resolveUser } from "../lib/auth";
 import { eventsService } from "../../services/events.service";
 import { isAppError } from "../../lib/errors";
+import { env } from "../../env";
 
 export const eventsHandler = new Composer<BotContext>();
 
@@ -86,7 +87,7 @@ eventsHandler.callbackQuery("rsvp_back", async (ctx) => {
   await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
 });
 
-// Callback: RSVP button pressed — show status options
+// Callback: RSVP button pressed — show status options (private) or deep link (group)
 eventsHandler.callbackQuery(/^rsvp:(.+)$/, async (ctx) => {
   const eventId = ctx.match?.[1];
   if (!eventId) {
@@ -94,15 +95,24 @@ eventsHandler.callbackQuery(/^rsvp:(.+)$/, async (ctx) => {
     return;
   }
 
-  const keyboard = new InlineKeyboard()
-    .text("✅ Going", `rsvp_status:${eventId}:going`)
-    .text("🤔 Maybe", `rsvp_status:${eventId}:maybe`)
-    .text("❌ Not Going", `rsvp_status:${eventId}:not_going`)
-    .row()
-    .text("« Back", "rsvp_back");
+  const isPrivate = ctx.chat?.type === "private";
 
-  await ctx.answerCallbackQuery();
-  await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+  if (isPrivate) {
+    const keyboard = new InlineKeyboard()
+      .text("✅ Going", `rsvp_status:${eventId}:going`)
+      .text("🤔 Maybe", `rsvp_status:${eventId}:maybe`)
+      .text("❌ Not Going", `rsvp_status:${eventId}:not_going`)
+      .row()
+      .text("« Back", "rsvp_back");
+
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+  } else {
+    const botUsername = env.TELEGRAM_BOT_USERNAME;
+    await ctx.answerCallbackQuery({
+      url: `https://t.me/${botUsername}?start=rsvp_${eventId}`,
+    });
+  }
 });
 
 // Callback: RSVP status selected — perform the RSVP
