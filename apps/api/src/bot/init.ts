@@ -12,6 +12,7 @@ import { loginHandler } from "./handlers/login";
 import { PostgresSessionStorage } from "./session-storage";
 import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
+import { cleanupStaleAuthors } from "./lib/message-cache";
 import { env } from "../env";
 
 const ALLOWED_UPDATES = [
@@ -94,6 +95,9 @@ export async function initBot(): Promise<void> {
     secret_token: env.WEBHOOK_SECRET,
     allowed_updates: [...ALLOWED_UPDATES],
   });
+
+  // Periodically clean up stale message author rows (every hour)
+  setInterval(cleanupStaleAuthors, 60 * 60 * 1000);
 
   console.log(`Bot @${bot.botInfo.username} initialized`);
 }

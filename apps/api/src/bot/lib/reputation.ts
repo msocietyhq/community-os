@@ -22,7 +22,8 @@ export type ReputationResult =
   | { status: "no_trigger" }
   | { status: "user_not_found" }
   | { status: "unknown_author" }
-  | { status: "duplicate" };
+  | { status: "duplicate" }
+  | { status: "error"; message: string };
 
 interface ReactionEvent {
   fromTelegramId: string;
@@ -45,7 +46,7 @@ export async function processReaction(
   event: ReactionEvent,
 ): Promise<ReputationResult> {
   try {
-    const toTelegramUserId = getMessageAuthor(event.chatId, event.messageId);
+    const toTelegramUserId = await getMessageAuthor(event.chatId, event.messageId);
     if (!toTelegramUserId) return { status: "unknown_author" };
 
     if (String(toTelegramUserId) === event.fromTelegramId) {
@@ -100,7 +101,7 @@ export async function processReaction(
     };
   } catch (error) {
     console.error("Failed to process reputation reaction:", error);
-    return { status: "no_trigger" };
+    return { status: "error", message: String(error) };
   }
 }
 
@@ -169,6 +170,6 @@ export async function processKeyword(
     };
   } catch (error) {
     console.error("Failed to process reputation keyword:", error);
-    return { status: "no_trigger" };
+    return { status: "error", message: String(error) };
   }
 }

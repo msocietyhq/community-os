@@ -1,3 +1,7 @@
+import { db } from "../../db";
+import { messageAuthors } from "../../db/schema";
+import { and, eq, lt } from "drizzle-orm";
+
 const MAX_ENTRIES = 10_000;
 const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -6,6 +10,7 @@ interface CacheEntry {
   createdAt: number;
 }
 
+/** L1 in-memory hot cache */
 const cache = new Map<string, CacheEntry>();
 
 function makeKey(chatId: string, messageId: string): string {
@@ -16,14 +21,12 @@ function evict(): void {
   if (cache.size <= MAX_ENTRIES) return;
 
   const now = Date.now();
-  // First pass: remove expired entries
   for (const [key, entry] of cache) {
     if (now - entry.createdAt > TTL_MS) {
       cache.delete(key);
     }
   }
 
-  // If still over limit, remove oldest entries
   if (cache.size > MAX_ENTRIES) {
     const overflow = cache.size - MAX_ENTRIES;
     const keys = cache.keys();
@@ -34,6 +37,10 @@ function evict(): void {
   }
 }
 
+/**
+ * Cache a message author in memory and persist to DB (write-through).
+ * DB write is fire-and-forget to avoid blocking the message handler.
+ */
 export function cacheMessage(
   chatId: string,
   messageId: string,
@@ -44,17 +51,71 @@ export function cacheMessage(
     fromUserId,
     createdAt: Date.now(),
   });
+
+  // Write-through to DB (fire-and-forget)
+  db.insert(messageAuthors)
+    .values({ chatId, messageId, fromUserId })
+    .onConflictDoNothing()
+    .then(() => {})
+    .catch((err) => console.error("Failed to persist message author:", err));
 }
 
-export function getMessageAuthor(
+/**
+ * Look up the author of a message. Checks in-memory cache first,
+ * falls back to DB on miss. Returns null only if truly unknown.
+ */
+export async function getMessageAuthor(
   chatId: string,
   messageId: string,
-): number | null {
-  const entry = cache.get(makeKey(chatId, messageId));
-  if (!entry) return null;
-  if (Date.now() - entry.createdAt > TTL_MS) {
-    cache.delete(makeKey(chatId, messageId));
-    return null;
+): Promise<number | null> {
+  // L1: in-memory cache
+  const key = makeKey(chatId, messageId);
+  const entry = cache.get(key);
+  if (entry) {
+    if (Date.now() - entry.createdAt > TTL_MS) {
+      cache.delete(key);
+    } else {
+      return entry.fromUserId;
+    }
   }
-  return entry.fromUserId;
+
+  // L2: database fallback
+  try {
+    const row = await db
+      .select({ fromUserId: messageAuthors.fromUserId })
+      .from(messageAuthors)
+      .where(
+        and(
+          eq(messageAuthors.chatId, chatId),
+          eq(messageAuthors.messageId, messageId),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    if (row) {
+      // Backfill L1 cache
+      cache.set(key, { fromUserId: row.fromUserId, createdAt: Date.now() });
+      return row.fromUserId;
+    }
+  } catch (err) {
+    console.error("Failed to query message author from DB:", err);
+  }
+
+  return null;
+}
+
+/**
+ * Remove message_authors rows older than 24 hours.
+ * Call periodically (e.g. every hour) to keep the table small.
+ */
+export async function cleanupStaleAuthors(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - TTL_MS);
+    await db
+      .delete(messageAuthors)
+      .where(lt(messageAuthors.createdAt, cutoff));
+  } catch (err) {
+    console.error("Failed to cleanup stale message authors:", err);
+  }
 }

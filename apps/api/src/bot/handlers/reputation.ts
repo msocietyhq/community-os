@@ -34,13 +34,15 @@ reputationHandler.on("message_reaction", async (ctx) => {
 
   for (const emoji of reaction.new_reaction) {
     if (emoji.type === "emoji") {
-      await processReaction({
+      const result = await processReaction({
         fromTelegramId: String(fromUser.id),
         messageId: String(reaction.message_id),
         chatId: String(reaction.chat.id),
         emoji: emoji.emoji,
       });
-      // No chat feedback for reactions — the emoji is visual enough
+      if (result.status === "error") {
+        console.error("Reaction reputation error:", result.message);
+      }
     }
   }
 });
@@ -225,6 +227,9 @@ async function sendFeedback(
       await ctx.reply("Can't find that user. They may need to register first.", {
         reply_parameters: { message_id: ctx.message.message_id },
       });
+      break;
+    case "error":
+      console.error("Keyword reputation error:", result.message);
       break;
     // no_trigger, unknown_author, duplicate → silent
   }
