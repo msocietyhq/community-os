@@ -38,7 +38,9 @@ export type Actions =
   | "check_in"
   | "endorse"
   | "provision"
-  | "deprovision";
+  | "deprovision"
+  | "ban"
+  | "manage_role";
 
 export type AppAbility = MongoAbility<[Actions, Subjects]>;
 
@@ -63,6 +65,7 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     // Members
     can("read", "Member");
     can("update", "Member");
+    can("ban", "Member");
     // Projects
     can("read", "Project");
     can("create", "Project");

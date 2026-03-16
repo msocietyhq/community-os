@@ -18,6 +18,8 @@ export const PERMISSIONS = {
   "members:read": ["member", "admin", "superadmin"],
   "members:update_own": ["member", "admin", "superadmin"],
   "members:update_any": ["admin", "superadmin"],
+  "members:ban": ["admin", "superadmin"],
+  "members:manage_role": ["superadmin"],
   "members:delete": ["superadmin"],
 
   // Events
@@ -145,6 +147,9 @@ export const AUDIT_ACTIONS = [
   "deprovision",
   "approve",
   "reject",
+  "ban",
+  "unban",
+  "role_change",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

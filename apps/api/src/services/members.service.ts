@@ -2,6 +2,8 @@ import { eq, and, or, ilike, count, asc, sql } from "drizzle-orm";
 import { db } from "../db";
 import { members } from "../db/schema/members";
 import { user } from "../db/schema/auth";
+import { bot } from "../bot/bot";
+import { env } from "../env";
 import type {
   CreateMemberInput,
   MemberListQuery,
@@ -85,6 +87,8 @@ export const membersService = {
             id: user.id,
             name: user.name,
             image: user.image,
+            role: user.role,
+            banned: user.banned,
             telegramUsername: user.telegramUsername,
           },
         })
@@ -147,5 +151,81 @@ export const membersService = {
       .returning();
 
     return { created: !!member };
+  },
+
+  async findWithUser(userId: string) {
+    const result = await db
+      .select({
+        id: members.id,
+        userId: members.userId,
+        githubHandle: members.githubHandle,
+        bio: members.bio,
+        skills: members.skills,
+        interests: members.interests,
+        currentCompany: members.currentCompany,
+        currentTitle: members.currentTitle,
+        education: members.education,
+        linkedinUrl: members.linkedinUrl,
+        websiteUrl: members.websiteUrl,
+        joinedAt: members.joinedAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          banned: user.banned,
+          telegramUsername: user.telegramUsername,
+          telegramId: user.telegramId,
+        },
+      })
+      .from(members)
+      .innerJoin(user, eq(members.userId, user.id))
+      .where(eq(members.userId, userId))
+      .limit(1);
+
+    return result[0] ?? null;
+  },
+
+  async ban(userId: string) {
+    const [updated] = await db
+      .update(user)
+      .set({ banned: true, updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning();
+
+    if (updated?.telegramId && env.TELEGRAM_GROUP_ID) {
+      await bot.api
+        .banChatMember(env.TELEGRAM_GROUP_ID, Number(updated.telegramId))
+        .catch(console.error);
+    }
+
+    return updated ?? null;
+  },
+
+  async unban(userId: string) {
+    const [updated] = await db
+      .update(user)
+      .set({ banned: false, updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning();
+
+    if (updated?.telegramId && env.TELEGRAM_GROUP_ID) {
+      await bot.api
+        .unbanChatMember(env.TELEGRAM_GROUP_ID, Number(updated.telegramId))
+        .catch(console.error);
+    }
+
+    return updated ?? null;
+  },
+
+  async changeRole(userId: string, role: string) {
+    const [updated] = await db
+      .update(user)
+      .set({ role, updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning();
+
+    return updated ?? null;
   },
 };

@@ -35,3 +35,13 @@ export const updateMemberSchema = z.object({
 });
 
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
+
+export const banMemberSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+export type BanMemberInput = z.infer<typeof banMemberSchema>;
+
+export const changeRoleSchema = z.object({
+  role: z.enum(["member", "admin"]),
+});
+export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
