@@ -6,14 +6,7 @@ import { telegramUserFromContext } from "../lib/telegram-user";
 import { membersService } from "../../services/members.service";
 import type { CreateMemberInput } from "@community-os/shared/validators";
 import { env } from "../../env";
-
-function parseTitleCompany(text: string): { title?: string; company?: string } {
-  const match = text.match(/^(.+?)\s+at\s+(.+)$/i);
-  if (match?.[1] && match[2]) {
-    return { title: match[1].trim(), company: match[2].trim() };
-  }
-  return { title: text.trim() };
-}
+import { bot } from "../bot";
 
 function parseCsvList(text: string): string[] {
   return text
@@ -22,16 +15,22 @@ function parseCsvList(text: string): string[] {
     .filter(Boolean);
 }
 
+function withCurrent(prompt: string, value: string | null | undefined): string {
+  if (!value) return prompt;
+  return `${prompt}\n\n\`${value}\``;
+}
+
 async function askQuestion(
   conversation: BotConversation,
   ctx: BotContext,
   prompt: string,
 ): Promise<string | null> {
   const keyboard = new InlineKeyboard().text("Skip ⏭", "skip_step");
-  await ctx.reply(prompt, { reply_markup: keyboard });
+  await ctx.reply(prompt, { reply_markup: keyboard, parse_mode: "Markdown" });
   const response = await conversation.wait();
   if (response.callbackQuery?.data === "skip_step") {
     await response.answerCallbackQuery();
+    await response.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
     return null;
   }
   return response.message?.text ?? null;
@@ -48,7 +47,7 @@ async function setProfileConversation(conversation: BotConversation, ctx: BotCon
   if (env.TELEGRAM_GROUP_ID) {
     const member = await conversation.external(async () => {
       try {
-        return await ctx.api.getChatMember(env.TELEGRAM_GROUP_ID!, from.id);
+        return await bot.api.getChatMember(env.TELEGRAM_GROUP_ID!, from.id);
       } catch {
         return null;
       }
@@ -66,7 +65,7 @@ async function setProfileConversation(conversation: BotConversation, ctx: BotCon
 
   // Build TelegramUser once (includes profile photo fetch)
   const telegramUser = await conversation.external(() =>
-    telegramUserFromContext(from, ctx.api),
+    telegramUserFromContext(from, bot.api),
   );
 
   // Create auth user + account (or get existing)
@@ -91,49 +90,57 @@ async function setProfileConversation(conversation: BotConversation, ctx: BotCon
   const bioAnswer = await askQuestion(
     conversation,
     ctx,
-    "1/5 — Tell us about yourself (max 500 chars):",
+    withCurrent("1/6 — Tell us about yourself (max 500 chars):", existing?.bio),
   );
   if (bioAnswer) {
     data.bio = bioAnswer.slice(0, 500);
   }
 
-  // 2. Title + Company
+  // 2. Title
   const titleAnswer = await askQuestion(
     conversation,
     ctx,
-    '2/5 — What do you do? (e.g. "Software Engineer at Grab"):',
+    withCurrent('2/6 — What\'s your role? (e.g. "Software Engineer"):', existing?.currentTitle),
   );
   if (titleAnswer) {
-    const { title, company } = parseTitleCompany(titleAnswer);
-    data.currentTitle = title;
-    data.currentCompany = company;
+    data.currentTitle = titleAnswer.trim();
   }
 
-  // 3. Skills
+  // 3. Company
+  const companyAnswer = await askQuestion(
+    conversation,
+    ctx,
+    withCurrent('3/6 — Where do you work? (e.g. "Grab"):', existing?.currentCompany),
+  );
+  if (companyAnswer) {
+    data.currentCompany = companyAnswer.trim();
+  }
+
+  // 4. Skills
   const skillsAnswer = await askQuestion(
     conversation,
     ctx,
-    "3/5 — Your skills? (comma-separated, e.g. TypeScript, React, Python):",
+    withCurrent("4/6 — Your skills? (comma-separated, e.g. TypeScript, React, Python):", existing?.skills?.join(", ")),
   );
   if (skillsAnswer) {
     data.skills = parseCsvList(skillsAnswer);
   }
 
-  // 4. Interests
+  // 5. Interests
   const interestsAnswer = await askQuestion(
     conversation,
     ctx,
-    "4/5 — Your interests? (comma-separated, e.g. AI, Web Dev, Open Source):",
+    withCurrent("5/6 — Your interests? (comma-separated, e.g. AI, Web Dev, Open Source):", existing?.interests?.join(", ")),
   );
   if (interestsAnswer) {
     data.interests = parseCsvList(interestsAnswer);
   }
 
-  // 5. GitHub
+  // 6. GitHub
   const githubAnswer = await askQuestion(
     conversation,
     ctx,
-    "5/5 — Your GitHub username:",
+    withCurrent("6/6 — Your GitHub username:", existing?.githubHandle),
   );
   if (githubAnswer) {
     data.githubHandle = githubAnswer.replace(/^@/, "").trim();
@@ -150,17 +157,29 @@ async function setProfileConversation(conversation: BotConversation, ctx: BotCon
   const verb = existing ? "updated" : "created";
   const lines = [`Your MSOCIETY profile has been ${verb}!\n`];
   if (data.bio) lines.push(`Bio: ${data.bio}`);
-  if (data.currentTitle) {
-    const role = data.currentCompany
-      ? `${data.currentTitle} at ${data.currentCompany}`
-      : data.currentTitle;
-    lines.push(`Role: ${role}`);
-  }
+  if (data.currentTitle) lines.push(`Role: ${data.currentTitle}`);
+  if (data.currentCompany) lines.push(`Company: ${data.currentCompany}`);
   if (data.skills?.length) lines.push(`Skills: ${data.skills.join(", ")}`);
   if (data.interests?.length) lines.push(`Interests: ${data.interests.join(", ")}`);
   if (data.githubHandle) lines.push(`GitHub: ${data.githubHandle}`);
 
   await ctx.reply(lines.join("\n"));
+}
+
+function hasProfileData(member: {
+  bio?: string | null;
+  currentTitle?: string | null;
+  skills?: string[] | null;
+  interests?: string[] | null;
+  githubHandle?: string | null;
+}): boolean {
+  return !!(
+    member.bio ||
+    member.currentTitle ||
+    (member.skills && member.skills.length > 0) ||
+    (member.interests && member.interests.length > 0) ||
+    member.githubHandle
+  );
 }
 
 function formatProfile(member: {
@@ -173,21 +192,114 @@ function formatProfile(member: {
 }): string {
   const lines: string[] = [];
   if (member.bio) lines.push(`*Bio:* ${member.bio}`);
-  if (member.currentTitle) {
-    const role = member.currentCompany
-      ? `${member.currentTitle} at ${member.currentCompany}`
-      : member.currentTitle;
-    lines.push(`*Role:* ${role}`);
-  }
+  if (member.currentTitle) lines.push(`*Role:* ${member.currentTitle}`);
+  if (member.currentCompany) lines.push(`*Company:* ${member.currentCompany}`);
   if (member.skills?.length) lines.push(`*Skills:* ${member.skills.join(", ")}`);
   if (member.interests?.length) lines.push(`*Interests:* ${member.interests.join(", ")}`);
   if (member.githubHandle) lines.push(`*GitHub:* ${member.githubHandle}`);
   return lines.length > 0 ? lines.join("\n") : "Your profile is empty.";
 }
 
+const fieldConfig = {
+  bio: { label: "Bio", prompt: "Tell us about yourself (max 500 chars):" },
+  title: { label: "Role", prompt: 'What\'s your role? (e.g. "Software Engineer"):' },
+  company: { label: "Company", prompt: 'Where do you work? (e.g. "Grab"):' },
+  skills: { label: "Skills", prompt: "Your skills? (comma-separated, e.g. TypeScript, React, Python):" },
+  interests: { label: "Interests", prompt: "Your interests? (comma-separated, e.g. AI, Web Dev, Open Source):" },
+  github: { label: "GitHub", prompt: "Your GitHub username:" },
+} as const;
+
+type EditableField = keyof typeof fieldConfig;
+
+function currentValueForField(
+  member: NonNullable<Awaited<ReturnType<typeof membersService.findByUserId>>>,
+  field: EditableField,
+): string | null | undefined {
+  switch (field) {
+    case "bio":
+      return member.bio;
+    case "title":
+      return member.currentTitle;
+    case "company":
+      return member.currentCompany;
+    case "skills":
+      return member.skills?.join(", ");
+    case "interests":
+      return member.interests?.join(", ");
+    case "github":
+      return member.githubHandle;
+  }
+}
+
+function applyFieldUpdate(field: EditableField, text: string): CreateMemberInput {
+  switch (field) {
+    case "bio":
+      return { bio: text.slice(0, 500) };
+    case "title":
+      return { currentTitle: text.trim() };
+    case "company":
+      return { currentCompany: text.trim() };
+    case "skills":
+      return { skills: parseCsvList(text) };
+    case "interests":
+      return { interests: parseCsvList(text) };
+    case "github":
+      return { githubHandle: text.replace(/^@/, "").trim() };
+  }
+}
+
+const editFieldKeyboard = new InlineKeyboard()
+  .text("Bio", "edit_field:bio")
+  .text("Role", "edit_field:title")
+  .text("Company", "edit_field:company")
+  .row()
+  .text("Skills", "edit_field:skills")
+  .text("Interests", "edit_field:interests")
+  .text("GitHub", "edit_field:github")
+  .row()
+  .text("← Back", "edit_back");
+
+async function editFieldConversation(conversation: BotConversation, ctx: BotContext) {
+  const field = ctx.callbackQuery?.data?.replace("edit_field:", "") as EditableField | undefined;
+  if (!field || !(field in fieldConfig)) return;
+
+  const from = ctx.from;
+  if (!from) return;
+
+  const telegramUser = await conversation.external(() =>
+    telegramUserFromContext(from, bot.api),
+  );
+  const userId = await conversation.external(() => createTelegramUser(telegramUser));
+  const existing = await conversation.external(() => membersService.findByUserId(userId));
+
+  const config = fieldConfig[field];
+  const current = existing ? currentValueForField(existing, field) : undefined;
+  const updatePrompt = `What should we update your ${config.label.toLowerCase()} with?`;
+  const message = current ? `\`${current}\`\n\n${updatePrompt}` : updatePrompt;
+
+  await ctx.reply(message, { parse_mode: "Markdown" });
+  const response = await conversation.wait();
+  const text = response.message?.text;
+
+  if (!text) {
+    await response.reply("No text received. Edit cancelled.");
+    return;
+  }
+
+  const data = applyFieldUpdate(field, text);
+  if (existing) {
+    await conversation.external(() => membersService.update(userId, data));
+  } else {
+    await conversation.external(() => membersService.create(userId, data));
+  }
+
+  await response.reply(`${config.label} updated!`);
+}
+
 export const profileHandler = new Composer<BotContext>();
 
 profileHandler.use(createConversation(setProfileConversation));
+profileHandler.use(createConversation(editFieldConversation));
 
 profileHandler.command("profile", async (ctx) => {
   if (ctx.chat.type !== "private") {
@@ -202,10 +314,8 @@ profileHandler.command("profile", async (ctx) => {
   const userId = await createTelegramUser(telegramUser);
   const member = await membersService.findByUserId(userId);
 
-  if (!member) {
-    await ctx.reply("You haven't set up your profile yet.", {
-      reply_markup: new InlineKeyboard().text("Edit Profile", "edit_profile"),
-    });
+  if (!member || !hasProfileData(member)) {
+    await ctx.conversation.enter("setProfileConversation");
     return;
   }
 
@@ -217,14 +327,17 @@ profileHandler.command("profile", async (ctx) => {
 
 profileHandler.callbackQuery("edit_profile", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.conversation.enter("setProfileConversation");
+  await ctx.editMessageReplyMarkup({ reply_markup: editFieldKeyboard });
 });
 
-profileHandler.command("set_profile", async (ctx) => {
-  if (ctx.chat.type !== "private") {
-    await ctx.reply("Please use this command in a private chat with me.");
-    return;
-  }
+profileHandler.callbackQuery("edit_back", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageReplyMarkup({
+    reply_markup: new InlineKeyboard().text("Edit Profile", "edit_profile"),
+  });
+});
 
-  await ctx.conversation.enter("setProfileConversation");
+profileHandler.callbackQuery(/^edit_field:/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.conversation.enter("editFieldConversation");
 });

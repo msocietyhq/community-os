@@ -4,7 +4,7 @@ import type { BotContext } from "../types";
 export const helpHandler = new Composer<BotContext>();
 
 helpHandler.command("start", async (ctx) => {
-  if (ctx.match === "set_profile") {
+  if (ctx.match === "profile") {
     await ctx.conversation.enter("setProfileConversation");
     return;
   }
