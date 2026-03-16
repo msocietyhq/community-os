@@ -74,62 +74,6 @@ eventsHandler.command("events", async (ctx) => {
   });
 });
 
-// /rsvp [slug] — RSVP to an event
-eventsHandler.command("rsvp", async (ctx) => {
-  const telegramId = ctx.from?.id;
-  if (!telegramId) return;
-
-  const resolved = await resolveUser(String(telegramId));
-  if (!resolved) {
-    await ctx.reply("You need to register first. Send /register to get started.");
-    return;
-  }
-
-  const slug = ctx.match?.trim();
-
-  // No slug provided — show event picker
-  if (!slug) {
-    const upcoming = await eventsService.listUpcoming(5);
-
-    if (upcoming.length === 0) {
-      await ctx.reply("No upcoming events to RSVP for right now.");
-      return;
-    }
-
-    const keyboard = new InlineKeyboard();
-    for (const [i, e] of upcoming.entries()) {
-      keyboard.text(e.title.slice(0, 40), `rsvp:${e.id}`);
-      if (i < upcoming.length - 1) keyboard.row();
-    }
-
-    await ctx.reply("Pick an event to RSVP:", { reply_markup: keyboard });
-    return;
-  }
-
-  // Slug provided — RSVP directly
-  try {
-    const event = await eventsService.getBySlug(slug);
-    await eventsService.rsvp(event.id, resolved.user.id, "going");
-    const fresh = await eventsService.getBySlug(slug);
-
-    await ctx.reply(
-      `✅ You're going to *${escapeMarkdown(fresh.title)}*!\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
-      { parse_mode: "Markdown" },
-    );
-  } catch (err) {
-    if (isAppError(err)) {
-      const messages: Record<string, string> = {
-        EVENT_NOT_FOUND: "Event not found. Check the slug and try again.",
-        EVENT_NOT_PUBLISHED: "This event is not open for RSVPs yet.",
-        EVENT_FULL: "Sorry, this event is full!",
-      };
-      await ctx.reply(messages[err.code] ?? err.message);
-      return;
-    }
-    throw err;
-  }
-});
-
 // Callback: Back button — restore original RSVP buttons
 eventsHandler.callbackQuery("rsvp_back", async (ctx) => {
   const upcoming = await eventsService.listUpcoming(5);
