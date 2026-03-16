@@ -34,6 +34,7 @@ export const auth = betterAuth({
     telegram({
       botToken: env.TELEGRAM_BOT_TOKEN,
       botUsername: env.TELEGRAM_BOT_USERNAME,
+      autoCreateUser: false,
     }),
   ],
   user: {

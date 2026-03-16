@@ -1,12 +1,9 @@
 import { Composer, InlineKeyboard } from "grammy";
 import { createConversation } from "@grammyjs/conversations";
 import type { BotContext, BotConversation } from "../types";
-import { getBotToken } from "../lib/auth";
+import { createTelegramUser } from "../lib/auth";
 import { membersService } from "../../services/members.service";
 import { loginLinkService } from "../../services/login-link.service";
-import { db } from "../../db";
-import { account } from "../../db/schema/auth";
-import { and, eq } from "drizzle-orm";
 import type { CreateMemberInput } from "@community-os/shared/validators";
 import { env } from "../../env";
 
@@ -56,9 +53,9 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
     }
   }
 
-  // Auto-create auth user (or get existing session)
-  await conversation.external(() =>
-    getBotToken({
+  // Create auth user + account (or get existing)
+  const userId = await conversation.external(() =>
+    createTelegramUser({
       id: from.id,
       first_name: from.first_name,
       last_name: from.last_name,
@@ -66,28 +63,9 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
     }),
   );
 
-  // Resolve Telegram ID → user ID
-  const acct = await conversation.external(() =>
-    db
-      .select({ userId: account.userId })
-      .from(account)
-      .where(
-        and(
-          eq(account.providerId, "telegram"),
-          eq(account.accountId, String(from.id)),
-        ),
-      )
-      .then((rows) => rows[0] ?? null),
-  );
-
-  if (!acct) {
-    await ctx.reply("Something went wrong creating your account. Please try again later.");
-    return;
-  }
-
   // Check if already registered
   const existing = await conversation.external(() =>
-    membersService.findByUserId(acct.userId),
+    membersService.findByUserId(userId),
   );
 
   if (existing) {
@@ -153,7 +131,7 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
 
   // Create member
   await conversation.external(() =>
-    membersService.create(acct.userId, data),
+    membersService.create(userId, data),
   );
 
   // Build summary

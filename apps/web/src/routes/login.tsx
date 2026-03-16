@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
-import { api } from "../lib/api-client";
+import { authClient } from "../lib/auth-client";
 
 interface TelegramAuthData {
   id: number;
@@ -31,13 +31,15 @@ function LoginPage() {
 
   const telegramLogin = useMutation({
     mutationFn: async (authData: TelegramAuthData) => {
-      const { data, error } =
-        await api.api.v1.auth["telegram-login"].post(authData);
-      if (error) {
-        const body = error.value as unknown as { error: string } | undefined;
-        throw new Error(body?.error ?? "Telegram sign in failed");
+      const result = await authClient.signInWithTelegram(authData);
+      if (result.error) {
+        const msg =
+          result.error.status === 403
+            ? "You must register via @msocietybot first. Send /register to the bot."
+            : (result.error.message ?? "Telegram sign in failed");
+        throw new Error(msg);
       }
-      return data;
+      return result.data;
     },
     onSuccess: async () => {
       await refreshSession();
@@ -45,14 +47,19 @@ function LoginPage() {
     },
   });
 
+  const handleTelegramAuth = useCallback(
+    (authData: TelegramAuthData) => {
+      telegramLogin.mutate(authData);
+    },
+    [telegramLogin.mutate],
+  );
+
   useEffect(() => {
     const container = telegramRef.current;
     if (!container) return;
 
     const win = window as unknown as Record<string, unknown>;
-    win.onTelegramAuth = (user: TelegramAuthData) => {
-      telegramLogin.mutate(user);
-    };
+    win.onTelegramAuth = handleTelegramAuth;
 
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
@@ -68,7 +75,7 @@ function LoginPage() {
       delete win.onTelegramAuth;
       container.innerHTML = "";
     };
-  }, [telegramLogin]);
+  }, [handleTelegramAuth]);
 
   if (isLoading) {
     return (
@@ -99,7 +106,7 @@ function LoginPage() {
               Sign in to MSOCIETY
             </h2>
             <p className="text-gray-400 text-sm text-center mb-8">
-              Only registered MSOCIETY members can log in.
+              Use your Telegram account to sign in.
             </p>
 
             {/* Telegram Login Widget */}
@@ -121,7 +128,7 @@ function LoginPage() {
             )}
 
             <p className="text-gray-500 text-xs text-center">
-              Not a member? Send /register to{" "}
+              New here? Send /register to{" "}
               <a
                 href="https://t.me/msocietybot"
                 target="_blank"
@@ -130,7 +137,7 @@ function LoginPage() {
               >
                 @msocietybot
               </a>{" "}
-              on Telegram.
+              to set up your profile.
             </p>
           </div>
         </div>

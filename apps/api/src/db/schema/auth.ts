@@ -13,7 +13,7 @@ export const user = pgTable("user", {
   image: text("image"),
   role: text("role").default("member"),
   banned: boolean("banned").default(false),
-  telegramId: text("telegram_id"),
+  telegramId: text("telegram_id").unique(),
   telegramUsername: text("telegram_username"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

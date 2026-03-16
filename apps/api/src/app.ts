@@ -11,7 +11,6 @@ import { fundRoutes } from "./routes/funds";
 import { reputationRoutes } from "./routes/reputation";
 import { venueRoutes } from "./routes/venues";
 import { botRoutes } from "./routes/bot";
-import { authLoginRoutes } from "./routes/auth-login";
 import { AppError } from "./lib/errors";
 import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
 import { env } from "./env";
@@ -96,8 +95,7 @@ export const app = new Elysia()
       },
     }),
   )
-  .use(authLoginRoutes)
-  .mount("/api/auth", auth.handler)
+  .mount(auth.handler)
   .use(healthRoutes)
   .use(memberRoutes)
   .use(eventRoutes)

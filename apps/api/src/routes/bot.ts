@@ -29,7 +29,7 @@ export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
 
       if (!response) {
         return new Response(
-          "Invalid or expired login link. Please run /register again in the bot.",
+          "Invalid or expired login link. Please run /login again in the bot.",
           { status: 400, headers: { "Content-Type": "text/plain" } },
         );
       }

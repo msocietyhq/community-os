@@ -1,9 +1,10 @@
-import { createHmac, createHash } from "node:crypto";
+import { createHmac, createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { account, members, user } from "../../db/schema";
 import { auth } from "../../auth";
 import { env } from "../../env";
+import { createAuditEntry } from "../../middleware/audit";
 
 export interface TelegramUser {
   id: number;
@@ -69,6 +70,89 @@ export function computeTelegramHash(
   return createHmac("sha256", secretKey).update(checkString).digest("hex");
 }
 
+export interface TelegramSignInResult {
+  session: { token: string } | null;
+  user: unknown;
+}
+
+export interface TelegramSignInWithHeadersResult {
+  headers: Headers;
+  response: TelegramSignInResult;
+}
+
+// The better-auth-telegram plugin types signInWithTelegram as conditional,
+// so direct calls lose type info. This typed wrapper avoids `any`.
+// Validated against better-auth@1.5.5 / better-auth-telegram@1.5.0.
+const signInWithTelegram = auth.api.signInWithTelegram as unknown as (
+  opts: { body: Record<string, string | number> },
+) => Promise<TelegramSignInResult>;
+
+const signInWithTelegramHeaders = auth.api.signInWithTelegram as unknown as (
+  opts: { body: Record<string, string | number>; returnHeaders: true },
+) => Promise<TelegramSignInWithHeadersResult>;
+
+export { signInWithTelegramHeaders };
+
+/**
+ * Create a user + account record for a Telegram user directly in the DB.
+ * Used by bot /register since autoCreateUser is disabled on the plugin.
+ * Returns the userId, or the existing userId if the account already exists.
+ */
+export async function createTelegramUser(
+  telegramUser: TelegramUser,
+): Promise<string> {
+  const userId = randomUUID();
+  const name =
+    telegramUser.first_name +
+    (telegramUser.last_name ? ` ${telegramUser.last_name}` : "");
+
+  // Insert user — unique constraint on telegram_id makes this race-safe
+  const [inserted] = await db
+    .insert(user)
+    .values({
+      id: userId,
+      name,
+      telegramId: String(telegramUser.id),
+      telegramUsername: telegramUser.username,
+    })
+    .onConflictDoNothing({ target: user.telegramId })
+    .returning({ id: user.id });
+
+  if (!inserted) {
+    // User already exists — look up via account
+    const [existing] = await db
+      .select({ userId: account.userId })
+      .from(account)
+      .where(
+        and(
+          eq(account.providerId, "telegram"),
+          eq(account.accountId, String(telegramUser.id)),
+        ),
+      )
+      .limit(1);
+    return existing!.userId;
+  }
+
+  await db.insert(account).values({
+    id: randomUUID(),
+    accountId: String(telegramUser.id),
+    providerId: "telegram",
+    userId: inserted.id,
+    telegramId: String(telegramUser.id),
+    telegramUsername: telegramUser.username,
+  });
+
+  // Mirror Better Auth's databaseHooks.user.create.after (audit entry)
+  createAuditEntry({
+    entityType: "member",
+    entityId: inserted.id,
+    action: "create",
+    newValue: { id: inserted.id, name, telegramId: String(telegramUser.id) },
+  }).catch(console.error);
+
+  return inserted.id;
+}
+
 /**
  * Create a session for a Telegram user via Better Auth's telegram plugin.
  * Constructs valid Telegram auth data with HMAC and calls signInWithTelegram,
@@ -89,10 +173,7 @@ export async function getBotToken(
   if (telegramUser.photo_url) data.photo_url = telegramUser.photo_url;
 
   const hash = computeTelegramHash(data, env.TELEGRAM_BOT_TOKEN);
-
-  const result = await auth.api.signInWithTelegram!({
-    body: { ...data, hash } as any,
-  });
+  const result = await signInWithTelegram({ body: { ...data, hash } });
 
   return result.session?.token ?? null;
 }

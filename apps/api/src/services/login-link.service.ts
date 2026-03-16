@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { TelegramUser } from "../bot/lib/auth";
-import { computeTelegramHash } from "../bot/lib/auth";
-import { auth } from "../auth";
+import { computeTelegramHash, signInWithTelegramHeaders } from "../bot/lib/auth";
 import { env } from "../env";
 
 interface LoginCodeEntry {
@@ -64,24 +63,25 @@ export const loginLinkService = {
 
     const hash = computeTelegramHash(data, env.TELEGRAM_BOT_TOKEN);
 
-    // Call Better Auth handler directly to get proper Set-Cookie headers
-    const authRequest = new Request(
-      `${env.API_URL}/api/auth/sign-in/telegram`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, hash }),
-      },
-    );
-    const authResponse = await auth.handler(authRequest);
-
-    // Build redirect response with session cookies from Better Auth
-    const headers = new Headers();
-    headers.set("Location", redirectTo);
-    for (const cookie of authResponse.headers.getSetCookie()) {
-      headers.append("Set-Cookie", cookie);
+    // Sign in via Better Auth API and get session cookies
+    let result: Awaited<ReturnType<typeof signInWithTelegramHeaders>>;
+    try {
+      result = await signInWithTelegramHeaders({
+        body: { ...data, hash },
+        returnHeaders: true,
+      });
+    } catch (err) {
+      console.error("signInWithTelegram failed during login link exchange:", err);
+      return null;
     }
 
-    return new Response(null, { status: 302, headers });
+    // Build redirect response with session cookies from Better Auth
+    const redirectHeaders = new Headers();
+    redirectHeaders.set("Location", redirectTo);
+    for (const cookie of result.headers.getSetCookie()) {
+      redirectHeaders.append("Set-Cookie", cookie);
+    }
+
+    return new Response(null, { status: 302, headers: redirectHeaders });
   },
 };
