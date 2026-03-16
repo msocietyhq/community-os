@@ -112,6 +112,7 @@ export async function createTelegramUser(
     .values({
       id: userId,
       name,
+      image: telegramUser.photo_url,
       telegramId: String(telegramUser.id),
       telegramUsername: telegramUser.username,
     })

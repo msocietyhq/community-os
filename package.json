@@ -4,7 +4,8 @@
   "workspaces": ["apps/*", "packages/*"],
   "catalog": {
     "better-auth": "^1.5.5",
-    "better-auth-telegram": "^1.5.0"
+    "better-auth-telegram": "^1.5.0",
+    "zod": "^4.3.6"
   },
   "scripts": {
     "dev": "concurrently -n api,web -c blue,cyan --kill-others-on-fail \"bun run --cwd apps/api dev\" \"wait-on tcp:3000 && bun run --cwd apps/web dev\"",
@@ -23,7 +24,6 @@
     "wait-on": "^9.0.4"
   },
   "dependencies": {
-    "@grammyjs/conversations": "^2.1.1",
-    "zod": "^4.3.6"
+    "@grammyjs/conversations": "^2.1.1"
   }
 }

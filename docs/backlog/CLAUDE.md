@@ -29,47 +29,70 @@ When adding backlog items, use this format:
 
 ## Current Backlog
 
-### P0 — Critical
+### P0 — Critical (MVP)
 
-#### [P0] Projects — CRUD, endorsement workflow
-**Status**: todo
+#### [P0] Auth — Telegram Login + Better Auth setup
+**Status**: done
 
-#### [P0] Funds — Transaction tracking, balance derivation
-**Status**: todo
+#### [P0] Member profiles — CRUD with Telegram linking
+**Status**: done
 
-#### [P0] Event pledges
-**Status**: todo
+#### [P0] Events — CRUD, RSVP, attendance
+**Status**: done
 
-#### [P0] Web portal — Auth pages, dashboard, events, projects
-**Status**: todo
+#### [P0] Reputation — Emoji reaction + keyword tracking
+**Status**: done
 
-#### [P0] Bot AI agent — Claude tool-use
-**Status**: todo
+#### [P0] Bot — grammY setup, event commands, AI chat
+**Status**: done
+
+#### [P0] API — OpenAPI docs, health check, CORS
+**Status**: done
+
+#### [P0] Audit logging
+**Status**: done
 
 ### P1 — Important
 
-#### [P1] Infra provisioning — Railway, Neon, Cloudflare
+#### [P1] Projects — CRUD, endorsement workflow
 **Status**: todo
 
-#### [P1] Subdomain management
+#### [P1] Funds — Transaction tracking, balance derivation
 **Status**: todo
 
-#### [P1] Email notifications — Resend integration
+#### [P1] Event pledges
 **Status**: todo
 
-#### [P1] Reputation leaderboard
+#### [P1] Web portal — Auth pages, dashboard, events, projects
+**Status**: todo
+
+#### [P1] Bot AI agent — Claude tool-use
 **Status**: todo
 
 ### P2 — Nice to Have
 
-#### [P2] Admin CLI tool
+#### [P2] Infra provisioning — Railway, Neon, Cloudflare
 **Status**: todo
 
-#### [P2] Webhooks for external integrations
+#### [P2] Subdomain management
 **Status**: todo
 
-#### [P2] Advanced analytics and reporting
+#### [P2] Email notifications — Resend integration
 **Status**: todo
 
-#### [P2] Member skills matching
+#### [P2] Reputation leaderboard
+**Status**: todo
+
+### P3 — Future
+
+#### [P3] Admin CLI tool
+**Status**: todo
+
+#### [P3] Webhooks for external integrations
+**Status**: todo
+
+#### [P3] Advanced analytics and reporting
+**Status**: todo
+
+#### [P3] Member skills matching
 **Status**: todo

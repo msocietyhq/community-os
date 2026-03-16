@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedInfraRouteImport } from './routes/_authenticated/infra'
 import { Route as AuthenticatedFundsRouteImport } from './routes/_authenticated/funds'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
@@ -35,6 +36,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedInfraRoute = AuthenticatedInfraRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/events': typeof AuthenticatedEventsRoute
   '/funds': typeof AuthenticatedFundsRoute
   '/infra': typeof AuthenticatedInfraRoute
+  '/members': typeof AuthenticatedMembersRoute
   '/projects': typeof AuthenticatedProjectsRoute
 }
 export interface FileRoutesByTo {
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/events': typeof AuthenticatedEventsRoute
   '/funds': typeof AuthenticatedFundsRoute
   '/infra': typeof AuthenticatedInfraRoute
+  '/members': typeof AuthenticatedMembersRoute
   '/projects': typeof AuthenticatedProjectsRoute
 }
 export interface FileRoutesById {
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/funds': typeof AuthenticatedFundsRoute
   '/_authenticated/infra': typeof AuthenticatedInfraRoute
+  '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
 }
 export interface FileRouteTypes {
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/events'
     | '/funds'
     | '/infra'
+    | '/members'
     | '/projects'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/events'
     | '/funds'
     | '/infra'
+    | '/members'
     | '/projects'
   id:
     | '__root__'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/_authenticated/events'
     | '/_authenticated/funds'
     | '/_authenticated/infra'
+    | '/_authenticated/members'
     | '/_authenticated/projects'
   fileRoutesById: FileRoutesById
 }
@@ -154,6 +166,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/members': {
+      id: '/_authenticated/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof AuthenticatedMembersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/infra': {
       id: '/_authenticated/infra'
       path: '/infra'
@@ -190,6 +209,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedFundsRoute: typeof AuthenticatedFundsRoute
   AuthenticatedInfraRoute: typeof AuthenticatedInfraRoute
+  AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
 }
 
@@ -198,6 +218,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedFundsRoute: AuthenticatedFundsRoute,
   AuthenticatedInfraRoute: AuthenticatedInfraRoute,
+  AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
 }
 
