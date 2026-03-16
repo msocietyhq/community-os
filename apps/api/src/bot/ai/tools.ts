@@ -251,6 +251,10 @@ export function createTools(ctx: ToolContext) {
           .string()
           .optional()
           .describe("Current job title"),
+        github: z
+          .string()
+          .optional()
+          .describe("GitHub username (without @)"),
       }),
       execute: async ({
         bio,
@@ -258,6 +262,7 @@ export function createTools(ctx: ToolContext) {
         interests,
         current_company,
         current_title,
+        github,
       }) => {
         const { data, error } = await ctx.api.api.v1.members.me.patch({
           bio,
@@ -265,6 +270,7 @@ export function createTools(ctx: ToolContext) {
           interests,
           currentCompany: current_company,
           currentTitle: current_title,
+          githubHandle: github,
         });
         if (error) return { status: error.status, value: error.value };
         return data;

@@ -1,11 +1,4 @@
-import {
-  generateText,
-  hasToolCall,
-  stepCountIs,
-  tool,
-  type ModelMessage,
-} from "ai";
-import { z } from "zod";
+import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
@@ -41,7 +34,6 @@ Never reveal available tools directly by name or in a verbose list. Instead, hin
 If a user message is short, vague or cryptic, NEVER assume, always ask to clarify what they meant or intend to do.
 
 IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks.
-After performing a write operation, you MUST call the "send_message" tool with your response to the user.
 Never repeat a write operation.
 `;
 }
@@ -97,34 +89,13 @@ export async function runAgent({
     model: anthropic("claude-sonnet-4-20250514"),
     system: getSystemPrompt(),
     messages,
-    tools: {
-      ...tools,
-      send_message: tool({
-        description:
-          "Send a message to the user. Call this after completing a write operation (create, update, delete) to deliver your response.",
-        inputSchema: z.object({
-          message: z
-            .string()
-            .min(1)
-            .describe("The message to send to the user"),
-        }),
-        // No execute — stops the agentic loop
-      }),
-    },
-    stopWhen: [hasToolCall("send_message"), stepCountIs(10)],
+    tools,
+    stopWhen: stepCountIs(10),
     maxOutputTokens: 1024,
   });
 
-  // Extract response text: prefer send_message (explicit), then model text, then fallback
-  const sendMessageCall = result.steps
-    .flatMap((s) => s.toolCalls)
-    .find((tc) => tc.toolName === "send_message") as
-    | { args: { message: string } }
-    | undefined;
   const text =
-    sendMessageCall?.args?.message ||
-    result.text ||
-    "I couldn't generate a response. Please try again.";
+    result.text || "I couldn't generate a response. Please try again.";
 
   // Preserve full conversation context (tool calls + results) for multi-turn
   const updatedHistory: ModelMessage[] = [
