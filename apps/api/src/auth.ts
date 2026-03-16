@@ -5,6 +5,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import { env } from "./env";
 import { createAuditEntry } from "./middleware/audit";
+import { membersService } from "./services/members.service";
 
 const webHost = new URL(env.WEB_URL).hostname;
 const isLocalhost = webHost === "localhost" || webHost === "127.0.0.1";
@@ -51,6 +52,7 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user) => {
+          membersService.createIfNotExists(user.id).catch(console.error);
           createAuditEntry({
             entityType: "member",
             entityId: user.id,

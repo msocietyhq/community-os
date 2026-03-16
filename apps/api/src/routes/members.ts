@@ -11,7 +11,11 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
   .get(
     "/me",
     async ({ user }) => {
-      const member = await membersService.findByUserId(user.id);
+      let member = await membersService.findByUserId(user.id);
+      if (!member) {
+        await membersService.createIfNotExists(user.id);
+        member = await membersService.findByUserId(user.id);
+      }
       return { user, member };
     },
     {
