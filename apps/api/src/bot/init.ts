@@ -25,7 +25,7 @@ const ALLOWED_UPDATES = [
 
 /**
  * Initialize the Telegram bot: register handlers, init bot info,
- * and set up the webhook. Call this after the HTTP server is listening.
+ * and start long polling.
  */
 export async function initBot(): Promise<void> {
   // Auto-leave unauthorized groups when bot is added
@@ -84,16 +84,9 @@ export async function initBot(): Promise<void> {
   await warmUpKnownIds();
   await bot.init();
 
-  // Delete webhook first to reset Telegram's delivery state.
-  // After failed deliveries (e.g. during deployment downtime),
-  // Telegram backs off and may stop sending updates entirely.
-  // Re-registering the same URL via setWebhook alone doesn't reset this.
-  await bot.api.deleteWebhook({ drop_pending_updates: true });
-
-  const webhookUrl = `${env.API_URL}/api/v1/bot/webhook`;
-  await bot.api.setWebhook(webhookUrl, {
-    secret_token: env.WEBHOOK_SECRET,
-    allowed_updates: [...ALLOWED_UPDATES],
+  // Start long polling (fire-and-forget — resolves only when bot stops)
+  bot.start({ allowed_updates: [...ALLOWED_UPDATES] }).catch((err) => {
+    console.error("Bot polling error:", err);
   });
 
   // Periodically clean up stale message author rows (every hour)
@@ -103,12 +96,8 @@ export async function initBot(): Promise<void> {
 }
 
 /**
- * Gracefully shut down the bot (delete webhook).
+ * Gracefully stop the bot (stop long polling).
  */
 export async function shutdownBot(): Promise<void> {
-  try {
-    await bot.api.deleteWebhook();
-  } catch {
-    // Best-effort cleanup
-  }
+  await bot.stop();
 }

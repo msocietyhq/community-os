@@ -82,25 +82,25 @@ async function setProfileConversation(conversation: BotConversation, ctx: BotCon
   // Start questionnaire
   await ctx.reply(
     "Let's set up your MSOCIETY profile! I'll ask you a few questions.\n" +
-      "Press Skip to skip any question.\n\n" +
-      "1/5 — Tell us about yourself (max 500 chars):",
-    { reply_markup: new InlineKeyboard().text("Skip ⏭", "skip_step") },
+      "Press Skip to skip any question.",
   );
 
   const data: CreateMemberInput = {};
 
   // 1. Bio
-  const bioResponse = await conversation.wait();
-  if (bioResponse.callbackQuery?.data === "skip_step") {
-    await bioResponse.answerCallbackQuery();
-  } else if (bioResponse.message?.text) {
-    data.bio = bioResponse.message.text.slice(0, 500);
+  const bioAnswer = await askQuestion(
+    conversation,
+    ctx,
+    "1/5 — Tell us about yourself (max 500 chars):",
+  );
+  if (bioAnswer) {
+    data.bio = bioAnswer.slice(0, 500);
   }
 
   // 2. Title + Company
   const titleAnswer = await askQuestion(
     conversation,
-    bioResponse.callbackQuery ? bioResponse : ctx,
+    ctx,
     '2/5 — What do you do? (e.g. "Software Engineer at Grab"):',
   );
   if (titleAnswer) {

@@ -1,24 +1,10 @@
 import { Elysia } from "elysia";
-import { webhookCallback } from "grammy";
-import { bot } from "../bot/bot";
 import { env } from "../env";
 import { loginLinkService } from "../services/login-link.service";
 import { authModel } from "./models/auth";
 
 export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
   .use(authModel)
-  .post(
-    "/webhook",
-    webhookCallback(bot, "elysia", { secretToken: env.WEBHOOK_SECRET }),
-    {
-      detail: {
-        tags: ["Bot"],
-        summary: "Telegram webhook callback",
-        description:
-          "Receives updates from the Telegram Bot API. Authenticated via the X-Telegram-Bot-Api-Secret-Token header.",
-      },
-    },
-  )
   .get(
     "/login",
     async ({ query }) => {

@@ -8,7 +8,6 @@ console.log(
   `MSOCIETY community-os API running at ${app.server?.hostname}:${app.server?.port}`,
 );
 
-// Initialize bot after server is listening so webhook endpoint is ready
 initBot().catch((err) => {
   console.error("Failed to initialize bot:", err);
 });
