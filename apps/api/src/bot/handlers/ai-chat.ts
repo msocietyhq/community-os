@@ -14,6 +14,14 @@ aiChatHandler.on("message:text", async (ctx) => {
   const isPrivate = chatType === "private";
   const isGroup = chatType === "group" || chatType === "supergroup";
 
+  // Reject unhandled commands so they don't reach the AI
+  if (text.startsWith("/")) {
+    await ctx.reply("That's an invalid command. Use /help to see available commands.", {
+      reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
+    });
+    return;
+  }
+
   let query: string;
 
   if (isGroup) {

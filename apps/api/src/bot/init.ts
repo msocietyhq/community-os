@@ -75,6 +75,12 @@ export async function initBot(): Promise<void> {
 
   await bot.init();
 
+  // Delete webhook first to reset Telegram's delivery state.
+  // After failed deliveries (e.g. during deployment downtime),
+  // Telegram backs off and may stop sending updates entirely.
+  // Re-registering the same URL via setWebhook alone doesn't reset this.
+  await bot.api.deleteWebhook({ drop_pending_updates: true });
+
   const webhookUrl = `${env.API_URL}/api/v1/bot/webhook`;
   await bot.api.setWebhook(webhookUrl, {
     secret_token: env.WEBHOOK_SECRET,
