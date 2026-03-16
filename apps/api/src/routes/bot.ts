@@ -1,5 +1,4 @@
 import { Elysia } from "elysia";
-import { webhookCallback } from "grammy";
 import { bot } from "../bot/bot";
 import { env } from "../env";
 import { loginLinkService } from "../services/login-link.service";
@@ -9,7 +8,20 @@ export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
   .use(authModel)
   .post(
     "/webhook",
-    webhookCallback(bot, "elysia", { secretToken: env.WEBHOOK_SECRET }),
+    ({ body, headers }) => {
+      const secret = headers["x-telegram-bot-api-secret-token"];
+      if (secret !== env.WEBHOOK_SECRET) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      // Fire-and-forget: respond 200 immediately so Telegram won't retry,
+      // then process the update asynchronously.
+      bot.handleUpdate(body as Parameters<typeof bot.handleUpdate>[0]).catch(
+        (err) => console.error("Bot update error:", err),
+      );
+
+      return new Response(null, { status: 200 });
+    },
     {
       detail: {
         tags: ["Bot"],
