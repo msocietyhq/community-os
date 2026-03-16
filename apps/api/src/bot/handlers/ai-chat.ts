@@ -35,6 +35,21 @@ aiChatHandler.on("message:text", async (ctx) => {
       ? text.replace(`@${botUsername}`, "").trim()
       : text.trim();
 
+    // When replying to a non-bot message, include the replied-to content
+    // so the AI has context (e.g. "@bot can you take a look at this request")
+    const replyMsg = ctx.message.reply_to_message;
+    if (replyMsg && replyMsg.from?.id !== ctx.me.id) {
+      const author =
+        replyMsg.from?.first_name ??
+        replyMsg.from?.username ??
+        "someone";
+      const replyText =
+        "text" in replyMsg && replyMsg.text
+          ? replyMsg.text
+          : "(non-text message)";
+      query = `[Replying to ${author}: "${replyText}"]\n${query}`;
+    }
+
     if (!query) {
       await ctx.reply("How can I help? Mention me with a question!", {
         reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
