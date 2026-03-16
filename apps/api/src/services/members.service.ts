@@ -116,6 +116,7 @@ export const membersService = {
       interests?: string[];
       currentTitle?: string;
       currentCompany?: string;
+      githubHandle?: string;
     },
   ) {
     const [updated] = await db

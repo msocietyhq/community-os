@@ -38,7 +38,7 @@ export async function warmUpKnownIds(): Promise<void> {
 
 /**
  * grammY middleware that auto-registers group members on first interaction.
- * Skips private chats (users there use /register for guided questionnaire).
+ * Skips private chats (users there use /set_profile for guided questionnaire).
  */
 export async function autoRegisterMiddleware(
   ctx: BotContext,

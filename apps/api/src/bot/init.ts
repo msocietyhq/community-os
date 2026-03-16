@@ -7,7 +7,7 @@ import { reputationHandler } from "./handlers/reputation";
 import { membershipHandler } from "./handlers/membership";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
-import { registerHandler } from "./handlers/register";
+import { profileHandler } from "./handlers/profile";
 import { loginHandler } from "./handlers/login";
 import { PostgresSessionStorage } from "./session-storage";
 import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
@@ -69,7 +69,7 @@ export async function initBot(): Promise<void> {
   bot.use(helpHandler);
   bot.use(tokenHandler);
   bot.use(loginHandler);
-  bot.use(registerHandler);
+  bot.use(profileHandler);
   bot.use(eventsHandler);
   bot.use(reputationHandler);
   bot.use(membershipHandler);

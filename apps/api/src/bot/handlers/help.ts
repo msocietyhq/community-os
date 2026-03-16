@@ -4,8 +4,8 @@ import type { BotContext } from "../types";
 export const helpHandler = new Composer<BotContext>();
 
 helpHandler.command("start", async (ctx) => {
-  if (ctx.match === "register") {
-    await ctx.conversation.enter("registerConversation");
+  if (ctx.match === "set_profile") {
+    await ctx.conversation.enter("setProfileConversation");
     return;
   }
 
@@ -15,7 +15,7 @@ helpHandler.command("start", async (ctx) => {
       `/events — View upcoming events\n` +
       `/rsvp <event> — RSVP to an event\n` +
       `/reputation — Check your reputation score\n` +
-      `/register — Set up your community profile\n` +
+      `/profile — View or edit your community profile\n` +
       `/login — Get a login link for the web portal\n` +
       `/help — Show this help message\n\n` +
       `You can also mention @msocietybot with any question about the community!`,
@@ -28,7 +28,7 @@ helpHandler.command("help", async (ctx) => {
       `📅 /events — View upcoming events\n` +
       `✅ /rsvp <event> — RSVP to an event\n` +
       `⭐ /reputation — Check your reputation score\n` +
-      `👤 /register — Set up your community profile\n` +
+      `👤 /profile — View or edit your community profile\n` +
       `🔗 /login — Get a login link for the web portal\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,

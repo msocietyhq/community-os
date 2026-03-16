@@ -26,31 +26,15 @@ function LandingPage() {
         style={{ animation: "float-3 22s ease-in-out infinite" }}
       />
 
-      {/* Navbar */}
-      <nav className="relative z-10 border-b border-white/10 backdrop-blur-md bg-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <span className="text-xl font-bold tracking-tight">MSOCIETY</span>
-            <div className="flex items-center gap-3">
-              {!isLoading && user ? (
-                <Link
-                  to="/dashboard"
-                  className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  Dashboard
-                </Link>
-              ) : (
-                <Link
-                  to="/login"
-                  className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  Login
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* Floating dashboard button */}
+      {!isLoading && user && (
+        <Link
+          to="/dashboard"
+          className="fixed top-4 right-4 z-50 text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors backdrop-blur-md shadow-lg"
+        >
+          Dashboard
+        </Link>
+      )}
 
       {/* Hero */}
       <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-20 text-center">

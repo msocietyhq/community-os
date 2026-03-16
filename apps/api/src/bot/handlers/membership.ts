@@ -89,8 +89,8 @@ membershipHandler.on("chat_member", async (ctx) => {
     } else {
       const botUsername = env.TELEGRAM_BOT_USERNAME;
       const keyboard = new InlineKeyboard().url(
-        "Register",
-        `https://t.me/${botUsername}?start=register`,
+        "Set up profile",
+        `https://t.me/${botUsername}?start=set_profile`,
       );
 
       await ctx.reply(
