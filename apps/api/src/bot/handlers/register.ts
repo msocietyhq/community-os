@@ -2,6 +2,7 @@ import { Composer, InlineKeyboard } from "grammy";
 import { createConversation } from "@grammyjs/conversations";
 import type { BotContext, BotConversation } from "../types";
 import { createTelegramUser } from "../lib/auth";
+import { telegramUserFromContext } from "../lib/telegram-user";
 import { membersService } from "../../services/members.service";
 import { loginLinkService } from "../../services/login-link.service";
 import type { CreateMemberInput } from "@community-os/shared/validators";
@@ -53,14 +54,14 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
     }
   }
 
+  // Build TelegramUser once (includes profile photo fetch)
+  const telegramUser = await conversation.external(() =>
+    telegramUserFromContext(from, ctx.api),
+  );
+
   // Create auth user + account (or get existing)
   const userId = await conversation.external(() =>
-    createTelegramUser({
-      id: from.id,
-      first_name: from.first_name,
-      last_name: from.last_name,
-      username: from.username,
-    }),
+    createTelegramUser(telegramUser),
   );
 
   // Check if already registered
@@ -70,12 +71,7 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
 
   if (existing) {
     const loginLink = await conversation.external(() =>
-      loginLinkService.createLoginLink({
-        id: from.id,
-        first_name: from.first_name,
-        last_name: from.last_name,
-        username: from.username,
-      }),
+      loginLinkService.createLoginLink(telegramUser),
     );
     await ctx.reply(
       "You're already registered! Open the portal to update your profile:",
@@ -148,12 +144,7 @@ async function registerConversation(conversation: BotConversation, ctx: BotConte
   if (data.githubHandle) lines.push(`GitHub: ${data.githubHandle}`);
 
   const loginLink = await conversation.external(() =>
-    loginLinkService.createLoginLink({
-      id: from.id,
-      first_name: from.first_name,
-      last_name: from.last_name,
-      username: from.username,
-    }),
+    loginLinkService.createLoginLink(telegramUser),
   );
   await ctx.reply(lines.join("\n"), {
     reply_markup: new InlineKeyboard().url("Open MSOCIETY", loginLink),

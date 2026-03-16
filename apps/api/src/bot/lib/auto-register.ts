@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import type { NextFunction } from "grammy";
 import type { BotContext } from "../types";
 import { getBotToken, resolveUser } from "./auth";
+import { telegramUserFromContext } from "./telegram-user";
 import { membersService } from "../../services/members.service";
 import { createAuditEntry } from "../../middleware/audit";
 import { db } from "../../db";
@@ -71,12 +72,8 @@ export async function autoRegisterMiddleware(
     }
 
     // Auto-register: create user+account via Better Auth
-    await getBotToken({
-      id: from.id,
-      first_name: from.first_name,
-      last_name: from.last_name,
-      username: from.username,
-    });
+    const telegramUser = await telegramUserFromContext(from, ctx.api);
+    await getBotToken(telegramUser);
 
     // Resolve the newly created account to get userId
     const acct = await db

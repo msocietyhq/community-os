@@ -1,6 +1,7 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../types";
 import { getBotToken } from "../lib/auth";
+import { telegramUserFromContext } from "../lib/telegram-user";
 
 export const tokenHandler = new Composer<BotContext>();
 
@@ -17,12 +18,8 @@ tokenHandler.command("token", async (ctx) => {
   }
 
   try {
-    const token = await getBotToken({
-      id: ctx.from.id,
-      first_name: ctx.from.first_name,
-      last_name: ctx.from.last_name,
-      username: ctx.from.username,
-    });
+    const telegramUser = await telegramUserFromContext(ctx.from, ctx.api);
+    const token = await getBotToken(telegramUser);
 
     if (!token) {
       await ctx.reply("Failed to generate token. Please try again.");

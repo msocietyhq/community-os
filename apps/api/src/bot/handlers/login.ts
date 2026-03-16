@@ -1,6 +1,7 @@
 import { Composer, InlineKeyboard } from "grammy";
 import type { BotContext } from "../types";
 import { loginLinkService } from "../../services/login-link.service";
+import { telegramUserFromContext } from "../lib/telegram-user";
 
 export const loginHandler = new Composer<BotContext>();
 
@@ -15,12 +16,8 @@ loginHandler.command("login", async (ctx) => {
     return;
   }
 
-  const link = loginLinkService.createLoginLink({
-    id: ctx.from.id,
-    first_name: ctx.from.first_name,
-    last_name: ctx.from.last_name,
-    username: ctx.from.username,
-  });
+  const telegramUser = await telegramUserFromContext(ctx.from, ctx.api);
+  const link = loginLinkService.createLoginLink(telegramUser);
 
   const keyboard = new InlineKeyboard().url("Login to MSOCIETY", link);
 
