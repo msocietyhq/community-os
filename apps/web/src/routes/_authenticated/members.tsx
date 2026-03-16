@@ -2,14 +2,44 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../lib/api-client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../../components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/members")({
   component: MembersPage,
 });
 
+interface Member {
+  id: string;
+  userId: string;
+  bio?: string | null;
+  githubHandle?: string | null;
+  skills?: string[] | null;
+  interests?: string[] | null;
+  currentTitle?: string | null;
+  currentCompany?: string | null;
+  education?: string | null;
+  linkedinUrl?: string | null;
+  websiteUrl?: string | null;
+  joinedAt?: string | Date | null;
+  user: {
+    name: string;
+    image?: string | null;
+    role?: string | null;
+    banned?: boolean | null;
+    telegramUsername?: string | null;
+  };
+}
+
 function MembersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const limit = 20;
 
   const { data, isLoading } = useQuery({
@@ -27,7 +57,7 @@ function MembersPage() {
     },
   });
 
-  const members = data?.members ?? [];
+  const members = (data?.members ?? []) as Member[];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
 
@@ -121,7 +151,11 @@ function MembersPage() {
             {/* Rows */}
             <div className="divide-y divide-border">
               {members.map((member) => (
-                <MemberRow key={member.id} member={member} />
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  onClick={() => setSelectedMember(member)}
+                />
               ))}
             </div>
           </>
@@ -154,61 +188,36 @@ function MembersPage() {
           </div>
         </div>
       )}
+
+      {/* Profile dialog */}
+      <MemberProfileDialog
+        member={selectedMember}
+        open={selectedMember !== null}
+        onClose={() => setSelectedMember(null)}
+      />
     </div>
   );
 }
 
 function MemberRow({
   member,
+  onClick,
 }: {
-  member: {
-    id: string;
-    userId: string;
-    bio?: string | null;
-    skills?: string[] | null;
-    currentTitle?: string | null;
-    currentCompany?: string | null;
-    joinedAt?: string | Date | null;
-    user: {
-      name: string;
-      image?: string | null;
-      role?: string | null;
-      banned?: boolean | null;
-      telegramUsername?: string | null;
-    };
-  };
+  member: Member;
+  onClick: () => void;
 }) {
-  const initials = member.user.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-
-  const joinedDate = member.joinedAt
-    ? new Date(member.joinedAt).toLocaleDateString("en-SG", {
-        month: "short",
-        year: "numeric",
-      })
-    : null;
+  const initials = getInitials(member.user.name);
+  const joinedDate = formatJoinedDate(member.joinedAt);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 sm:gap-4 px-6 py-4 items-center hover:bg-accent/50 transition-colors">
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 sm:gap-4 px-6 py-4 items-center hover:bg-accent/50 transition-colors cursor-pointer"
+    >
       {/* Member info */}
       <div className="flex items-center gap-3">
-        {member.user.image ? (
-          <img
-            src={member.user.image}
-            alt={member.user.name}
-            className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-          />
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-semibold">
-              {initials}
-            </span>
-          </div>
-        )}
+        <Avatar name={member.user.name} image={member.user.image} size="sm" />
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground truncate">
             {member.user.name}
@@ -225,15 +234,7 @@ function MemberRow({
 
       {/* Role */}
       <div>
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-            member.user.role === "admin"
-              ? "bg-indigo-500/10 text-indigo-500"
-              : "bg-muted text-muted-foreground"
-          }`}
-        >
-          {member.user.role ?? "member"}
-        </span>
+        <RoleBadge role={member.user.role} />
       </div>
 
       {/* Skills */}
@@ -259,6 +260,232 @@ function MemberRow({
           <span className="text-xs text-muted-foreground">{joinedDate}</span>
         )}
       </div>
+    </button>
+  );
+}
+
+function MemberProfileDialog({
+  member,
+  open,
+  onClose,
+}: {
+  member: Member | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  if (!member) return null;
+
+  const joinedDate = member.joinedAt
+    ? new Date(member.joinedAt).toLocaleDateString("en-SG", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+
+  const links = [
+    member.user.telegramUsername && {
+      label: "Telegram",
+      href: `https://t.me/${member.user.telegramUsername}`,
+      value: `@${member.user.telegramUsername}`,
+    },
+    member.githubHandle && {
+      label: "GitHub",
+      href: `https://github.com/${member.githubHandle}`,
+      value: member.githubHandle,
+    },
+    member.linkedinUrl && {
+      label: "LinkedIn",
+      href: member.linkedinUrl,
+      value: "Profile",
+    },
+    member.websiteUrl && {
+      label: "Website",
+      href: member.websiteUrl,
+      value: member.websiteUrl.replace(/^https?:\/\//, ""),
+    },
+  ].filter(Boolean) as { label: string; href: string; value: string }[];
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <div className="flex items-center gap-4">
+            <Avatar
+              name={member.user.name}
+              image={member.user.image}
+              size="lg"
+            />
+            <div className="min-w-0 flex-1">
+              <DialogTitle>{member.user.name}</DialogTitle>
+              <DialogDescription>
+                {[member.currentTitle, member.currentCompany]
+                  .filter(Boolean)
+                  .join(" at ") || "Community member"}
+              </DialogDescription>
+              <div className="mt-2">
+                <RoleBadge role={member.user.role} />
+              </div>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="px-6 pb-6 space-y-5">
+          {/* Bio */}
+          {member.bio && (
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                Bio
+              </h4>
+              <p className="text-sm text-foreground leading-relaxed">
+                {member.bio}
+              </p>
+            </div>
+          )}
+
+          {/* Skills */}
+          {member.skills && member.skills.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                Skills
+              </h4>
+              <div className="flex flex-wrap gap-1.5">
+                {member.skills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center px-2.5 py-1 rounded-md bg-muted text-xs text-muted-foreground"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Interests */}
+          {member.interests && member.interests.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                Interests
+              </h4>
+              <div className="flex flex-wrap gap-1.5">
+                {member.interests.map((interest) => (
+                  <span
+                    key={interest}
+                    className="inline-flex items-center px-2.5 py-1 rounded-md bg-indigo-500/10 text-xs text-indigo-500"
+                  >
+                    {interest}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Education */}
+          {member.education && (
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                Education
+              </h4>
+              <p className="text-sm text-foreground">{member.education}</p>
+            </div>
+          )}
+
+          {/* Links */}
+          {links.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                Links
+              </h4>
+              <div className="space-y-1.5">
+                {links.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-indigo-500 hover:underline"
+                  >
+                    <span className="text-xs text-muted-foreground w-16 flex-shrink-0">
+                      {link.label}
+                    </span>
+                    {link.value}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Joined */}
+          {joinedDate && (
+            <p className="text-xs text-muted-foreground pt-2 border-t">
+              Joined {joinedDate}
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Avatar({
+  name,
+  image,
+  size = "sm",
+}: {
+  name: string;
+  image?: string | null;
+  size?: "sm" | "lg";
+}) {
+  const initials = getInitials(name);
+  const sizeClass = size === "lg" ? "w-14 h-14 text-lg" : "w-9 h-9 text-xs";
+
+  if (image) {
+    return (
+      <img
+        src={image}
+        alt={name}
+        className={`${sizeClass} rounded-full object-cover flex-shrink-0`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClass} rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 flex items-center justify-center flex-shrink-0`}
+    >
+      <span className="text-white font-semibold">{initials}</span>
     </div>
   );
+}
+
+function RoleBadge({ role }: { role?: string | null }) {
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+        role === "admin"
+          ? "bg-indigo-500/10 text-indigo-500"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {role ?? "member"}
+    </span>
+  );
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function formatJoinedDate(date?: string | Date | null) {
+  if (!date) return null;
+  return new Date(date).toLocaleDateString("en-SG", {
+    month: "short",
+    year: "numeric",
+  });
 }

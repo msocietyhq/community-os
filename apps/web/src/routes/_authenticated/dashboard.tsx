@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../lib/auth";
+import { api } from "../../lib/api-client";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
@@ -8,6 +10,37 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.name.split(" ")[0] ?? "there";
+
+  const { data: membersData } = useQuery({
+    queryKey: ["members", "count"],
+    queryFn: async () => {
+      const res = await api.api.v1.members.get({ query: { page: 1, limit: 1 } });
+      if (res.error) throw new Error("Failed to fetch members");
+      return res.data;
+    },
+  });
+
+  const { data: eventsData } = useQuery({
+    queryKey: ["events", "upcoming"],
+    queryFn: async () => {
+      const res = await api.api.v1.events.get({ query: { page: 1, limit: 1, upcoming: true } });
+      if (res.error) throw new Error("Failed to fetch events");
+      return res.data;
+    },
+  });
+
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects", "count"],
+    queryFn: async () => {
+      const res = await api.api.v1.projects.get({ query: { page: 1, limit: 1 } });
+      if (res.error) throw new Error("Failed to fetch projects");
+      return res.data;
+    },
+  });
+
+  const memberCount = membersData?.total ?? null;
+  const upcomingEvents = eventsData?.total ?? null;
+  const projectCount = projectsData?.total ?? null;
 
   return (
     <div className="space-y-8">
@@ -23,10 +56,10 @@ function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Members" value="—" change={null} />
-        <StatCard label="Upcoming Events" value="—" change={null} />
-        <StatCard label="Active Projects" value="—" change={null} />
-        <StatCard label="Community Fund" value="—" change={null} />
+        <StatCard label="Members" value={memberCount !== null ? String(memberCount) : "—"} />
+        <StatCard label="Upcoming Events" value={upcomingEvents !== null ? String(upcomingEvents) : "—"} />
+        <StatCard label="Active Projects" value={projectCount !== null ? String(projectCount) : "—"} />
+        <StatCard label="Community Fund" value="—" />
       </div>
 
       {/* Two-column layout */}
@@ -162,29 +195,16 @@ function DashboardPage() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  change,
-}: {
-  label: string;
-  value: string;
-  change: string | null;
-}) {
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-card rounded-xl border shadow-sm px-5 py-4">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         {label}
       </p>
-      <div className="mt-2 flex items-baseline gap-2">
+      <div className="mt-2">
         <span className="text-2xl font-semibold text-card-foreground">
           {value}
         </span>
-        {change && (
-          <span className="text-xs font-medium text-emerald-600">
-            {change}
-          </span>
-        )}
       </div>
     </div>
   );
