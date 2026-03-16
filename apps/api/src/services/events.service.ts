@@ -80,17 +80,18 @@ export const eventsService = {
       conditions.push(eq(events.eventType, query.eventType));
     }
 
-    if (query.upcoming === true) {
-      conditions.push(gt(events.startsAt, new Date()));
-    } else if (query.upcoming === false) {
-      conditions.push(lte(events.startsAt, new Date()));
+    if (query.startsAfter) {
+      conditions.push(gt(events.startsAt, query.startsAfter));
+    }
+    if (query.startsBefore) {
+      conditions.push(lte(events.startsAt, query.startsBefore));
     }
 
     const where = and(...conditions);
     const offset = (query.page - 1) * query.limit;
 
     const orderBy =
-      query.upcoming === false
+      query.startsBefore && !query.startsAfter
         ? [desc(events.startsAt)]
         : [asc(events.startsAt)];
 

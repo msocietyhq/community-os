@@ -23,7 +23,7 @@ function DashboardPage() {
   const { data: eventsData } = useQuery({
     queryKey: ["events", "upcoming"],
     queryFn: async () => {
-      const res = await api.api.v1.events.get({ query: { page: 1, limit: 1, upcoming: true } });
+      const res = await api.api.v1.events.get({ query: { page: 1, limit: 1, startsAfter: new Date().toISOString(), status: "published" } });
       if (res.error) throw new Error("Failed to fetch events");
       return res.data;
     },
@@ -55,11 +55,10 @@ function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Members" value={memberCount !== null ? String(memberCount) : "—"} />
         <StatCard label="Upcoming Events" value={upcomingEvents !== null ? String(upcomingEvents) : "—"} />
         <StatCard label="Active Projects" value={projectCount !== null ? String(projectCount) : "—"} />
-        <StatCard label="Community Fund" value="—" />
       </div>
 
       {/* Two-column layout */}
@@ -114,9 +113,9 @@ function DashboardPage() {
                 }
               />
               <QuickAction
-                to="/funds"
-                title="View Funds"
-                description="Track community fund transparency"
+                to="/members"
+                title="View Members"
+                description="Browse the community directory"
                 icon={
                   <svg
                     className="w-5 h-5"
@@ -128,27 +127,7 @@ function DashboardPage() {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                    />
-                  </svg>
-                }
-              />
-              <QuickAction
-                to="/infra"
-                title="Infrastructure"
-                description="Manage project infrastructure"
-                icon={
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 0 6h13.5a3 3 0 1 0 0-6m-16.5-3a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3m-19.5 0a4.5 4.5 0 0 1 .9-2.7L5.737 5.1a3.375 3.375 0 0 1 2.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 0 1 .9 2.7m0 0a3 3 0 0 1-3 3m0 3h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Zm-3 6h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Z"
+                      d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
                     />
                   </svg>
                 }
@@ -224,13 +203,15 @@ function QuickAction({
   return (
     <Link
       to={to}
-      className="group flex items-start gap-4 p-4 rounded-lg border hover:bg-accent transition-all"
+      className="group relative flex items-start gap-4 p-4 rounded-lg border hover:bg-accent transition-all duration-300 overflow-hidden cursor-pointer"
     >
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center group-hover:bg-accent/80 transition-colors">
+      <div className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-r from-blue-600/20 via-indigo-600/20 to-cyan-500/20 blur-sm -z-10" />
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+      <div className="relative flex-shrink-0 w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center group-hover:bg-accent/80 transition-colors">
         {icon}
       </div>
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground group-hover:text-foreground transition-colors">
+      <div className="relative min-w-0">
+        <p className="text-sm font-medium text-foreground transition-colors">
           {title}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
