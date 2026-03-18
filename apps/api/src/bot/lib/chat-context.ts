@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import type { ChatTurn, TelegramMeta } from "../types";
+import type { telegramMessages } from "../../db/schema/bot";
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
 export const MAX_HISTORY = 30;
@@ -89,11 +90,33 @@ function displayName(from: {
   return from.username ? `@${from.username}` : from.firstName;
 }
 
+type TelegramMessageRow = typeof telegramMessages.$inferSelect;
+
+/**
+ * Formats a list of DB message rows into a readable transcript for group context.
+ */
+export function formatGroupHistory(messages: TelegramMessageRow[]): string {
+  const lines = messages.map((msg) => {
+    const time = formatTelegramDate(Math.floor(msg.date.getTime() / 1000));
+    const name = msg.fromUsername
+      ? `@${msg.fromUsername}`
+      : (msg.fromFirstName ?? "unknown");
+    const content =
+      msg.text ?? msg.caption ?? (msg.mediaType ? `[${msg.mediaType}]` : "[message]");
+    return `${time} ${name}: ${content}`;
+  });
+  return `[Recent group conversation:]\n${lines.join("\n")}\n---`;
+}
+
 /**
  * Returns the query string prefixed with a compact context header containing
  * sender info, timestamp, and optional reply chain.
  */
-export function buildEnrichedQuery(query: string, meta: TelegramMeta): string {
+export function buildEnrichedQuery(
+  query: string,
+  meta: TelegramMeta,
+  groupTranscript?: string,
+): string {
   const datePart = `${formatTelegramDateFull(meta.date)}, ${formatTelegramDate(meta.date)}`;
 
   let header: string;
@@ -114,7 +137,8 @@ export function buildEnrichedQuery(query: string, meta: TelegramMeta): string {
     header = `[${datePart} | ${senderPart}]`;
   }
 
-  return `${header}\n${query}`;
+  const transcript = groupTranscript ? `${groupTranscript}\n` : "";
+  return `${transcript}${header}\n${query}`;
 }
 
 /**

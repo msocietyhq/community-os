@@ -12,6 +12,7 @@ import { loginHandler } from "./handlers/login";
 import { PostgresSessionStorage } from "./session-storage";
 import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
+import { telegramMessageLoggerMiddleware } from "./lib/telegram-message-logger";
 import { cleanupStaleAuthors } from "./lib/message-cache";
 import { env } from "../env";
 
@@ -55,6 +56,8 @@ export async function initBot(): Promise<void> {
     await next();
   });
 
+  // Log all messages to DB for group context (after group guard)
+  bot.use(telegramMessageLoggerMiddleware);
   // Auto-register group members before session/handlers
   bot.use(autoRegisterMiddleware);
   // Sync profile photo in private chats (at most once per 24h)

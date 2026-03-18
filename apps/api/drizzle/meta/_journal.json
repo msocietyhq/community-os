@@ -43,6 +43,13 @@
       "when": 1773657601366,
       "tag": "0005_cuddly_spencer_smythe",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773819978595,
+      "tag": "0006_nostalgic_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

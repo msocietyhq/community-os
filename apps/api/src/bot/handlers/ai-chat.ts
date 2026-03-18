@@ -5,10 +5,12 @@ import { env } from "../../env";
 import {
   buildTelegramMeta,
   buildEnrichedQuery,
+  formatGroupHistory,
   getRecentHistory,
   ONE_HOUR_MS,
   MAX_HISTORY,
 } from "../lib/chat-context";
+import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
 
 // Convert Markdown output from AI into Telegram HTML.
 // Escapes HTML entities first, then maps ** / * / _ / ` to tags.
@@ -77,7 +79,21 @@ aiChatHandler.on("message:text", async (ctx) => {
     chatType as "private" | "group" | "supergroup",
     ctx.me.id,
   );
-  const enrichedQuery = buildEnrichedQuery(query, meta);
+
+  let groupTranscript: string | undefined;
+  if (isGroup) {
+    const recentMsgs = await getRecentChatMessages(
+      String(ctx.chat.id),
+      ctx.message.message_thread_id ?? null,
+      2 * ONE_HOUR_MS,
+      50,
+      ctx.message.message_id,
+    );
+    groupTranscript =
+      recentMsgs.length > 0 ? formatGroupHistory(recentMsgs) : undefined;
+  }
+
+  const enrichedQuery = buildEnrichedQuery(query, meta, groupTranscript);
 
   const { recentTurns, chatHistory } = getRecentHistory(
     ctx.session.chatTurns ?? [],
@@ -101,10 +117,11 @@ aiChatHandler.on("message:text", async (ctx) => {
       { timestamp: now, meta, messages: newTurnMessages },
     ];
 
-    await ctx.reply(markdownToHtml(responseText), {
+    const sentMsg = await ctx.reply(markdownToHtml(responseText), {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
       parse_mode: "HTML",
     });
+    logBotMessage(sentMsg, ctx.me, chatType, responseText);
   } catch (error) {
     console.error("AI chat error:", error);
     await ctx.reply("Sorry, I encountered an error. Please try again later.", {
