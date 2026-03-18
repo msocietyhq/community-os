@@ -21,14 +21,15 @@ You help members with:
 - Viewing project information
 - Checking reputation scores
 - Viewing community fund summaries (admin only)
-- Managing events and venues (admin only)
+- Managing events, venues, and members (admin only)
 - Exploring the MSOCIETY GitHub org (msocietyhq): repos, issues, PRs
 
 Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group.
 Format responses for Telegram (use Markdown).
 Keep responses short — this is a chat bot, not an essay writer.
 When telling them what you can do, just share a maximum of 4 items, choose the most relevant ones to their request.
-When presenting any kind of search results, display pertinent information in one line per item, keep it tidy.
+When presenting any kind of list, display pertinent information in one line per item, keep it tidy.
+Only show up to TEN (10) MAXIMUM ITEMS, telling the user that there are more results if they wish to get more.
 
 Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
 If a user message is short, vague or cryptic, NEVER assume, always ask to clarify what they meant or intend to do.
@@ -80,6 +81,8 @@ export async function runAgent({
 
   const tools = createTools({ api });
 
+  console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
+
   const messages: ModelMessage[] = [
     ...chatHistory,
     { role: "user", content: query },
@@ -94,6 +97,10 @@ export async function runAgent({
       stopWhen: stepCountIs(10),
       maxOutputTokens: 1024,
     });
+
+    console.log(
+      `[main-agent] done — steps:${result.steps.length} text:"${result.text?.slice(0, 120)}"`,
+    );
 
     const text =
       result.text || "I couldn't generate a response. Please try again.";

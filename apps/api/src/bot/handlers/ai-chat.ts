@@ -10,6 +10,19 @@ import {
   MAX_HISTORY,
 } from "../lib/chat-context";
 
+// Convert Markdown output from AI into Telegram HTML.
+// Escapes HTML entities first, then maps ** / * / _ / ` to tags.
+function markdownToHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/gs, "<b>$1</b>")
+    .replace(/\*([^*\n]+?)\*/g, "<i>$1</i>")
+    .replace(/_([^_\n]+?)_/g, "<i>$1</i>")
+    .replace(/`([^`]+?)`/g, "<code>$1</code>");
+}
+
 export const aiChatHandler = new Composer<BotContext>();
 
 aiChatHandler.on("message:text", async (ctx) => {
@@ -88,9 +101,9 @@ aiChatHandler.on("message:text", async (ctx) => {
       { timestamp: now, meta, messages: newTurnMessages },
     ];
 
-    await ctx.reply(responseText, {
+    await ctx.reply(markdownToHtml(responseText), {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
     });
   } catch (error) {
     console.error("AI chat error:", error);
