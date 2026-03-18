@@ -18,7 +18,14 @@ export function createMembersAgent(ctx: ToolContext) {
         const { data, error } = await ctx.api.api.v1
           .members({ userId: user_id })
           .get();
-        if (error) { console.error("[members-agent:get_member_profile] error:", error.status, error.value); return { status: error.status, value: error.value }; }
+        if (error) {
+          console.error(
+            "[members-agent:get_member_profile] error:",
+            error.status,
+            error.value,
+          );
+          return { status: error.status, value: error.value };
+        }
         return data;
       },
     }),
@@ -30,15 +37,21 @@ export function createMembersAgent(ctx: ToolContext) {
         q: z
           .string()
           .optional()
-          .describe("Free-text search across name, bio, title, company, etc."),
+          .describe(
+            "Free-text search across name, bio, title, company, skills, interests, education, github handle. Prefer this for open-ended queries (e.g. 'rust developer', 'machine learning').",
+          ),
         skills: z
           .array(z.string())
           .optional()
-          .describe("Filter by skills (e.g. ['python', 'react'])"),
+          .describe(
+            "Strict filter — only use when the user explicitly wants members whose skills include ALL of these values. Do not use for general discovery; use q instead.",
+          ),
         interests: z
           .array(z.string())
           .optional()
-          .describe("Filter by interests (e.g. ['ai', 'web3'])"),
+          .describe(
+            "Strict filter — only use when the user explicitly wants members whose interests include ALL of these values. Do not use for general discovery; use q instead.",
+          ),
         role: z
           .string()
           .optional()
@@ -46,10 +59,17 @@ export function createMembersAgent(ctx: ToolContext) {
         limit: z
           .number()
           .optional()
+          .default(10)
           .describe("Number of results to return (default: 20)"),
       }),
       execute: async ({ q, skills, interests, role, limit }) => {
-        console.log("[members-agent:search_members]", { q, skills, interests, role, limit });
+        console.log("[members-agent:search_members]", {
+          q,
+          skills,
+          interests,
+          role,
+          limit,
+        });
         const { data, error } = await ctx.api.api.v1.members.get({
           query: {
             q,
@@ -60,8 +80,19 @@ export function createMembersAgent(ctx: ToolContext) {
             limit: limit ?? 20,
           },
         });
-        if (error) { console.error("[members-agent:search_members] error:", error.status, error.value); return { status: error.status, value: error.value }; }
-        console.log("[members-agent:search_members] returned", Array.isArray(data) ? data.length : 1, "item(s)");
+        if (error) {
+          console.error(
+            "[members-agent:search_members] error:",
+            error.status,
+            error.value,
+          );
+          return { status: error.status, value: error.value };
+        }
+        console.log(
+          "[members-agent:search_members] returned",
+          Array.isArray(data) ? data.length : 1,
+          "item(s)",
+        );
         return data;
       },
     }),
@@ -84,7 +115,14 @@ export function createMembersAgent(ctx: ToolContext) {
         current_title,
         github,
       }) => {
-        console.log("[members-agent:update_my_profile]", { bio: bio?.slice(0, 40), skills, interests, current_company, current_title, github });
+        console.log("[members-agent:update_my_profile]", {
+          bio: bio?.slice(0, 40),
+          skills,
+          interests,
+          current_company,
+          current_title,
+          github,
+        });
         const { data, error } = await ctx.api.api.v1.members.me.patch({
           bio,
           skills,
@@ -93,7 +131,14 @@ export function createMembersAgent(ctx: ToolContext) {
           currentTitle: current_title,
           githubHandle: github,
         });
-        if (error) { console.error("[members-agent:update_my_profile] error:", error.status, error.value); return { status: error.status, value: error.value }; }
+        if (error) {
+          console.error(
+            "[members-agent:update_my_profile] error:",
+            error.status,
+            error.value,
+          );
+          return { status: error.status, value: error.value };
+        }
         return data;
       },
     }),
@@ -104,7 +149,14 @@ export function createMembersAgent(ctx: ToolContext) {
       execute: async () => {
         console.log("[members-agent:get_my_profile]");
         const { data, error } = await ctx.api.api.v1.members.me.get();
-        if (error) { console.error("[members-agent:get_my_profile] error:", error.status, error.value); return { status: error.status, value: error.value }; }
+        if (error) {
+          console.error(
+            "[members-agent:get_my_profile] error:",
+            error.status,
+            error.value,
+          );
+          return { status: error.status, value: error.value };
+        }
         return data;
       },
     }),
@@ -130,7 +182,14 @@ export function createMembersAgent(ctx: ToolContext) {
         console.log("[members-agent:get_leaderboard]");
         const { data, error } =
           await ctx.api.api.v1.reputation.leaderboard.get();
-        if (error) { console.error("[members-agent:get_leaderboard] error:", error.status, error.value); return { status: error.status, value: error.value }; }
+        if (error) {
+          console.error(
+            "[members-agent:get_leaderboard] error:",
+            error.status,
+            error.value,
+          );
+          return { status: error.status, value: error.value };
+        }
         return data;
       },
     }),
@@ -147,7 +206,12 @@ export function createMembersAgent(ctx: ToolContext) {
       maxOutputTokens: 512,
     });
 
-    console.log("[members-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
+    console.log(
+      "[members-agent] steps:",
+      result.steps.length,
+      "| response:",
+      result.text?.slice(0, 120),
+    );
     return result.text || "No member information found.";
   };
 }

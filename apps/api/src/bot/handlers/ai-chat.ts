@@ -19,6 +19,7 @@ function markdownToHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(/\*\*(.+?)\*\*/gs, "<b>$1</b>")
     .replace(/\*([^*\n]+?)\*/g, "<i>$1</i>")
     .replace(/_([^_\n]+?)_/g, "<i>$1</i>")

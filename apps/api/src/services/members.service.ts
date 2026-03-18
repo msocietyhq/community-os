@@ -28,12 +28,16 @@ export const membersService = {
       const pattern = `%${query.q}%`;
       conditions.push(
         or(
+          // BM25 for members table fields (indexed, case-insensitive)
+          sql`${members.bio} @@@ ${query.q}::text`,
+          sql`${members.currentTitle} @@@ ${query.q}::text`,
+          sql`${members.currentCompany} @@@ ${query.q}::text`,
+          sql`${members.education} @@@ ${query.q}::text`,
+          sql`${members.githubHandle} @@@ ${query.q}::text`,
+          sql`${members.skills} @@@ ${query.q}::text`,
+          sql`${members.interests} @@@ ${query.q}::text`,
+          // ILIKE for user table fields (separate table, not in BM25 index)
           ilike(user.name, pattern),
-          ilike(members.bio, pattern),
-          ilike(members.currentTitle, pattern),
-          ilike(members.currentCompany, pattern),
-          ilike(members.education, pattern),
-          ilike(members.githubHandle, pattern),
           ilike(user.telegramUsername, pattern),
         )!,
       );
@@ -44,12 +48,7 @@ export const membersService = {
       .map((s) => s.trim())
       .filter(Boolean);
     if (skillsArr?.length) {
-      conditions.push(
-        sql`${members.skills} && ARRAY[${sql.join(
-          skillsArr.map((s) => sql`${s}`),
-          sql`,`,
-        )}]::text[]`,
-      );
+      conditions.push(sql`${members.skills} @@@ ${skillsArr.join(" ")}::text`);
     }
 
     const interestsArr = query.interests
@@ -57,12 +56,7 @@ export const membersService = {
       .map((s) => s.trim())
       .filter(Boolean);
     if (interestsArr?.length) {
-      conditions.push(
-        sql`${members.interests} && ARRAY[${sql.join(
-          interestsArr.map((i) => sql`${i}`),
-          sql`,`,
-        )}]::text[]`,
-      );
+      conditions.push(sql`${members.interests} @@@ ${interestsArr.join(" ")}::text`);
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
