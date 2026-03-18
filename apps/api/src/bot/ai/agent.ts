@@ -8,8 +8,6 @@ import { env } from "../../env";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-const MAX_HISTORY = 30;
-
 function getSystemPrompt(): string {
   const today = new Date().toISOString().split("T")[0];
   return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
@@ -87,7 +85,7 @@ export async function runAgent({
 
   try {
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-20250514"),
+      model: anthropic("claude-sonnet-4-5-20250929"),
       system: getSystemPrompt(),
       messages,
       tools,

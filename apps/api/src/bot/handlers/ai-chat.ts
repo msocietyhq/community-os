@@ -2,8 +2,13 @@ import { Composer } from "grammy";
 import type { BotContext } from "../types";
 import { runAgent } from "../ai/agent";
 import { env } from "../../env";
-
-const ONE_HOUR_MS = 60 * 60 * 1000;
+import {
+  buildTelegramMeta,
+  buildEnrichedQuery,
+  getRecentHistory,
+  ONE_HOUR_MS,
+  MAX_HISTORY,
+} from "../lib/chat-context";
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -16,9 +21,12 @@ aiChatHandler.on("message:text", async (ctx) => {
 
   // Reject unhandled commands so they don't reach the AI
   if (text.startsWith("/")) {
-    await ctx.reply("That's an invalid command. Use /help to see available commands.", {
-      reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
-    });
+    await ctx.reply(
+      "That's an invalid command. Use /help to see available commands.",
+      {
+        reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
+      },
+    );
     return;
   }
 
@@ -26,29 +34,13 @@ aiChatHandler.on("message:text", async (ctx) => {
 
   if (isGroup) {
     const isMentioned = text.includes(`@${botUsername}`);
-    const isReplyToBot =
-      ctx.message.reply_to_message?.from?.id === ctx.me.id;
+    const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
 
     if (!isMentioned && !isReplyToBot) return;
 
     query = isMentioned
       ? text.replace(`@${botUsername}`, "").trim()
       : text.trim();
-
-    // When replying to a non-bot message, include the replied-to content
-    // so the AI has context (e.g. "@bot can you take a look at this request")
-    const replyMsg = ctx.message.reply_to_message;
-    if (replyMsg && replyMsg.from?.id !== ctx.me.id) {
-      const author =
-        replyMsg.from?.first_name ??
-        replyMsg.from?.username ??
-        "someone";
-      const replyText =
-        "text" in replyMsg && replyMsg.text
-          ? replyMsg.text
-          : "(non-text message)";
-      query = `[Replying to ${author}: "${replyText}"]\n${query}`;
-    }
 
     if (!query) {
       await ctx.reply("How can I help? Mention me with a question!", {
@@ -64,29 +56,37 @@ aiChatHandler.on("message:text", async (ctx) => {
   }
 
   const telegramId = String(ctx.from!.id);
-
-  // Reset history if last message was over 1 hour ago
   const now = Date.now();
-  if (
-    ctx.session.lastMessageAt &&
-    now - ctx.session.lastMessageAt > ONE_HOUR_MS
-  ) {
-    ctx.session.chatHistory = [];
-  }
 
-  const chatHistory = ctx.session.chatHistory ?? [];
+  const meta = buildTelegramMeta(
+    ctx.message,
+    ctx.from!,
+    chatType as "private" | "group" | "supergroup",
+    ctx.me.id,
+  );
+  const enrichedQuery = buildEnrichedQuery(query, meta);
+
+  const { recentTurns, chatHistory } = getRecentHistory(
+    ctx.session.chatTurns ?? [],
+    now,
+    ONE_HOUR_MS,
+    MAX_HISTORY,
+  );
 
   try {
     await ctx.replyWithChatAction("typing");
     const { text: responseText, updatedHistory } = await runAgent({
-      query,
+      query: enrichedQuery,
       telegramId,
-      telegramUser: ctx.from!,
+      telegramUser: ctx.from,
       chatHistory,
     });
 
-    ctx.session.chatHistory = updatedHistory;
-    ctx.session.lastMessageAt = now;
+    const newTurnMessages = updatedHistory.slice(chatHistory.length);
+    ctx.session.chatTurns = [
+      ...recentTurns,
+      { timestamp: now, meta, messages: newTurnMessages },
+    ];
 
     await ctx.reply(responseText, {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
@@ -94,9 +94,8 @@ aiChatHandler.on("message:text", async (ctx) => {
     });
   } catch (error) {
     console.error("AI chat error:", error);
-    await ctx.reply(
-      "Sorry, I encountered an error. Please try again later.",
-      { reply_to_message_id: isGroup ? ctx.message.message_id : undefined },
-    );
+    await ctx.reply("Sorry, I encountered an error. Please try again later.", {
+      reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
+    });
   }
 });
