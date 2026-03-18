@@ -54,25 +54,28 @@ When adding backlog items, use this format:
 
 ### P1 — Important
 
+#### [P0] Venues — CRUD
+**Status**: done
+
 #### [P1] Projects — CRUD, endorsement workflow
-**Status**: todo
+**Status**: in-progress
 
 #### [P1] Funds — Transaction tracking, balance derivation
-**Status**: todo
+**Status**: in-progress
 
 #### [P1] Event pledges
 **Status**: todo
 
 #### [P1] Web portal — Auth pages, dashboard, events, projects
-**Status**: todo
+**Status**: in-progress
 
 #### [P1] Bot AI agent — Claude tool-use
-**Status**: todo
+**Status**: done
 
 ### P2 — Nice to Have
 
 #### [P2] Infra provisioning — Railway, Neon, Cloudflare
-**Status**: todo
+**Status**: in-progress
 
 #### [P2] Subdomain management
 **Status**: todo

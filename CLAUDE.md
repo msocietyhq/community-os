@@ -32,6 +32,7 @@
 - **Auth**: Better Auth with Telegram Login Widget + email/password fallback
 - **Bot**: grammY (Telegram) + Anthropic Claude SDK (AI features)
 - **Validation**: Zod (shared between API and web via `packages/shared`)
+- **Permissions**: CASL (`@casl/ability`) — abilities defined in `packages/shared`
 - **API Docs**: OpenAPI via `@elysiajs/openapi` (Scalar UI at `/openapi`)
 
 ## Project Structure
@@ -48,7 +49,7 @@ community-os/
 
 ### Package Purposes
 
-- **`apps/api`** — REST API with OpenAPI docs, Better Auth, Drizzle ORM. All business logic lives here. Includes the Telegram bot (`src/bot/`) which runs in-process and calls services directly (see ADR-005).
+- **`apps/api`** — REST API with OpenAPI docs, Better Auth, Drizzle ORM. All business logic lives here. Includes the Telegram bot (`src/bot/`) which runs in-process and calls services directly (see ADR-005). Notable subdirectories: `src/integrations/` (Cloudflare, Neon, Railway, Resend clients) and `src/middleware/` (audit, auth, permissions, rate-limit).
 - **`apps/web`** — SPA portal at `msociety.dev`. Consumes API via Eden Treaty for end-to-end type safety.
 - **`packages/shared`** — Shared Zod validators, TypeScript types, and constants used by all apps.
 
@@ -70,7 +71,7 @@ See `/docs/README.md` for the full documentation structure. Key locations:
 ```bash
 bun install              # Install all workspace dependencies
 bun dev                  # Start all apps in dev mode (API + web)
-bun run --filter api dev # Start API only (includes bot)
+bun run --cwd apps/api dev # Start API only (includes bot)
 bun build                # Build all apps
 bun lint                 # Run Biome linter
 bun lint:fix             # Auto-fix lint issues
@@ -96,7 +97,7 @@ bun db:seed              # Seed database with initial data
 Follow the patterns from the [ElysiaJS best practices](https://elysiajs.com/essential/best-practice.html):
 
 - **Zod is the single source of truth** for all validation schemas — defined in `packages/shared`, never duplicated
-- **Register Zod schemas as Elysia models** via `.model()` in per-module `model.ts` files, then reference by name in routes (`body: 'event.create'`)
+- **Register Zod schemas as Elysia models** via `.model()` in `src/routes/models/<entity>.ts` files, then reference by name in routes (`body: 'event.create'`)
 - **Derive TypeScript types from Zod** (`z.infer<typeof schema>`) — never create standalone interfaces or classes for request/response shapes
 - **Define `response` schemas** on every route so OpenAPI docs are accurate
 - **Deconstruct context** in route handlers — don't pass the entire Elysia `Context` to service functions
