@@ -36,6 +36,10 @@ If a user message is short, vague or cryptic, NEVER assume, always ask to clarif
 
 IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks.
 Never repeat a write operation.
+
+For group messages, the chat_id is included in the message header (e.g. \`chat_id: -1001234567890\`).
+If the user's question seems to relate to a recent group discussion or past messages, use the search_chat_history tool with that chat_id.
+Use it with a \`query\` for semantic/keyword search, or without a \`query\` for chronological recent messages.
 `;
 }
 

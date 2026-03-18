@@ -13,6 +13,8 @@ import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
 import { searchMessagesHybrid } from "../../services/messages.service";
+import { getRecentChatMessages } from "../lib/telegram-message-logger";
+import { formatGroupHistory } from "../lib/chat-context";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -115,43 +117,88 @@ export function createTools(ctx: ToolContext) {
 
     search_chat_history: tool({
       description:
-        "Search past messages in this Telegram chat using hybrid semantic + keyword search. Use this to answer questions like 'did anyone share job opportunities?', 'what was discussed about X?', 'find messages about Y'. Only use in group chats where a chat_id is available in context.",
+        "Fetch or search past messages in this Telegram group chat. Use with a `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'). Omit `query` to fetch recent messages chronologically (e.g. 'what were we discussing?'). Only use in group chats where a chat_id is available in the message header.",
       inputSchema: z.object({
         chat_id: z
           .string()
           .describe(
-            "The Telegram chat ID to search — use the chat_id from the current conversation context",
+            "The Telegram chat ID — use the chat_id from the current message header",
           ),
         query: z
           .string()
+          .optional()
           .describe(
-            "Natural-language search query — can be a topic, keyword, or phrase",
+            "Natural-language search query. Omit to fetch recent messages chronologically.",
           ),
+        after: z
+          .string()
+          .optional()
+          .describe("ISO 8601 date — only return messages after this time"),
+        before: z
+          .string()
+          .optional()
+          .describe("ISO 8601 date — only return messages before this time"),
         limit: z
           .number()
           .optional()
-          .default(10)
-          .describe("Number of messages to return (default: 10)"),
+          .default(20)
+          .describe("Number of messages to return (default: 20)"),
       }),
-      execute: async ({ chat_id, query, limit }) => {
+      execute: async ({ chat_id, query, after, before, limit }) => {
         console.log("[main-agent:search_chat_history]", {
           chat_id,
           query,
+          after,
+          before,
           limit,
         });
-        const results = await searchMessagesHybrid(
-          chat_id,
-          query,
-          limit ?? 10,
-        );
-        if (results.length === 0) return { messages: [] };
+
+        const effectiveLimit = limit ?? 20;
+
+        if (query) {
+          const results = await searchMessagesHybrid(chat_id, query, effectiveLimit);
+          let filtered = results;
+          if (after) {
+            const afterDate = new Date(after);
+            filtered = filtered.filter((r) => r.date >= afterDate);
+          }
+          if (before) {
+            const beforeDate = new Date(before);
+            filtered = filtered.filter((r) => r.date <= beforeDate);
+          }
+          if (filtered.length === 0) return { messages: [] };
+          return {
+            messages: filtered.map((r) => ({
+              messageId: r.messageId,
+              from: r.fromFirstName ?? r.fromUsername ?? "Unknown",
+              text: r.text ?? r.caption,
+              date: r.date.toISOString(),
+              score: r.score,
+            })),
+          };
+        }
+
+        // No query — chronological fetch using date range as window
+        const afterDate = after ? new Date(after) : null;
+        const beforeDate = before ? new Date(before) : null;
+        const windowMs = afterDate
+          ? Date.now() - afterDate.getTime()
+          : 2 * 60 * 60 * 1000; // default 2h
+
+        const rows = await getRecentChatMessages(chat_id, null, windowMs, effectiveLimit);
+        let filtered = rows;
+        if (beforeDate) {
+          filtered = filtered.filter((r) => r.date <= beforeDate);
+        }
+        if (filtered.length === 0) return { messages: [] };
+        const transcript = formatGroupHistory(filtered);
         return {
-          messages: results.map((r) => ({
+          transcript,
+          messages: filtered.map((r) => ({
             messageId: r.messageId,
             from: r.fromFirstName ?? r.fromUsername ?? "Unknown",
             text: r.text ?? r.caption,
             date: r.date.toISOString(),
-            score: r.score,
           })),
         };
       },

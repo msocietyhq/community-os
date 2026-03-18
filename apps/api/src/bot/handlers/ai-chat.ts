@@ -5,12 +5,11 @@ import { env } from "../../env";
 import {
   buildTelegramMeta,
   buildEnrichedQuery,
-  formatGroupHistory,
   getRecentHistory,
   ONE_HOUR_MS,
   MAX_HISTORY,
 } from "../lib/chat-context";
-import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
+import { logBotMessage } from "../lib/telegram-message-logger";
 
 // Convert Markdown output from AI into Telegram HTML.
 // Escapes HTML entities first, then maps ** / * / _ / ` to tags.
@@ -81,23 +80,9 @@ aiChatHandler.on("message:text", async (ctx) => {
     ctx.me.id,
   );
 
-  let groupTranscript: string | undefined;
-  if (isGroup) {
-    const recentMsgs = await getRecentChatMessages(
-      String(ctx.chat.id),
-      ctx.message.message_thread_id ?? null,
-      2 * ONE_HOUR_MS,
-      50,
-      ctx.message.message_id,
-    );
-    groupTranscript =
-      recentMsgs.length > 0 ? formatGroupHistory(recentMsgs) : undefined;
-  }
-
   const enrichedQuery = buildEnrichedQuery(
     query,
     meta,
-    groupTranscript,
     isGroup ? String(ctx.chat.id) : undefined,
   );
 

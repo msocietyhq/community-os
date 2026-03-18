@@ -115,7 +115,6 @@ export function formatGroupHistory(messages: TelegramMessageRow[]): string {
 export function buildEnrichedQuery(
   query: string,
   meta: TelegramMeta,
-  groupTranscript?: string,
   chatId?: string,
 ): string {
   const datePart = `${formatTelegramDateFull(meta.date)}, ${formatTelegramDate(meta.date)}`;
@@ -138,8 +137,7 @@ export function buildEnrichedQuery(
     header = `[${datePart} | ${senderPart}${chatId ? ` | chat_id: ${chatId}` : ""}]`;
   }
 
-  const transcript = groupTranscript ? `${groupTranscript}\n` : "";
-  return `${transcript}${header}\n${query}`;
+  return `${header}\n${query}`;
 }
 
 /**
