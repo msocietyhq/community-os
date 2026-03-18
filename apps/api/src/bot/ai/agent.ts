@@ -59,7 +59,7 @@ export async function runAgent({
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
     return {
-      text: "You're not registered yet. Please use /register first to join the community!",
+      text: "Your profile is not set up yet. Please use /profile first to set up your community profile!",
       updatedHistory: chatHistory,
     };
   }

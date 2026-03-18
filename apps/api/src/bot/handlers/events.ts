@@ -126,7 +126,7 @@ eventsHandler.callbackQuery(/^rsvp_status:(.+):(going|maybe|not_going)$/, async 
   const resolved = await resolveUser(String(telegramId));
   if (!resolved) {
     await ctx.answerCallbackQuery({
-      text: "You need to register first. Send /register in a private chat.",
+      text: "You need to set up your profile first. Send /profile in a private chat.",
       show_alert: true,
     });
     return;

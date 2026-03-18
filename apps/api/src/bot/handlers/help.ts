@@ -20,7 +20,9 @@ helpHandler.command("start", async (ctx) => {
 
     const resolved = await resolveUser(String(telegramId));
     if (!resolved) {
-      await ctx.reply("You need to set up your profile first. Send /profile to get started.");
+      await ctx.reply(
+        "You need to set up your profile first. Send /profile to get started.",
+      );
       return;
     }
 
@@ -53,7 +55,6 @@ helpHandler.command("start", async (ctx) => {
       `/events — View upcoming events\n` +
       `/reputation — Check your reputation score\n` +
       `/profile — View or edit your community profile\n` +
-      `/login — Get a login link for the web portal\n` +
       `/help — Show this help message\n\n` +
       `You can also mention @msocietybot with any question about the community!`,
   );
@@ -65,7 +66,6 @@ helpHandler.command("help", async (ctx) => {
       `📅 /events — View upcoming events\n` +
       `⭐ /reputation — Check your reputation score\n` +
       `👤 /profile — View or edit your community profile\n` +
-      `🔗 /login — Get a login link for the web portal\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
     { parse_mode: "Markdown" },
