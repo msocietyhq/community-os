@@ -57,6 +57,34 @@
       "when": 1773825889882,
       "tag": "0007_member_search",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1773828503671,
+      "tag": "0008_enable_pgvector",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1773828518642,
+      "tag": "0009_messages_fts_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773828518954,
+      "tag": "0010_messages_embedding_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1773828519271,
+      "tag": "0011_messages_embedding_index",
+      "breakpoints": true
     }
   ]
 }
