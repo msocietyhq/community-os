@@ -47,118 +47,126 @@ function detectMediaType(
 
 /**
  * Middleware that persists all incoming messages to the telegram_messages table.
- * Fire-and-forget — does not block the handler chain.
+ * The DB insert is awaited before calling next() so downstream handlers
+ * (e.g. reputation) can query the message. Embedding generation remains
+ * fire-and-forget.
  */
 export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
   ctx,
   next,
 ) => {
-  await next();
-
   const msg = ctx.message;
-  if (!msg || !ctx.chat) return;
+  if (msg && ctx.chat) {
+    const chat = ctx.chat;
+    const from = msg.from;
+    const senderChat = msg.sender_chat;
+    const forwardOrigin =
+      "forward_origin" in msg ? (msg.forward_origin as Record<string, unknown> | undefined) : undefined;
+    const mediaType = detectMediaType(msg);
 
-  const chat = ctx.chat;
-  const from = msg.from;
-  const senderChat = msg.sender_chat;
-  const forwardOrigin =
-    "forward_origin" in msg ? (msg.forward_origin as Record<string, unknown> | undefined) : undefined;
-  const mediaType = detectMediaType(msg);
+    const row: typeof telegramMessages.$inferInsert = {
+      chatId: String(chat.id),
+      chatType: chat.type,
+      messageId: msg.message_id,
+      messageThreadId: msg.message_thread_id ?? null,
+      isTopicMessage: msg.is_topic_message ?? null,
+      isAutomaticForward: msg.is_automatic_forward ?? null,
 
-  const row: typeof telegramMessages.$inferInsert = {
-    chatId: String(chat.id),
-    chatType: chat.type,
-    messageId: msg.message_id,
-    messageThreadId: msg.message_thread_id ?? null,
-    isTopicMessage: msg.is_topic_message ?? null,
-    isAutomaticForward: msg.is_automatic_forward ?? null,
+      fromUserId: from?.id ?? null,
+      fromFirstName: from?.first_name ?? null,
+      fromLastName: from?.last_name ?? null,
+      fromUsername: from?.username ?? null,
+      fromIsBot: from?.is_bot ?? false,
+      fromIsPremium: ("is_premium" in (from ?? {}) ? ((from as unknown as Record<string, unknown>)?.is_premium) : null) as boolean | null,
+      fromLanguageCode: from?.language_code ?? null,
 
-    fromUserId: from?.id ?? null,
-    fromFirstName: from?.first_name ?? null,
-    fromLastName: from?.last_name ?? null,
-    fromUsername: from?.username ?? null,
-    fromIsBot: from?.is_bot ?? false,
-    fromIsPremium: ("is_premium" in (from ?? {}) ? ((from as unknown as Record<string, unknown>)?.is_premium) : null) as boolean | null,
-    fromLanguageCode: from?.language_code ?? null,
+      senderChatId: senderChat?.id ?? null,
+      senderChatUsername: senderChat && "username" in senderChat ? (senderChat.username as string) : null,
+      senderChatTitle: senderChat && "title" in senderChat ? (senderChat.title as string) : null,
+      authorSignature: "author_signature" in msg ? (msg.author_signature as string) : null,
 
-    senderChatId: senderChat?.id ?? null,
-    senderChatUsername: senderChat && "username" in senderChat ? (senderChat.username as string) : null,
-    senderChatTitle: senderChat && "title" in senderChat ? (senderChat.title as string) : null,
-    authorSignature: "author_signature" in msg ? (msg.author_signature as string) : null,
+      text: msg.text ?? null,
+      caption: msg.caption ?? null,
+      mediaType,
+      entities: msg.entities ? (msg.entities as unknown as Record<string, unknown>[]) : null,
+      captionEntities: msg.caption_entities ? (msg.caption_entities as unknown as Record<string, unknown>[]) : null,
 
-    text: msg.text ?? null,
-    caption: msg.caption ?? null,
-    mediaType,
-    entities: msg.entities ? (msg.entities as unknown as Record<string, unknown>[]) : null,
-    captionEntities: msg.caption_entities ? (msg.caption_entities as unknown as Record<string, unknown>[]) : null,
-
-    replyToMessageId: msg.reply_to_message?.message_id ?? null,
-    externalReplyChatId:
-      "external_reply" in msg && msg.external_reply
-        ? String((msg.external_reply as { chat?: { id: number } }).chat?.id ?? "")
-        : null,
-
-    forwardOriginType: forwardOrigin ? (forwardOrigin.type as string) : null,
-    forwardFromUserId:
-      forwardOrigin?.type === "user"
-        ? ((forwardOrigin.sender_user as { id: number })?.id ?? null)
-        : null,
-    forwardFromFirstName:
-      forwardOrigin?.type === "user"
-        ? ((forwardOrigin.sender_user as { first_name: string })?.first_name ?? null)
-        : forwardOrigin?.type === "hidden_user"
-          ? (forwardOrigin.sender_user_name as string ?? null)
+      replyToMessageId: msg.reply_to_message?.message_id ?? null,
+      externalReplyChatId:
+        "external_reply" in msg && msg.external_reply
+          ? String((msg.external_reply as { chat?: { id: number } }).chat?.id ?? "")
           : null,
-    forwardFromUsername:
-      forwardOrigin?.type === "user"
-        ? ((forwardOrigin.sender_user as { username?: string })?.username ?? null)
+
+      forwardOriginType: forwardOrigin ? (forwardOrigin.type as string) : null,
+      forwardFromUserId:
+        forwardOrigin?.type === "user"
+          ? ((forwardOrigin.sender_user as { id: number })?.id ?? null)
+          : null,
+      forwardFromFirstName:
+        forwardOrigin?.type === "user"
+          ? ((forwardOrigin.sender_user as { first_name: string })?.first_name ?? null)
+          : forwardOrigin?.type === "hidden_user"
+            ? (forwardOrigin.sender_user_name as string ?? null)
+            : null,
+      forwardFromUsername:
+        forwardOrigin?.type === "user"
+          ? ((forwardOrigin.sender_user as { username?: string })?.username ?? null)
+          : null,
+      forwardFromChatId:
+        forwardOrigin?.type === "chat" || forwardOrigin?.type === "channel"
+          ? ((forwardOrigin.chat as { id: number })?.id ?? null)
+          : null,
+      forwardFromChatTitle:
+        forwardOrigin?.type === "chat" || forwardOrigin?.type === "channel"
+          ? ((forwardOrigin.chat as { title?: string })?.title ?? null)
+          : null,
+      forwardDate: forwardOrigin?.date
+        ? new Date((forwardOrigin.date as number) * 1000)
         : null,
-    forwardFromChatId:
-      forwardOrigin?.type === "chat" || forwardOrigin?.type === "channel"
-        ? ((forwardOrigin.chat as { id: number })?.id ?? null)
+
+      viaBotId: msg.via_bot?.id ?? null,
+      businessConnectionId:
+        "business_connection_id" in msg
+          ? (msg.business_connection_id as string)
+          : null,
+
+      pollId: msg.poll?.id ?? null,
+      pollQuestion: msg.poll?.question ?? null,
+
+      editDate: msg.edit_date ? new Date(msg.edit_date * 1000) : null,
+
+      newChatMemberIds: msg.new_chat_members
+        ? (msg.new_chat_members.map((m) => m.id) as unknown as Record<string, unknown>[])
         : null,
-    forwardFromChatTitle:
-      forwardOrigin?.type === "chat" || forwardOrigin?.type === "channel"
-        ? ((forwardOrigin.chat as { title?: string })?.title ?? null)
-        : null,
-    forwardDate: forwardOrigin?.date
-      ? new Date((forwardOrigin.date as number) * 1000)
-      : null,
+      leftChatMemberUserId: msg.left_chat_member?.id ?? null,
+      newChatTitle: msg.new_chat_title ?? null,
+      pinnedMessageId: msg.pinned_message?.message_id ?? null,
 
-    viaBotId: msg.via_bot?.id ?? null,
-    businessConnectionId:
-      "business_connection_id" in msg
-        ? (msg.business_connection_id as string)
-        : null,
+      date: new Date(msg.date * 1000),
+      raw: msg as unknown as Record<string, unknown>,
+    };
 
-    pollId: msg.poll?.id ?? null,
-    pollQuestion: msg.poll?.question ?? null,
+    // Persist synchronously so downstream handlers can query the message
+    await db
+      .insert(telegramMessages)
+      .values(row)
+      .onConflictDoNothing()
+      .catch((err: unknown) => {
+        console.error("[message-logger] failed to persist message:", err);
+      });
 
-    editDate: msg.edit_date ? new Date(msg.edit_date * 1000) : null,
+    // Embedding generation is fire-and-forget
+    const content = row.text ?? row.caption;
+    if (content) {
+      generateEmbedding(content)
+        .then((embedding) => setMessageEmbedding(row.chatId, row.messageId, embedding))
+        .catch((err: unknown) => {
+          console.error("[message-logger] embedding failed:", err);
+        });
+    }
+  }
 
-    newChatMemberIds: msg.new_chat_members
-      ? (msg.new_chat_members.map((m) => m.id) as unknown as Record<string, unknown>[])
-      : null,
-    leftChatMemberUserId: msg.left_chat_member?.id ?? null,
-    newChatTitle: msg.new_chat_title ?? null,
-    pinnedMessageId: msg.pinned_message?.message_id ?? null,
-
-    date: new Date(msg.date * 1000),
-    raw: msg as unknown as Record<string, unknown>,
-  };
-
-  db.insert(telegramMessages)
-    .values(row)
-    .onConflictDoNothing()
-    .then(async () => {
-      const content = row.text ?? row.caption;
-      if (!content) return;
-      const embedding = await generateEmbedding(content);
-      await setMessageEmbedding(row.chatId, row.messageId, embedding);
-    })
-    .catch((err: unknown) => {
-      console.error("[message-logger] failed to persist message:", err);
-    });
+  await next();
 };
 
 /**

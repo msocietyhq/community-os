@@ -136,7 +136,7 @@ export const FUND_TRANSACTION_TYPES = [
 ] as const;
 export type FundTransactionType = (typeof FUND_TRANSACTION_TYPES)[number];
 
-export const REPUTATION_TRIGGER_TYPES = ["reaction", "keyword"] as const;
+export const REPUTATION_TRIGGER_TYPES = ["keyword"] as const;
 export type ReputationTriggerType = (typeof REPUTATION_TRIGGER_TYPES)[number];
 
 export const AUDIT_ACTIONS = [
@@ -169,13 +169,11 @@ export const VOTE_QUOTA = 5;
 export const VOTE_QUOTA_DURATION_HOURS = 24;
 
 export const DEFAULT_REPUTATION_TRIGGERS = [
-  { type: "reaction" as const, value: "👍", points: 1 },
-  { type: "reaction" as const, value: "❤️", points: 1 },
-  { type: "reaction" as const, value: "🔥", points: 1 },
-  { type: "reaction" as const, value: "👎", points: -1 },
   { type: "keyword" as const, value: "thanks", points: 1 },
   { type: "keyword" as const, value: "thank you", points: 1 },
   { type: "keyword" as const, value: "jazakallah", points: 1 },
+  { type: "keyword" as const, value: "👍", points: 1 },
   { type: "keyword" as const, value: "boo", points: -1 },
   { type: "keyword" as const, value: "eww", points: -1 },
+  { type: "keyword" as const, value: "👎", points: -1 },
 ] as const;

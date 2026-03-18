@@ -166,11 +166,34 @@ export function createMembersAgent(ctx: ToolContext) {
     }),
 
     get_my_reputation: tool({
-      description: "Get the requesting user's reputation score",
+      description: "Get the requesting user's reputation score and recent events",
       inputSchema: z.object({}),
       execute: async () => {
         console.log("[members-agent:get_my_reputation]");
-        return { message: "Reputation feature is not yet available." };
+        const { data: me, error: meErr } =
+          await ctx.api.api.v1.members.me.get();
+        if (meErr) return { status: meErr.status, value: meErr.value };
+        const { data, error } = await ctx.api.api.v1
+          .reputation({ userId: me.user.id })
+          .get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
+      },
+    }),
+
+    get_reputation: tool({
+      description:
+        "Get any community member's reputation score and recent events by their user ID",
+      inputSchema: z.object({
+        user_id: z.string().describe("The user ID of the member"),
+      }),
+      execute: async ({ user_id }) => {
+        console.log("[members-agent:get_reputation]", { user_id });
+        const { data, error } = await ctx.api.api.v1
+          .reputation({ userId: user_id })
+          .get();
+        if (error) return { status: error.status, value: error.value };
+        return data;
       },
     }),
 

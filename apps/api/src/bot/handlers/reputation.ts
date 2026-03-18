@@ -1,51 +1,14 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../types";
 import {
-  processReaction,
   processKeyword,
   type ReputationResult,
 } from "../lib/reputation";
-import { cacheMessage } from "../lib/message-cache";
 import { resolveUser, resolveUserByUsername } from "../lib/auth";
 import { reputationService } from "../../services/reputation.service";
 import { VOTE_QUOTA } from "@community-os/shared/constants";
 
 export const reputationHandler = new Composer<BotContext>();
-
-// Cache every message for reaction resolution
-reputationHandler.on("message", async (ctx, next) => {
-  if (ctx.from && !ctx.from.is_bot) {
-    cacheMessage(
-      String(ctx.chat.id),
-      String(ctx.message.message_id),
-      ctx.from.id,
-    );
-  }
-  await next();
-});
-
-// Handle emoji reactions
-reputationHandler.on("message_reaction", async (ctx) => {
-  const reaction = ctx.messageReaction;
-  if (!reaction) return;
-
-  const fromUser = reaction.user;
-  if (!fromUser || fromUser.is_bot) return;
-
-  for (const emoji of reaction.new_reaction) {
-    if (emoji.type === "emoji") {
-      const result = await processReaction({
-        fromTelegramId: String(fromUser.id),
-        messageId: String(reaction.message_id),
-        chatId: String(reaction.chat.id),
-        emoji: emoji.emoji,
-      });
-      if (result.status === "error") {
-        console.error("Reaction reputation error:", result.message);
-      }
-    }
-  }
-});
 
 // Handle keyword-based reputation (reply or @mention)
 reputationHandler.on("message:text", async (ctx, next) => {
@@ -146,6 +109,19 @@ reputationHandler.command("reputation", async (ctx) => {
       if (mentionEntity?.type === "text_mention" && mentionEntity.user) {
         targetTelegramId = String(mentionEntity.user.id);
         targetLabel = mentionEntity.user.first_name + "'s";
+      } else if (mentionEntity?.type === "mention") {
+        const username = ctx.message!.text!
+          .slice(mentionEntity.offset + 1, mentionEntity.offset + mentionEntity.length)
+          .toLowerCase();
+        const byUsername = await resolveUserByUsername(username);
+        if (byUsername) {
+          const score = await reputationService.getScore(byUsername.user.id);
+          const displayName = byUsername.user.name ?? "User";
+          await ctx.reply(`${displayName}'s reputation score: ${score}`);
+          return;
+        }
+        await ctx.reply("User not found. They may need to register first.");
+        return;
       }
     }
 
@@ -231,7 +207,7 @@ async function sendFeedback(
     case "error":
       console.error("Keyword reputation error:", result.message);
       break;
-    // no_trigger, unknown_author, duplicate → silent
+    // no_trigger → silent
   }
 }
 

@@ -1,5 +1,4 @@
 import { resolveUser } from "./auth";
-import { getMessageAuthor } from "./message-cache";
 import { reputationService } from "../../services/reputation.service";
 import { VOTE_QUOTA } from "@community-os/shared/constants";
 
@@ -21,16 +20,7 @@ export type ReputationResult =
     }
   | { status: "no_trigger" }
   | { status: "user_not_found" }
-  | { status: "unknown_author" }
-  | { status: "duplicate" }
   | { status: "error"; message: string };
-
-interface ReactionEvent {
-  fromTelegramId: string;
-  messageId: string;
-  chatId: string;
-  emoji: string;
-}
 
 interface KeywordEvent {
   fromTelegramId: string;
@@ -40,69 +30,6 @@ interface KeywordEvent {
   text: string;
   /** Pre-resolved recipient (skips resolveUser for toUserId) */
   toResolved?: { user: { id: string; name: string | null }; member: unknown };
-}
-
-export async function processReaction(
-  event: ReactionEvent,
-): Promise<ReputationResult> {
-  try {
-    const toTelegramUserId = await getMessageAuthor(event.chatId, event.messageId);
-    if (!toTelegramUserId) return { status: "unknown_author" };
-
-    if (String(toTelegramUserId) === event.fromTelegramId) {
-      return { status: "self_vote" };
-    }
-
-    const trigger = await reputationService.findTrigger(
-      "reaction",
-      event.emoji,
-    );
-    if (!trigger) return { status: "no_trigger" };
-
-    const [fromUser, toUser] = await Promise.all([
-      resolveUser(event.fromTelegramId),
-      resolveUser(String(toTelegramUserId)),
-    ]);
-    if (!fromUser || !toUser) return { status: "user_not_found" };
-
-    // Check vote quota
-    const quota = await reputationService.getVoteQuota(fromUser.user.id);
-    if (quota.votesRemaining <= 0) {
-      return {
-        status: "quota_exceeded",
-        votesGiven: quota.votesGiven,
-        quota: VOTE_QUOTA,
-        nextVoteIn: quota.nextVoteIn,
-      };
-    }
-
-    const recorded = await reputationService.recordEvent({
-      fromUserId: fromUser.user.id,
-      toUserId: toUser.user.id,
-      triggerId: trigger.id,
-      value: trigger.reputationValue,
-      telegramMessageId: event.messageId,
-      telegramChatId: event.chatId,
-    });
-    if (!recorded) return { status: "duplicate" };
-
-    const [fromScore, toScore] = await Promise.all([
-      reputationService.getScore(fromUser.user.id),
-      reputationService.getScore(toUser.user.id),
-    ]);
-
-    return {
-      status: "recorded",
-      fromName: fromUser.user.name ?? "User",
-      toName: toUser.user.name ?? "User",
-      fromScore,
-      toScore,
-      value: trigger.reputationValue,
-    };
-  } catch (error) {
-    console.error("Failed to process reputation reaction:", error);
-    return { status: "error", message: String(error) };
-  }
 }
 
 export async function processKeyword(
@@ -117,10 +44,7 @@ export async function processKeyword(
   if (!matchedKeyword) return { status: "no_trigger" };
 
   try {
-    const trigger = await reputationService.findTrigger(
-      "keyword",
-      matchedKeyword,
-    );
+    const trigger = await reputationService.findTrigger(matchedKeyword);
     if (!trigger) return { status: "no_trigger" };
 
     const fromUser = await resolveUser(event.fromTelegramId);
@@ -145,15 +69,8 @@ export async function processKeyword(
       };
     }
 
-    const recorded = await reputationService.recordEvent({
-      fromUserId: fromUser.user.id,
-      toUserId: toUser.user.id,
-      triggerId: trigger.id,
-      value: trigger.reputationValue,
-      telegramMessageId: event.messageId,
-      telegramChatId: event.chatId,
-    });
-    if (!recorded) return { status: "duplicate" };
+    // Recompute score from telegram_messages (idempotent)
+    await reputationService.recalculateScore(toUser.user.id);
 
     const [fromScore, toScore] = await Promise.all([
       reputationService.getScore(fromUser.user.id),

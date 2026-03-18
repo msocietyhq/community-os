@@ -2,6 +2,7 @@ import {
   pgTable,
   uuid,
   text,
+  integer,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
@@ -22,6 +23,7 @@ export const members = pgTable("members", {
   education: text("education"),
   linkedinUrl: text("linkedin_url"),
   websiteUrl: text("website_url"),
+  reputationScore: integer("reputation_score").notNull().default(0),
   joinedAt: timestamp("joined_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

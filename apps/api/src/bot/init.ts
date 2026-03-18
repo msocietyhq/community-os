@@ -13,7 +13,6 @@ import { PostgresSessionStorage } from "./session-storage";
 import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
 import { telegramMessageLoggerMiddleware } from "./lib/telegram-message-logger";
-import { cleanupStaleAuthors } from "./lib/message-cache";
 import { env } from "../env";
 
 const ALLOWED_UPDATES = [
@@ -21,7 +20,6 @@ const ALLOWED_UPDATES = [
   "callback_query",
   "chat_member",
   "my_chat_member",
-  "message_reaction",
 ] as const;
 
 /**
@@ -91,9 +89,6 @@ export async function initBot(): Promise<void> {
   bot.start({ allowed_updates: [...ALLOWED_UPDATES] }).catch((err) => {
     console.error("Bot polling error:", err);
   });
-
-  // Periodically clean up stale message author rows (every hour)
-  setInterval(cleanupStaleAuthors, 60 * 60 * 1000);
 
   console.log(`Bot @${bot.botInfo.username} initialized`);
 }
