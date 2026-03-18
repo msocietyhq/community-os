@@ -2,11 +2,15 @@ import { resolve } from "path";
 import { db } from "./index";
 import { telegramMessages } from "./schema";
 
-const EXPORT_PATH = process.env.EXPORT_PATH ?? Bun.argv[2];
-if (!EXPORT_PATH) {
-  console.error("Usage: bun run backfill-telegram.ts <path-to-result.json>");
-  process.exit(1);
+function getExportPath(): string {
+  const p = process.env.EXPORT_PATH ?? Bun.argv[2];
+  if (!p) {
+    console.error("Usage: bun run backfill-telegram.ts <path-to-result.json>");
+    process.exit(1);
+  }
+  return p;
 }
+const EXPORT_PATH = getExportPath();
 const CHAT_ID = "-1001039529025";
 const CHAT_TYPE = "supergroup";
 const BATCH_SIZE = 500;
