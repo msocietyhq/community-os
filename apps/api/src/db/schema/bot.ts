@@ -17,7 +17,7 @@ const vector = customType<{
   config: { dimensions: number };
 }>({
   dataType(config) {
-    return `vector(${config?.dimensions ?? 384})`;
+    return `vector(${config?.dimensions ?? 512})`;
   },
   toDriver(value: number[]): string {
     return `[${value.join(",")}]`;
@@ -107,7 +107,7 @@ export const telegramMessages = pgTable(
     raw: jsonb("raw").notNull(),
 
     // --- Semantic search ---
-    embedding: vector("embedding", { dimensions: 384 }),
+    embedding: vector("embedding", { dimensions: 512 }),
   },
   (table) => [
     primaryKey({ columns: [table.chatId, table.messageId] }),

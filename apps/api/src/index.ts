@@ -1,5 +1,6 @@
 import { app } from "./app";
 import { initBot, shutdownBot } from "./bot/init";
+import { backfillMissingEmbeddings } from "./services/embeddings.service";
 import { env } from "./env";
 
 app.listen(env.PORT);
@@ -10,6 +11,10 @@ console.log(
 
 initBot().catch((err) => {
   console.error("Failed to initialize bot:", err);
+});
+
+backfillMissingEmbeddings().catch((err) => {
+  console.error("Embedding backfill failed:", err);
 });
 
 const shutdown = async () => {

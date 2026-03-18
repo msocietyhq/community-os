@@ -1,7 +1,7 @@
 import { sql, eq, and } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
-import { generateEmbedding } from "./embeddings.service";
+import { generateQueryEmbedding } from "./embeddings.service";
 
 export type MessageSearchResult = {
   chatId: string;
@@ -58,7 +58,7 @@ export async function searchMessagesSemantic(
   query: string,
   limit: number,
 ): Promise<MessageSearchResult[]> {
-  const embedding = await generateEmbedding(query);
+  const embedding = await generateQueryEmbedding(query);
   const vectorLiteral = `[${embedding.join(",")}]`;
 
   const rows = await db
