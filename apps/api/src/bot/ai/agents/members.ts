@@ -106,6 +106,7 @@ export function createMembersAgent(ctx: ToolContext) {
         current_company: z.string().optional().describe("Current company"),
         current_title: z.string().optional().describe("Current job title"),
         github: z.string().optional().describe("GitHub username (without @)"),
+        linkedin_url: z.string().url().optional().describe("LinkedIn profile URL"),
       }),
       execute: async ({
         bio,
@@ -114,6 +115,7 @@ export function createMembersAgent(ctx: ToolContext) {
         current_company,
         current_title,
         github,
+        linkedin_url,
       }) => {
         console.log("[members-agent:update_my_profile]", {
           bio: bio?.slice(0, 40),
@@ -122,6 +124,7 @@ export function createMembersAgent(ctx: ToolContext) {
           current_company,
           current_title,
           github,
+          linkedin_url,
         });
         const { data, error } = await ctx.api.api.v1.members.me.patch({
           bio,
@@ -130,6 +133,7 @@ export function createMembersAgent(ctx: ToolContext) {
           currentCompany: current_company,
           currentTitle: current_title,
           githubHandle: github,
+          linkedinUrl: linkedin_url,
         });
         if (error) {
           console.error(
