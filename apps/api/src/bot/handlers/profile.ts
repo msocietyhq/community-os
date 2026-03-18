@@ -4,6 +4,7 @@ import type { BotContext, BotConversation } from "../types";
 import { createTelegramUser } from "../lib/auth";
 import { telegramUserFromContext } from "../lib/telegram-user";
 import { membersService } from "../../services/members.service";
+import { reputationService } from "../../services/reputation.service";
 import type {
   CreateMemberInput,
   UpdateMemberInput,
@@ -170,10 +171,11 @@ async function setProfileConversation(
   const linkedinAnswer = await askQuestion(
     conversation,
     ctx,
-    withCurrent("7/7 — Your LinkedIn URL (optional):", existing?.linkedinUrl),
+    withCurrent("7/7 — Your LinkedIn username or URL:", existing?.linkedinUrl),
   );
   if (linkedinAnswer) {
-    data.linkedinUrl = linkedinAnswer.trim();
+    const raw = linkedinAnswer.trim().replace(/^@/, "");
+    data.linkedinUrl = raw.startsWith("http") ? raw : `https://linkedin.com/in/${raw}`;
   }
 
   // Create or update member
@@ -216,28 +218,59 @@ function hasProfileData(member: {
   );
 }
 
-function formatProfile(member: {
-  bio?: string | null;
-  currentTitle?: string | null;
-  currentCompany?: string | null;
-  skills?: string[] | null;
-  interests?: string[] | null;
-  githubHandle?: string | null;
-  linkedinUrl?: string | null;
-}): string {
-  const lines: string[] = [];
-  if (member.bio) lines.push(`*Bio:* ${member.bio}`);
+function esc(text: string): string {
+  return text.replace(/[_*`[\]]/g, "\\$&");
+}
+
+function formatProfile(
+  name: string,
+  username: string | null | undefined,
+  score: number,
+  member: {
+    bio?: string | null;
+    currentTitle?: string | null;
+    currentCompany?: string | null;
+    skills?: string[] | null;
+    interests?: string[] | null;
+    githubHandle?: string | null;
+    linkedinUrl?: string | null;
+  },
+): string {
+  const header = `*${esc(name)}*` + (username ? ` (@${esc(username)})` : "");
+
   const titleCompany = [member.currentTitle, member.currentCompany]
     .filter(Boolean)
     .join(" at ");
-  if (titleCompany) lines.push(`*Role:* ${titleCompany}`);
+
+  const sections: string[] = [header];
+
+  if (titleCompany) sections.push(esc(titleCompany));
+  sections.push(`⭐ ${score} pts`);
+
+  if (member.bio) {
+    sections.push("");
+    sections.push(esc(member.bio));
+  }
+
+  const tags: string[] = [];
   if (member.skills?.length)
-    lines.push(`*Skills:* ${member.skills.join(", ")}`);
+    tags.push(`🌱 ${member.skills.map(esc).join(" · ")}`);
   if (member.interests?.length)
-    lines.push(`*Interests:* ${member.interests.join(", ")}`);
-  if (member.githubHandle) lines.push(`*GitHub:* ${member.githubHandle}`);
-  if (member.linkedinUrl) lines.push(`*LinkedIn:* ${member.linkedinUrl}`);
-  return lines.length > 0 ? lines.join("\n") : "Your profile is empty.";
+    tags.push(`✨ ${member.interests.map(esc).join(" · ")}`);
+  if (tags.length) {
+    sections.push("");
+    sections.push(...tags);
+  }
+
+  const links: string[] = [];
+  if (member.githubHandle) links.push(`github.com/${esc(member.githubHandle)}`);
+  if (member.linkedinUrl) links.push(member.linkedinUrl);
+  if (links.length) {
+    sections.push("");
+    sections.push(...links);
+  }
+
+  return sections.join("\n");
 }
 
 const fieldConfig = {
@@ -256,7 +289,7 @@ const fieldConfig = {
     prompt: "Your interests? (comma-separated, e.g. AI, Web Dev, Open Source):",
   },
   github: { label: "GitHub", prompt: "Your GitHub username:" },
-  linkedin: { label: "LinkedIn", prompt: "Your LinkedIn profile URL:" },
+  linkedin: { label: "LinkedIn", prompt: "Your LinkedIn username or URL:" },
 } as const;
 
 type EditableField = keyof typeof fieldConfig;
@@ -300,8 +333,11 @@ function applyFieldUpdate(
       return { interests: parseCsvList(text) };
     case "github":
       return { githubHandle: text.replace(/^@/, "").trim() };
-    case "linkedin":
-      return { linkedinUrl: text.trim() };
+    case "linkedin": {
+      const raw = text.trim().replace(/^@/, "");
+      const url = raw.startsWith("http") ? raw : `https://linkedin.com/in/${raw}`;
+      return { linkedinUrl: url };
+    }
   }
 }
 
@@ -399,7 +435,10 @@ profileHandler.command("profile", async (ctx) => {
     return;
   }
 
-  await ctx.reply(`*Your MSOCIETY Profile*\n\n${formatProfile(member)}`, {
+  const score = await reputationService.getScore(userId);
+  const displayName = from.first_name + (from.last_name ? ` ${from.last_name}` : "");
+
+  await ctx.reply(formatProfile(displayName, from.username, score, member), {
     parse_mode: "Markdown",
     reply_markup: new InlineKeyboard().text("Edit Profile", "edit_profile"),
   });

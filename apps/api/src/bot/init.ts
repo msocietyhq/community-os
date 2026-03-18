@@ -54,6 +54,25 @@ export async function initBot(): Promise<void> {
     await next();
   });
 
+  // Auto-reply to the triggering message in group chats
+  bot.use(async (ctx, next) => {
+    if (
+      (ctx.chat?.type === "group" || ctx.chat?.type === "supergroup") &&
+      ctx.message
+    ) {
+      const originalReply = ctx.reply.bind(ctx);
+      const messageId = ctx.message.message_id;
+      ctx.reply = (text, other) =>
+        originalReply(text, {
+          ...other,
+          reply_parameters: other?.reply_parameters ?? {
+            message_id: messageId,
+          },
+        });
+    }
+    return next();
+  });
+
   // Log all messages to DB for group context (after group guard)
   bot.use(telegramMessageLoggerMiddleware);
   // Auto-register group members before session/handlers

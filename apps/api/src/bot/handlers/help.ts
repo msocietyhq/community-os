@@ -60,6 +60,10 @@ helpHandler.command("start", async (ctx) => {
   );
 });
 
+helpHandler.command("projects", async (ctx) => {
+  await ctx.reply("Projects command coming soon!");
+});
+
 helpHandler.command("help", async (ctx) => {
   await ctx.reply(
     `*MSOCIETY Bot Commands*\n\n` +

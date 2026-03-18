@@ -145,6 +145,33 @@ reputationHandler.command("reputation", async (ctx) => {
   }
 });
 
+// /leaderboard command
+reputationHandler.command("leaderboard", async (ctx) => {
+  try {
+    const arg = ctx.match?.trim();
+    const limit = arg ? Math.min(Math.max(Number.parseInt(arg, 10) || 10, 1), 50) : 10;
+
+    const rows = await reputationService.getLeaderboard(limit);
+    if (rows.length === 0) {
+      await ctx.reply("No reputation scores yet.");
+      return;
+    }
+
+    const lines = rows.map((r, i) => {
+      const firstName = (r.userName ?? "Unknown").replace(/_/g, "\\_");
+      const handle = r.telegramUsername ? ` (@${r.telegramUsername.replace(/_/g, "\\_")})` : "";
+      return `${i + 1}. ${firstName}${handle} - *${r.score} pts*`;
+    });
+
+    await ctx.reply(`*Top ${rows.length} Reputation*\n\n${lines.join("\n")}`, {
+      parse_mode: "Markdown",
+    });
+  } catch (error) {
+    console.error("Failed to fetch leaderboard:", error);
+    await ctx.reply("Failed to fetch leaderboard. Please try again.");
+  }
+});
+
 // /vote_quota command
 reputationHandler.command("vote_quota", async (ctx) => {
   try {
