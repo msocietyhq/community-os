@@ -36,7 +36,10 @@ export function createTools(ctx: ToolContext) {
       execute: async ({ query }) => {
         console.log("[main-agent] → events sub-agent, query:", query);
         const result = await runEventsAgent(query);
-        console.log("[main-agent] ← events sub-agent, response:", result.slice(0, 120));
+        console.log(
+          "[main-agent] ← events sub-agent, response:",
+          result.slice(0, 120),
+        );
         return result;
       },
     }),
@@ -50,7 +53,10 @@ export function createTools(ctx: ToolContext) {
       execute: async ({ query }) => {
         console.log("[main-agent] → members sub-agent, query:", query);
         const result = await runMembersAgent(query);
-        console.log("[main-agent] ← members sub-agent, response:", result.slice(0, 120));
+        console.log(
+          "[main-agent] ← members sub-agent, response:",
+          result.slice(0, 120),
+        );
         return result;
       },
     }),
@@ -64,7 +70,10 @@ export function createTools(ctx: ToolContext) {
       execute: async ({ query }) => {
         console.log("[main-agent] → venues sub-agent, query:", query);
         const result = await runVenuesAgent(query);
-        console.log("[main-agent] ← venues sub-agent, response:", result.slice(0, 120));
+        console.log(
+          "[main-agent] ← venues sub-agent, response:",
+          result.slice(0, 120),
+        );
         return result;
       },
     }),
@@ -118,7 +127,7 @@ export function createTools(ctx: ToolContext) {
 
     search_chat_history: tool({
       description:
-        "Fetch or search past messages in the MSOCIETY Telegram group chat. Use with a `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'). Omit `query` to fetch recent messages chronologically (e.g. 'what were we discussing?').",
+        "Fetch or search past messages in the MSOCIETY Telegram group chat. Use with a `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'). Omit `query` to fetch recent messages chronologically (e.g. 'what were we discussing?'). If using this to get context about a question or conversation, limit the date range to the last 6 hours.",
       inputSchema: z.object({
         chat_id: z
           .string()
@@ -158,7 +167,11 @@ export function createTools(ctx: ToolContext) {
         const effectiveLimit = limit ?? 20;
 
         if (query) {
-          const results = await searchMessagesHybrid(chat_id, query, effectiveLimit);
+          const results = await searchMessagesHybrid(
+            chat_id,
+            query,
+            effectiveLimit,
+          );
           let filtered = results;
           if (after) {
             const afterDate = new Date(after);
@@ -185,9 +198,15 @@ export function createTools(ctx: ToolContext) {
         const beforeDate = before ? new Date(before) : null;
         const windowMs = afterDate
           ? Date.now() - afterDate.getTime()
-          : 2 * 60 * 60 * 1000; // default 2h
+          : 7 * 24 * 60 * 60 * 1000; // default 7 days
 
-        const rows = await getRecentChatMessages(chat_id, null, windowMs, effectiveLimit);
+        // Pass undefined for threadId so all threads are included
+        const rows = await getRecentChatMessages(
+          chat_id,
+          undefined,
+          windowMs,
+          effectiveLimit,
+        );
         let filtered = rows;
         if (beforeDate) {
           filtered = filtered.filter((r) => r.date <= beforeDate);

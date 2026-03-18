@@ -1,6 +1,6 @@
 import type { MiddlewareFn } from "grammy";
 import type { Message, UserFromGetMe } from "grammy/types";
-import { and, eq, gte, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNull } from "drizzle-orm";
 import { db } from "../../db";
 import { telegramMessages } from "../../db/schema/bot";
 import type { BotContext } from "../types";
@@ -205,7 +205,7 @@ export function logBotMessage(
  */
 export async function getRecentChatMessages(
   chatId: string,
-  threadId: number | null,
+  threadId: number | null | undefined,
   windowMs: number,
   limit: number,
   excludeMessageId?: number,
@@ -215,19 +215,25 @@ export async function getRecentChatMessages(
   const conditions = [
     eq(telegramMessages.chatId, chatId),
     gte(telegramMessages.date, cutoff),
-    ...(threadId !== null
-      ? [eq(telegramMessages.messageThreadId, threadId)]
-      : [isNull(telegramMessages.messageThreadId)]),
+    ...(threadId === undefined
+      ? [] // no thread filter — return messages from all threads
+      : threadId !== null
+        ? [eq(telegramMessages.messageThreadId, threadId)]
+        : [isNull(telegramMessages.messageThreadId)]),
   ];
 
   const rows = await db
     .select()
     .from(telegramMessages)
     .where(and(...conditions))
-    .orderBy(telegramMessages.date)
+    .orderBy(desc(telegramMessages.date))
     .limit(limit + (excludeMessageId !== undefined ? 1 : 0));
 
-  return excludeMessageId !== undefined
-    ? rows.filter((r) => r.messageId !== excludeMessageId).slice(0, limit)
-    : rows;
+  const filtered =
+    excludeMessageId !== undefined
+      ? rows.filter((r) => r.messageId !== excludeMessageId).slice(0, limit)
+      : rows;
+
+  // Return in chronological order (oldest → newest)
+  return filtered.reverse();
 }
