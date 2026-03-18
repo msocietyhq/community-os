@@ -1,7 +1,7 @@
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { NextFunction } from "grammy";
 import type { BotContext } from "../types";
-import { getBotToken, resolveUser } from "./auth";
+import { createTelegramUser, resolveUser } from "./auth";
 import { telegramUserFromContext } from "./telegram-user";
 import { membersService } from "../../services/members.service";
 import { createAuditEntry } from "../../middleware/audit";
@@ -71,31 +71,12 @@ export async function autoRegisterMiddleware(
       return next();
     }
 
-    // Auto-register: create user+account via Better Auth
+    // Auto-register: create user+account directly in DB
     const telegramUser = await telegramUserFromContext(from, ctx.api);
-    await getBotToken(telegramUser);
-
-    // Resolve the newly created account to get userId
-    const acct = await db
-      .select({ userId: account.userId })
-      .from(account)
-      .where(
-        and(
-          eq(account.providerId, "telegram"),
-          eq(account.accountId, String(telegramId)),
-        ),
-      )
-      .then((rows) => rows[0] ?? null);
-
-    if (!acct) {
-      console.error(
-        `Auto-register: failed to resolve account for telegram ID ${telegramId}`,
-      );
-      return next();
-    }
+    const userId = await createTelegramUser(telegramUser);
 
     // Create member record (conflict-safe)
-    const { created } = await membersService.createIfNotExists(acct.userId);
+    const { created } = await membersService.createIfNotExists(userId);
 
     if (created) {
       console.log(
@@ -104,7 +85,7 @@ export async function autoRegisterMiddleware(
 
       await createAuditEntry({
         entityType: "member",
-        entityId: acct.userId,
+        entityId: userId,
         action: "create",
         newValue: {
           source: "auto-register",
