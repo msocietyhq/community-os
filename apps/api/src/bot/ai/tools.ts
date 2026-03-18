@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
+import { env } from "../../env";
 import {
   defineAbilityFor,
   type Actions,
@@ -117,12 +118,13 @@ export function createTools(ctx: ToolContext) {
 
     search_chat_history: tool({
       description:
-        "Fetch or search past messages in this Telegram group chat. Use with a `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'). Omit `query` to fetch recent messages chronologically (e.g. 'what were we discussing?'). Only use in group chats where a chat_id is available in the message header.",
+        "Fetch or search past messages in the MSOCIETY Telegram group chat. Use with a `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'). Omit `query` to fetch recent messages chronologically (e.g. 'what were we discussing?').",
       inputSchema: z.object({
         chat_id: z
           .string()
+          .default(env.TELEGRAM_GROUP_ID ?? "")
           .describe(
-            "The Telegram chat ID — use the chat_id from the current message header",
+            "The Telegram chat ID — defaults to the main MSOCIETY group chat",
           ),
         query: z
           .string()

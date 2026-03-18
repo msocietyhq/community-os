@@ -114,7 +114,7 @@ export async function searchMessagesHybrid(
   for (const [rank, row] of semanticResults.entries()) {
     const id = row.messageId;
     scores.set(id, (scores.get(id) ?? 0) + 1 / (RRF_K + rank + 1));
-    byId.set(id, { ...byId.get(id)!, score: scores.get(id)! });
+    byId.set(id, { ...(byId.get(id) ?? row), score: scores.get(id)! });
   }
 
   return [...scores.entries()]
