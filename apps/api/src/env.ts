@@ -14,6 +14,7 @@ const envSchema = z.object({
   TELEGRAM_BOT_USERNAME: z.string().default("msocietybot"),
   ANTHROPIC_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().optional(),
+  HF_CACHE_DIR: z.string().optional(),
   WEB_URL: z.string().url(),
   PORT: z.coerce.number().default(3000),
 });

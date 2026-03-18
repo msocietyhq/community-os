@@ -8,7 +8,27 @@ import {
   boolean,
   primaryKey,
   index,
+  customType,
 } from "drizzle-orm/pg-core";
+
+const vector = customType<{
+  data: number[];
+  driverData: string;
+  config: { dimensions: number };
+}>({
+  dataType(config) {
+    return `vector(${config?.dimensions ?? 384})`;
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value
+      .slice(1, -1)
+      .split(",")
+      .map(Number);
+  },
+});
 
 export const botSession = pgTable("bot_session", {
   key: text("key").primaryKey(),
@@ -85,6 +105,9 @@ export const telegramMessages = pgTable(
 
     // --- Full message (future-proof) ---
     raw: jsonb("raw").notNull(),
+
+    // --- Semantic search ---
+    embedding: vector("embedding", { dimensions: 384 }),
   },
   (table) => [
     primaryKey({ columns: [table.chatId, table.messageId] }),

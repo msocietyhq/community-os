@@ -4,6 +4,8 @@ import { and, eq, gte, isNull } from "drizzle-orm";
 import { db } from "../../db";
 import { telegramMessages } from "../../db/schema/bot";
 import type { BotContext } from "../types";
+import { generateEmbedding } from "../../services/embeddings.service";
+import { setMessageEmbedding } from "../../services/messages.service";
 
 type MediaType =
   | "photo"
@@ -148,6 +150,12 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
   db.insert(telegramMessages)
     .values(row)
     .onConflictDoNothing()
+    .then(async () => {
+      const content = row.text ?? row.caption;
+      if (!content) return;
+      const embedding = await generateEmbedding(content);
+      await setMessageEmbedding(row.chatId, row.messageId, embedding);
+    })
     .catch((err: unknown) => {
       console.error("[message-logger] failed to persist message:", err);
     });
@@ -181,6 +189,12 @@ export function logBotMessage(
   db.insert(telegramMessages)
     .values(row)
     .onConflictDoNothing()
+    .then(async () => {
+      const content = row.text;
+      if (!content) return;
+      const embedding = await generateEmbedding(content);
+      await setMessageEmbedding(row.chatId, row.messageId, embedding);
+    })
     .catch((err: unknown) => {
       console.error("[message-logger] failed to persist bot message:", err);
     });

@@ -116,6 +116,7 @@ export function buildEnrichedQuery(
   query: string,
   meta: TelegramMeta,
   groupTranscript?: string,
+  chatId?: string,
 ): string {
   const datePart = `${formatTelegramDateFull(meta.date)}, ${formatTelegramDate(meta.date)}`;
 
@@ -132,9 +133,9 @@ export function buildEnrichedQuery(
     if (replyText.length > REPLY_TEXT_MAX) {
       replyText = `${replyText.slice(0, REPLY_TEXT_MAX)}…`;
     }
-    header = `[${datePart} | ${senderPart} → replying to ${replyFrom} at ${replyTime}: "${replyText}"]`;
+    header = `[${datePart} | ${senderPart} → replying to ${replyFrom} at ${replyTime}: "${replyText}"${chatId ? ` | chat_id: ${chatId}` : ""}]`;
   } else {
-    header = `[${datePart} | ${senderPart}]`;
+    header = `[${datePart} | ${senderPart}${chatId ? ` | chat_id: ${chatId}` : ""}]`;
   }
 
   const transcript = groupTranscript ? `${groupTranscript}\n` : "";

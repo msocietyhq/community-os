@@ -94,7 +94,12 @@ aiChatHandler.on("message:text", async (ctx) => {
       recentMsgs.length > 0 ? formatGroupHistory(recentMsgs) : undefined;
   }
 
-  const enrichedQuery = buildEnrichedQuery(query, meta, groupTranscript);
+  const enrichedQuery = buildEnrichedQuery(
+    query,
+    meta,
+    groupTranscript,
+    isGroup ? String(ctx.chat.id) : undefined,
+  );
 
   const { recentTurns, chatHistory } = getRecentHistory(
     ctx.session.chatTurns ?? [],

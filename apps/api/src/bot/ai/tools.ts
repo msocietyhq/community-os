@@ -12,6 +12,7 @@ import { runGithubAgent } from "./agents/github";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
+import { searchMessagesHybrid } from "../../services/messages.service";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -109,6 +110,50 @@ export function createTools(ctx: ToolContext) {
       }),
       execute: async ({ query }) => {
         return runGithubAgent(query);
+      },
+    }),
+
+    search_chat_history: tool({
+      description:
+        "Search past messages in this Telegram chat using hybrid semantic + keyword search. Use this to answer questions like 'did anyone share job opportunities?', 'what was discussed about X?', 'find messages about Y'. Only use in group chats where a chat_id is available in context.",
+      inputSchema: z.object({
+        chat_id: z
+          .string()
+          .describe(
+            "The Telegram chat ID to search — use the chat_id from the current conversation context",
+          ),
+        query: z
+          .string()
+          .describe(
+            "Natural-language search query — can be a topic, keyword, or phrase",
+          ),
+        limit: z
+          .number()
+          .optional()
+          .default(10)
+          .describe("Number of messages to return (default: 10)"),
+      }),
+      execute: async ({ chat_id, query, limit }) => {
+        console.log("[main-agent:search_chat_history]", {
+          chat_id,
+          query,
+          limit,
+        });
+        const results = await searchMessagesHybrid(
+          chat_id,
+          query,
+          limit ?? 10,
+        );
+        if (results.length === 0) return { messages: [] };
+        return {
+          messages: results.map((r) => ({
+            messageId: r.messageId,
+            from: r.fromFirstName ?? r.fromUsername ?? "Unknown",
+            text: r.text ?? r.caption,
+            date: r.date.toISOString(),
+            score: r.score,
+          })),
+        };
       },
     }),
 
