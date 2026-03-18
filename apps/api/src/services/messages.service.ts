@@ -3,6 +3,27 @@ import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { generateQueryEmbedding } from "./embeddings.service";
 
+/**
+ * Returns true if the given Telegram user has sent at least one message in the given chat.
+ */
+export async function hasUserMessages(
+  chatId: string,
+  telegramUserId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: telegramMessages.messageId })
+    .from(telegramMessages)
+    .where(
+      and(
+        eq(telegramMessages.chatId, chatId),
+        eq(telegramMessages.fromUserId, telegramUserId),
+      ),
+    )
+    .limit(1);
+
+  return !!row;
+}
+
 export type MessageSearchResult = {
   chatId: string;
   messageId: number;

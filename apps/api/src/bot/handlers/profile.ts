@@ -11,6 +11,7 @@ import type {
 } from "@community-os/shared/validators";
 import { env } from "../../env";
 import { bot } from "../bot";
+import { hasUserMessages } from "../../services/messages.service";
 
 function parseCsvList(text: string): string[] {
   return text
@@ -54,16 +55,11 @@ async function setProfileConversation(
 
   // Verify user is a member of the MSOCIETY Telegram group
   if (env.TELEGRAM_GROUP_ID) {
-    const member = await conversation.external(async () => {
-      try {
-        return await bot.api.getChatMember(env.TELEGRAM_GROUP_ID!, from.id);
-      } catch {
-        return null;
-      }
-    });
+    const isMember = await conversation.external(() =>
+      hasUserMessages(env.TELEGRAM_GROUP_ID!, from.id),
+    );
 
-    const allowed = member && !["left", "kicked"].includes(member.status);
-    if (!allowed) {
+    if (!isMember) {
       await ctx.reply(
         "You must be a member of the MSOCIETY Telegram group to set up your profile.\n\n" +
           "MSOCIETY is invite-only — ask an existing member to add you to the group, then come back and try again.",
