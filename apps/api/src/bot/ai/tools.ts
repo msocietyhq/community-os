@@ -2,8 +2,13 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
-import { defineAbilityFor, type Actions, type Subjects } from "@community-os/shared/abilities";
+import {
+  defineAbilityFor,
+  type Actions,
+  type Subjects,
+} from "@community-os/shared/abilities";
 import { isRole } from "@community-os/shared/constants";
+import { runGithubAgent } from "./agents/github";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -38,7 +43,9 @@ export function createTools(ctx: ToolContext) {
         event_id: z.string().describe("The event ID (UUID) or slug"),
       }),
       execute: async ({ event_id }) => {
-        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).get();
+        const { data, error } = await ctx.api.api.v1
+          .events({ id: event_id })
+          .get();
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -48,14 +55,14 @@ export function createTools(ctx: ToolContext) {
       description: "RSVP to an event for the requesting user",
       inputSchema: z.object({
         event_id: z.string().describe("The event ID (UUID) or slug"),
-        status: z
-          .enum(["going", "maybe", "not_going"])
-          .describe("RSVP status"),
+        status: z.enum(["going", "maybe", "not_going"]).describe("RSVP status"),
       }),
       execute: async ({ event_id, status }) => {
-        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).rsvp.post({
-          rsvpStatus: status,
-        });
+        const { data, error } = await ctx.api.api.v1
+          .events({ id: event_id })
+          .rsvp.post({
+            rsvpStatus: status,
+          });
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -69,12 +76,24 @@ export function createTools(ctx: ToolContext) {
         event_type: z
           .enum(["meetup", "workshop", "hackathon", "talk", "social", "other"])
           .describe("Type of event"),
-        venue_id: z.string().optional().describe("Venue ID to host the event at"),
-        is_online: z.boolean().default(false).describe("Whether the event is online"),
+        venue_id: z
+          .string()
+          .optional()
+          .describe("Venue ID to host the event at"),
+        is_online: z
+          .boolean()
+          .default(false)
+          .describe("Whether the event is online"),
         online_url: z.string().optional().describe("URL for online event"),
         starts_at: z.string().describe("Start date/time in ISO 8601 format"),
-        ends_at: z.string().optional().describe("End date/time in ISO 8601 format"),
-        max_attendees: z.number().optional().describe("Maximum number of attendees"),
+        ends_at: z
+          .string()
+          .optional()
+          .describe("End date/time in ISO 8601 format"),
+        max_attendees: z
+          .number()
+          .optional()
+          .describe("Maximum number of attendees"),
       }),
       execute: async ({
         title,
@@ -114,11 +133,23 @@ export function createTools(ctx: ToolContext) {
           .optional()
           .describe("Type of event"),
         venue_id: z.string().optional().describe("Venue ID"),
-        is_online: z.boolean().optional().describe("Whether the event is online"),
+        is_online: z
+          .boolean()
+          .optional()
+          .describe("Whether the event is online"),
         online_url: z.string().optional().describe("URL for online event"),
-        starts_at: z.string().optional().describe("Start date/time in ISO 8601 format"),
-        ends_at: z.string().optional().describe("End date/time in ISO 8601 format"),
-        max_attendees: z.number().optional().describe("Maximum number of attendees"),
+        starts_at: z
+          .string()
+          .optional()
+          .describe("Start date/time in ISO 8601 format"),
+        ends_at: z
+          .string()
+          .optional()
+          .describe("End date/time in ISO 8601 format"),
+        max_attendees: z
+          .number()
+          .optional()
+          .describe("Maximum number of attendees"),
         status: z
           .enum(["draft", "published", "cancelled", "completed"])
           .optional()
@@ -137,18 +168,20 @@ export function createTools(ctx: ToolContext) {
         max_attendees,
         status,
       }) => {
-        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).patch({
-          title,
-          description,
-          eventType: event_type,
-          venueId: venue_id,
-          isOnline: is_online,
-          onlineUrl: online_url,
-          startsAt: starts_at,
-          endsAt: ends_at,
-          maxAttendees: max_attendees,
-          status,
-        });
+        const { data, error } = await ctx.api.api.v1
+          .events({ id: event_id })
+          .patch({
+            title,
+            description,
+            eventType: event_type,
+            venueId: venue_id,
+            isOnline: is_online,
+            onlineUrl: online_url,
+            startsAt: starts_at,
+            endsAt: ends_at,
+            maxAttendees: max_attendees,
+            status,
+          });
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -160,7 +193,9 @@ export function createTools(ctx: ToolContext) {
         event_id: z.string().describe("The event ID (UUID) or slug"),
       }),
       execute: async ({ event_id }) => {
-        const { data, error } = await ctx.api.api.v1.events({ id: event_id }).delete();
+        const { data, error } = await ctx.api.api.v1
+          .events({ id: event_id })
+          .delete();
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -241,22 +276,10 @@ export function createTools(ctx: ToolContext) {
       inputSchema: z.object({
         bio: z.string().optional().describe("Short bio"),
         skills: z.array(z.string()).optional().describe("List of skills"),
-        interests: z
-          .array(z.string())
-          .optional()
-          .describe("List of interests"),
-        current_company: z
-          .string()
-          .optional()
-          .describe("Current company"),
-        current_title: z
-          .string()
-          .optional()
-          .describe("Current job title"),
-        github: z
-          .string()
-          .optional()
-          .describe("GitHub username (without @)"),
+        interests: z.array(z.string()).optional().describe("List of interests"),
+        current_company: z.string().optional().describe("Current company"),
+        current_title: z.string().optional().describe("Current job title"),
+        github: z.string().optional().describe("GitHub username (without @)"),
       }),
       execute: async ({
         bio,
@@ -306,7 +329,8 @@ export function createTools(ctx: ToolContext) {
           .describe("Number of entries to return (default: 10)"),
       }),
       execute: async () => {
-        const { data, error } = await ctx.api.api.v1.reputation.leaderboard.get();
+        const { data, error } =
+          await ctx.api.api.v1.reputation.leaderboard.get();
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -315,10 +339,7 @@ export function createTools(ctx: ToolContext) {
     list_venues: tool({
       description: "List community venues/locations for events",
       inputSchema: z.object({
-        q: z
-          .string()
-          .optional()
-          .describe("Search by venue name or address"),
+        q: z.string().optional().describe("Search by venue name or address"),
         limit: z
           .number()
           .optional()
@@ -339,12 +360,21 @@ export function createTools(ctx: ToolContext) {
         name: z.string().describe("Venue name"),
         address: z.string().optional().describe("Street address"),
         city: z.string().optional().describe("City"),
-        country: z.string().optional().describe("2-letter country code (e.g. 'AE')"),
+        country: z
+          .string()
+          .optional()
+          .describe("2-letter country code (e.g. 'AE')"),
         postal_code: z.string().optional().describe("Postal/ZIP code"),
         maps_url: z.string().optional().describe("Google Maps or similar URL"),
         capacity: z.number().optional().describe("Maximum capacity"),
-        cost_per_day: z.number().optional().describe("Cost per day in base currency"),
-        cost_notes: z.string().optional().describe("Notes about cost (e.g. discounts)"),
+        cost_per_day: z
+          .number()
+          .optional()
+          .describe("Cost per day in base currency"),
+        cost_notes: z
+          .string()
+          .optional()
+          .describe("Notes about cost (e.g. discounts)"),
         notes: z.string().optional().describe("General notes about the venue"),
       }),
       execute: async ({
@@ -387,7 +417,10 @@ export function createTools(ctx: ToolContext) {
         postal_code: z.string().optional().describe("Postal/ZIP code"),
         maps_url: z.string().optional().describe("Google Maps or similar URL"),
         capacity: z.number().optional().describe("Maximum capacity"),
-        cost_per_day: z.number().optional().describe("Cost per day in base currency"),
+        cost_per_day: z
+          .number()
+          .optional()
+          .describe("Cost per day in base currency"),
         cost_notes: z.string().optional().describe("Notes about cost"),
         notes: z.string().optional().describe("General notes about the venue"),
       }),
@@ -404,18 +437,20 @@ export function createTools(ctx: ToolContext) {
         cost_notes,
         notes,
       }) => {
-        const { data, error } = await ctx.api.api.v1.venues({ id: venue_id }).patch({
-          name,
-          address,
-          city,
-          country,
-          postalCode: postal_code,
-          mapsUrl: maps_url,
-          capacity,
-          costPerDay: cost_per_day,
-          costNotes: cost_notes,
-          notes,
-        });
+        const { data, error } = await ctx.api.api.v1
+          .venues({ id: venue_id })
+          .patch({
+            name,
+            address,
+            city,
+            country,
+            postalCode: postal_code,
+            mapsUrl: maps_url,
+            capacity,
+            costPerDay: cost_per_day,
+            costNotes: cost_notes,
+            notes,
+          });
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -427,7 +462,9 @@ export function createTools(ctx: ToolContext) {
         venue_id: z.string().describe("The venue ID"),
       }),
       execute: async ({ venue_id }) => {
-        const { data, error } = await ctx.api.api.v1.venues({ id: venue_id }).delete();
+        const { data, error } = await ctx.api.api.v1
+          .venues({ id: venue_id })
+          .delete();
         if (error) return { status: error.status, value: error.value };
         return data;
       },
@@ -451,6 +488,17 @@ export function createTools(ctx: ToolContext) {
         const { data, error } = await ctx.api.api.v1.funds.balances.get();
         if (error) return { status: error.status, value: error.value };
         return data;
+      },
+    }),
+
+    github: tool({
+      description:
+        "Browse any public GitHub repo, org, or user: list repos, get repo details, view issues and pull requests. Defaults to the `msocietyhq` org when no owner is specified.",
+      inputSchema: z.object({
+        query: z.string().describe("What to look up on GitHub"),
+      }),
+      execute: async ({ query }) => {
+        return runGithubAgent(query);
       },
     }),
 
@@ -484,17 +532,25 @@ export function createTools(ctx: ToolContext) {
       }),
       execute: async ({ action, subject }) => {
         const { data, error } = await ctx.api.api.v1.members.me.get();
-        if (error) return { allowed: false, reason: "Could not retrieve user profile" };
+        if (error)
+          return { allowed: false, reason: "Could not retrieve user profile" };
 
         const { id, role } = data.user;
-        if (!isRole(role)) return { allowed: false, reason: "Unrecognized user role" };
+        if (!isRole(role))
+          return { allowed: false, reason: "Unrecognized user role" };
         const ability = defineAbilityFor({ id, role });
 
         let subjectArg: Subjects;
         if (subject === "Member") {
-          subjectArg = { __caslSubjectType__: "Member", userId: id } as Subjects;
+          subjectArg = {
+            __caslSubjectType__: "Member",
+            userId: id,
+          } as Subjects;
         } else if (subject === "Project") {
-          subjectArg = { __caslSubjectType__: "Project", ownerId: id } as Subjects;
+          subjectArg = {
+            __caslSubjectType__: "Project",
+            ownerId: id,
+          } as Subjects;
         } else {
           subjectArg = subject;
         }

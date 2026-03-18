@@ -13,6 +13,7 @@ const envSchema = z.object({
   TELEGRAM_GROUP_ID: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().default("msocietybot"),
   ANTHROPIC_API_KEY: z.string().min(1),
+  GITHUB_TOKEN: z.string().optional(),
   WEB_URL: z.string().url(),
   PORT: z.coerce.number().default(3000),
 });
