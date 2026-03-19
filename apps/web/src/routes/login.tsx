@@ -1,8 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
 import { authClient } from "../lib/auth-client";
+import { PublicHeader } from "../components/public-header";
 
 interface TelegramAuthData {
   id: number;
@@ -87,19 +88,10 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      {/* Navbar */}
-      <nav className="border-b border-white/10 backdrop-blur-md bg-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <Link to="/" className="text-xl font-bold tracking-tight">
-              MSOCIETY
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <PublicHeader />
 
       {/* Login */}
-      <div className="flex-1 flex items-center justify-center px-4">
+      <div className="flex-1 flex items-center justify-center px-4 pt-16">
         <div className="w-full max-w-md">
           <div className="bg-white/5 border border-white/10 rounded-xl p-8 backdrop-blur-sm">
             <h2 className="text-xl font-semibold text-center mb-2">

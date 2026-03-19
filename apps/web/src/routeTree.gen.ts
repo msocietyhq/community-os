@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
+import { Route as EventsIndexRouteImport } from './routes/events/index'
 import { Route as ProjectsSlugRouteImport } from './routes/projects/$slug'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardProjectsRouteImport } from './routes/_authenticated/dashboard/projects'
@@ -38,6 +39,11 @@ const IndexRoute = IndexRouteImport.update({
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsIndexRoute = EventsIndexRouteImport.update({
+  id: '/events/',
+  path: '/events/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsSlugRoute = ProjectsSlugRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/projects/$slug': typeof ProjectsSlugRoute
+  '/events/': typeof EventsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/projects/$slug': typeof ProjectsSlugRoute
+  '/events': typeof EventsIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/projects/$slug': typeof ProjectsSlugRoute
+  '/events/': typeof EventsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/_authenticated/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/_authenticated/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/projects/$slug'
+    | '/events/'
     | '/projects/'
     | '/dashboard/events'
     | '/dashboard/funds'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/projects/$slug'
+    | '/events'
     | '/projects'
     | '/dashboard/events'
     | '/dashboard/funds'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/projects/$slug'
+    | '/events/'
     | '/projects/'
     | '/_authenticated/dashboard/events'
     | '/_authenticated/dashboard/funds'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ProjectsSlugRoute: typeof ProjectsSlugRoute
+  EventsIndexRoute: typeof EventsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
 }
 
@@ -196,6 +209,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects/'
       preLoaderRoute: typeof ProjectsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events/': {
+      id: '/events/'
+      path: '/events'
+      fullPath: '/events/'
+      preLoaderRoute: typeof EventsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/$slug': {
@@ -277,6 +297,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   ProjectsSlugRoute: ProjectsSlugRoute,
+  EventsIndexRoute: EventsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
 }
 export const routeTree = rootRouteImport

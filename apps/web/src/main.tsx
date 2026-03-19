@@ -7,7 +7,11 @@ import { AuthProvider } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 import "./styles.css";
 
-const router = createRouter({ routeTree });
+const router = createRouter({
+  routeTree,
+  defaultPreloadStaleTime: 0,
+  scrollRestoration: true,
+});
 const queryClient = new QueryClient();
 
 declare module "@tanstack/react-router" {

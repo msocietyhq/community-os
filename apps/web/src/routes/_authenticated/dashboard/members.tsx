@@ -36,20 +36,29 @@ interface Member {
   };
 }
 
+const ROLE_OPTIONS = [
+  { value: "", label: "All roles" },
+  { value: "member", label: "Member" },
+  { value: "admin", label: "Admin" },
+  { value: "superadmin", label: "Superadmin" },
+] as const;
+
 function MembersPage() {
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [page, setPage] = useState(1);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const limit = 20;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["members", search, page],
+    queryKey: ["members", search, roleFilter, page],
     queryFn: async () => {
       const res = await api.api.v1.members.get({
         query: {
           page,
           limit,
           ...(search ? { q: search } : {}),
+          ...(roleFilter ? { role: roleFilter } : {}),
         },
       });
       if (res.error) throw new Error("Failed to fetch members");
@@ -74,31 +83,47 @@ function MembersPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+      {/* Search & Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative max-w-sm flex-1">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+            />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-9 pr-4 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground"
           />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search members..."
-          value={search}
+        </div>
+        <select
+          value={roleFilter}
           onChange={(e) => {
-            setSearch(e.target.value);
+            setRoleFilter(e.target.value);
             setPage(1);
           }}
-          className="w-full pl-9 pr-4 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground"
-        />
+          className="px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground"
+        >
+          {ROLE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Members list */}
@@ -130,11 +155,11 @@ function MembersPage() {
               </svg>
             </div>
             <h3 className="text-sm font-medium text-foreground">
-              {search ? "No members found" : "No members yet"}
+              {search || roleFilter ? "No members found" : "No members yet"}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-              {search
-                ? "Try adjusting your search query."
+              {search || roleFilter
+                ? "Try adjusting your search or filters."
                 : "Members will appear here once they join the community."}
             </p>
           </div>

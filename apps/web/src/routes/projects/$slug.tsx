@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { useAuth } from "../../lib/auth";
+import { PublicHeader } from "../../components/public-header";
 
 export const Route = createFileRoute("/projects/$slug")({
   component: ProjectDetailPage,
@@ -30,7 +30,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 function ProjectDetailPage() {
   const { slug } = Route.useParams();
-  const { user, isLoading: authLoading } = useAuth();
+
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["project", slug],
@@ -57,26 +57,10 @@ function ProjectDetailPage() {
         style={{ animation: "float-3 22s ease-in-out infinite" }}
       />
 
-      {/* Header */}
-      <header className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
-        <Link
-          to="/"
-          className="text-lg font-semibold tracking-tight text-white hover:text-gray-300 transition-colors"
-        >
-          MSOCIETY
-        </Link>
-        {!authLoading && user && (
-          <Link
-            to="/dashboard"
-            className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            Dashboard
-          </Link>
-        )}
-      </header>
+      <PublicHeader transparent />
 
       {/* Content */}
-      <main className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
+      <main className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-40 pb-24">
         {/* Back link */}
         <Link
           to="/projects"

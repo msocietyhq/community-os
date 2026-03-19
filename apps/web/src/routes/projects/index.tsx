@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
-import { useAuth } from "../../lib/auth";
+import { PublicHeader } from "../../components/public-header";
 import { z } from "zod";
 
 type Nature = "community" | "startup" | "side_project";
@@ -38,7 +38,7 @@ type Project = NonNullable<
 >["projects"][number];
 
 function PublicProjectsPage() {
-  const { user, isLoading: authLoading } = useAuth();
+
   const searchParams = Route.useSearch();
   const [search, setSearch] = useState(searchParams.search ?? "");
   const [nature, setNature] = useState<Nature | "">(searchParams.nature ?? "");
@@ -83,26 +83,10 @@ function PublicProjectsPage() {
         style={{ animation: "float-3 22s ease-in-out infinite" }}
       />
 
-      {/* Header */}
-      <header className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
-        <Link
-          to="/"
-          className="text-lg font-semibold tracking-tight text-white hover:text-gray-300 transition-colors"
-        >
-          MSOCIETY
-        </Link>
-        {!authLoading && user && (
-          <Link
-            to="/dashboard"
-            className="text-sm bg-white text-gray-900 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            Dashboard
-          </Link>
-        )}
-      </header>
+      <PublicHeader transparent />
 
       {/* Page heading */}
-      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 text-center">
+      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-40 pb-12 text-center">
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
           Projects
         </h1>
@@ -227,29 +211,33 @@ function ProjectCard({ project }: { project: Project }) {
           <h3 className={`font-bold text-xl leading-tight text-white group-hover:text-transparent group-hover:bg-gradient-to-r ${styles.text} group-hover:bg-clip-text transition-all duration-300`}>
             {project.name}
           </h3>
-          {(() => {
-            const members = (project as Project & { members?: string[] }).members;
-            if (!members?.length) return null;
-            return (
+          {project.members.length > 0 && (
               <div className="flex -space-x-2 flex-shrink-0">
-                {members
-                  .slice(0, members.length > 3 ? 2 : 3)
-                  .map((initials, i) => (
+                {(project.memberCount > 3
+                  ? project.members.slice(0, 2)
+                  : project.members
+                ).map((member) => (
                     <div
-                      key={i}
-                      className="relative z-0 hover:z-10 transition-all duration-300 rounded-full ring-2 ring-white/10 hover:ring-blue-400/50 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 w-8 h-8 bg-gradient-to-br from-blue-500/30 to-indigo-500/30 flex items-center justify-center text-[10px] font-medium text-white/70"
+                      key={member.id}
+                      className="relative z-0 hover:z-10 transition-all duration-300 rounded-full ring-2 ring-white/10 hover:ring-blue-400/50 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 w-8 h-8 bg-gradient-to-br from-blue-500/30 to-indigo-500/30 flex items-center justify-center overflow-hidden"
+                      title={member.name}
                     >
-                      {initials}
+                      {member.image ? (
+                        <img src={member.image} alt={member.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[10px] font-medium text-white/70">
+                          {member.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
                     </div>
                   ))}
-                {members.length > 3 && (
+                {project.memberCount > 3 && (
                   <div className="relative z-0 hover:z-10 transition-all duration-300 rounded-full ring-2 ring-white/10 hover:ring-blue-400/50 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 w-8 h-8 bg-white/10 flex items-center justify-center text-[10px] font-medium text-white/70">
-                    +{members.length - 2}
+                    +{project.memberCount - 2}
                   </div>
                 )}
               </div>
-            );
-          })()}
+            )}
         </div>
         {project.description && (
           <p className="text-gray-400 text-sm leading-relaxed mb-4 flex-1">

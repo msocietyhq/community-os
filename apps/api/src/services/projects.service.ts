@@ -117,10 +117,40 @@ export const projectsService = {
 			db.select({ total: count() }).from(projects).where(where),
 		]);
 
+		const projectIds = projectList.map((r) => r.project.id);
+
+		const memberPreviews =
+			projectIds.length > 0
+				? await db
+						.select({
+							projectId: projectMembers.projectId,
+							userId: user.id,
+							name: user.name,
+							image: user.image,
+						})
+						.from(projectMembers)
+						.innerJoin(user, eq(projectMembers.userId, user.id))
+						.where(
+							sql`${projectMembers.projectId} IN ${projectIds}`,
+						)
+						.orderBy(projectMembers.createdAt)
+				: [];
+
+		const membersByProject = new Map<
+			string,
+			{ id: string; name: string; image: string | null }[]
+		>();
+		for (const m of memberPreviews) {
+			const list = membersByProject.get(m.projectId) ?? [];
+			list.push({ id: m.userId, name: m.name, image: m.image });
+			membersByProject.set(m.projectId, list);
+		}
+
 		return {
 			projects: projectList.map((r) => ({
 				...r.project,
 				memberCount: r.memberCount,
+				members: (membersByProject.get(r.project.id) ?? []).slice(0, 3),
 			})),
 			total: totalResult[0]?.total ?? 0,
 		};
