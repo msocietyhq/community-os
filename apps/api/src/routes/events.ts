@@ -6,8 +6,18 @@ import { eventModel } from "./models/event";
 import { eventsService } from "../services/events.service";
 
 export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
-  .use(authMiddleware)
   .use(eventModel)
+  .get(
+    "/public",
+    async ({ query }) => {
+      return eventsService.list(query, "member");
+    },
+    {
+      query: "event.listQuery",
+      detail: { tags: ["Events"], summary: "List events (public)" },
+    },
+  )
+  .use(authMiddleware)
   .guard({ auth: true }, (app) =>
     app
       .get(

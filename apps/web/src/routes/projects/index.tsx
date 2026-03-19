@@ -124,16 +124,16 @@ function PublicProjectsPage() {
           </div>
 
           {/* Nature filter */}
-          <div className="flex gap-2">
+          <div className="inline-flex rounded-lg border border-white/10 overflow-hidden">
             {NATURE_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setNature(option.value as Nature | "")}
-                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-white/10 last:border-r-0 ${
                   nature === option.value
                     ? option.active
-                    : `border-white/10 bg-white/5 text-gray-400 ${option.hover}`
+                    : `bg-white/5 text-gray-400 ${option.hover}`
                 }`}
               >
                 {option.label}

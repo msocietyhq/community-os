@@ -73,7 +73,7 @@ export const eventsService = {
     if (query.status) {
       conditions.push(eq(events.status, query.status));
     } else if (userRole === "member") {
-      conditions.push(eq(events.status, "published"));
+      conditions.push(or(eq(events.status, "published"), eq(events.status, "completed"))!);
     }
 
     if (query.eventType) {

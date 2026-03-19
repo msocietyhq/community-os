@@ -101,14 +101,13 @@ function PublicEventsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["events", timeFilter],
     queryFn: () =>
-      api.api.v1.events.get({
+      api.api.v1.events.public.get({
         query: {
-          status: "published",
+          ...(timeFilter === "upcoming"
+            ? { status: "published" as const, startsAfter: now }
+            : { startsBefore: now }),
           page: 1,
           limit: 100,
-          ...(timeFilter === "upcoming"
-            ? { startsAfter: now }
-            : { startsBefore: now }),
         },
       }),
   });
@@ -151,42 +150,34 @@ function PublicEventsPage() {
       <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Time filter */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setTimeFilter("upcoming")}
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
-                timeFilter === "upcoming"
-                  ? "bg-white/15 text-white border-white/20"
-                  : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200"
-              }`}
-            >
-              Upcoming
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeFilter("past")}
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
-                timeFilter === "past"
-                  ? "bg-white/15 text-white border-white/20"
-                  : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200"
-              }`}
-            >
-              Past
-            </button>
+          <div className="inline-flex rounded-lg border border-white/10 overflow-hidden">
+            {(["upcoming", "past"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTimeFilter(value)}
+                className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-white/10 last:border-r-0 ${
+                  timeFilter === value
+                    ? "bg-white/15 text-white"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200"
+                }`}
+              >
+                {value === "upcoming" ? "Upcoming" : "Past"}
+              </button>
+            ))}
           </div>
 
           {/* Type filter */}
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="inline-flex rounded-lg border border-white/10 overflow-hidden overflow-x-auto">
             {TYPE_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setEventType(option.value as EventType | "")}
-                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border whitespace-nowrap ${
+                className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-white/10 last:border-r-0 whitespace-nowrap ${
                   eventType === option.value
                     ? option.active
-                    : `border-white/10 bg-white/5 text-gray-400 ${option.hover}`
+                    : `bg-white/5 text-gray-400 ${option.hover}`
                 }`}
               >
                 {option.label}
@@ -257,6 +248,7 @@ function EventCard({
 
   const day = date.getDate();
   const month = date.toLocaleDateString("en-SG", { month: "short" });
+  const year = date.getFullYear();
   const weekday = date.toLocaleDateString("en-SG", { weekday: "short" });
   const time = date.toLocaleTimeString("en-SG", {
     hour: "2-digit",
@@ -288,7 +280,7 @@ function EventCard({
             {day}
           </span>
           <span className="text-xs font-medium text-gray-500 uppercase mt-1">
-            {month}
+            {month} {year}
           </span>
         </div>
 
@@ -395,7 +387,7 @@ function EventCard({
                   d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"
                 />
               </svg>
-              {weekday}, {day} {month}
+              {weekday}, {day} {month} {year}
             </span>
           </div>
         </div>
