@@ -105,7 +105,8 @@ export const app = new Elysia()
   .use(fundRoutes)
   .use(venueRoutes)
   .use(reputationRoutes)
-  .use(botRoutes)
-  .use(statsRoutes);
+  .use(statsRoutes)
+  // botRoutes must be last — it breaks CORS for routes registered after it
+  .use(botRoutes);
 
 export type App = typeof app;
