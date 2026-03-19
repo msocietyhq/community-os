@@ -34,7 +34,7 @@ const navItems = [
     ),
   },
   {
-    to: "/members",
+    to: "/dashboard/members",
     label: "Members",
     icon: (
       <svg
@@ -53,7 +53,7 @@ const navItems = [
     ),
   },
   {
-    to: "/events",
+    to: "/dashboard/events",
     label: "Events",
     icon: (
       <svg
@@ -72,7 +72,7 @@ const navItems = [
     ),
   },
   {
-    to: "/projects",
+    to: "/dashboard/projects",
     label: "Projects",
     icon: (
       <svg
@@ -167,7 +167,10 @@ function AuthenticatedLayout() {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = currentPath === item.to;
+            const isActive =
+              item.to === "/dashboard"
+                ? currentPath === "/dashboard"
+                : currentPath.startsWith(item.to);
             return (
               <Link
                 key={item.to}

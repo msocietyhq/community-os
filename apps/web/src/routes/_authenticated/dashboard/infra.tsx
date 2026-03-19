@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/_authenticated/infra")({
+export const Route = createFileRoute("/_authenticated/dashboard/infra")({
   component: InfraPage,
 });
 

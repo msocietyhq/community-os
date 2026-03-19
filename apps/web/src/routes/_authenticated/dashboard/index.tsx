@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../../lib/auth";
-import { api } from "../../lib/api-client";
+import { useAuth } from "../../../lib/auth";
+import { api } from "../../../lib/api-client";
 
-export const Route = createFileRoute("/_authenticated/dashboard")({
+export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
 });
 
@@ -73,7 +73,7 @@ function DashboardPage() {
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <QuickAction
-                to="/events"
+                to="/dashboard/events"
                 title="Browse Events"
                 description="View upcoming meetups and workshops"
                 icon={
@@ -93,7 +93,7 @@ function DashboardPage() {
                 }
               />
               <QuickAction
-                to="/projects"
+                to="/dashboard/projects"
                 title="Explore Projects"
                 description="Discover community-built projects"
                 icon={
@@ -113,7 +113,7 @@ function DashboardPage() {
                 }
               />
               <QuickAction
-                to="/members"
+                to="/dashboard/members"
                 title="View Members"
                 description="Browse the community directory"
                 icon={

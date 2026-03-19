@@ -1,16 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "../../lib/api-client";
+import { api } from "../../../lib/api-client";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "../../components/ui/dialog";
+} from "../../../components/ui/dialog";
 
-export const Route = createFileRoute("/_authenticated/members")({
+export const Route = createFileRoute("/_authenticated/dashboard/members")({
   component: MembersPage,
 });
 
