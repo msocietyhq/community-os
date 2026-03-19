@@ -5,6 +5,8 @@ import { helpHandler } from "./handlers/help";
 import { eventsHandler } from "./handlers/events";
 import { projectsHandler } from "./handlers/projects";
 import { reputationHandler } from "./handlers/reputation";
+import { digestHandler } from "./handlers/digest";
+import { startDigestScheduler, stopDigestScheduler } from "./lib/digest-scheduler";
 import { membershipHandler } from "./handlers/membership";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
@@ -94,6 +96,7 @@ export async function initBot(): Promise<void> {
   bot.use(eventsHandler);
   bot.use(projectsHandler);
   bot.use(reputationHandler);
+  bot.use(digestHandler);
   bot.use(membershipHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);
@@ -111,6 +114,8 @@ export async function initBot(): Promise<void> {
     console.error("Bot polling error:", err);
   });
 
+  startDigestScheduler();
+
   console.log(`Bot @${bot.botInfo.username} initialized`);
 }
 
@@ -118,5 +123,6 @@ export async function initBot(): Promise<void> {
  * Gracefully stop the bot (stop long polling).
  */
 export async function shutdownBot(): Promise<void> {
+  stopDigestScheduler();
   await bot.stop();
 }

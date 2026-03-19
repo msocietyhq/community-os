@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, asc, isNotNull, not } from "drizzle-orm";
+import { eq, desc, and, gte, asc, isNotNull, not, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { reputationTriggers } from "../db/schema/reputation";
@@ -319,5 +319,83 @@ export const reputationService = {
       .orderBy(desc(members.reputationScore))
       .limit(limit);
     return rows;
+  },
+
+  /** Leaderboard of reputation gained since a given date. */
+  async getLeaderboardSince(since: Date, limit = 5) {
+    const triggers = await loadTriggers();
+    const keywordTriggers = triggers.filter((t) => t.triggerType === "keyword");
+    if (keywordTriggers.length === 0) return [];
+
+    const origMsg = alias(telegramMessages, "orig");
+    const replyRows = await db
+      .select({
+        recipientTelegramId: origMsg.fromUserId,
+        text: telegramMessages.text,
+        fromUserId: telegramMessages.fromUserId,
+        date: telegramMessages.date,
+      })
+      .from(telegramMessages)
+      .innerJoin(
+        origMsg,
+        and(
+          eq(telegramMessages.chatId, origMsg.chatId),
+          eq(telegramMessages.replyToMessageId, origMsg.messageId),
+        ),
+      )
+      .where(
+        and(
+          gte(telegramMessages.date, since),
+          isNotNull(telegramMessages.text),
+        ),
+      );
+
+    // Group replies by recipient and score them
+    const byRecipient = new Map<number, typeof replyRows>();
+    for (const row of replyRows) {
+      if (!row.recipientTelegramId) continue;
+      const existing = byRecipient.get(row.recipientTelegramId) ?? [];
+      existing.push(row);
+      byRecipient.set(row.recipientTelegramId, existing);
+    }
+
+    const scored: { telegramId: number; score: number }[] = [];
+    for (const [telegramId, messages] of byRecipient) {
+      const score = scoreMessages(messages, keywordTriggers);
+      if (score > 0) scored.push({ telegramId, score });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    const topScored = scored.slice(0, limit);
+    if (topScored.length === 0) return [];
+
+    // Resolve user info
+    const userRows = await db
+      .select({
+        telegramId: user.telegramId,
+        userName: user.name,
+        telegramUsername: user.telegramUsername,
+        userId: user.id,
+      })
+      .from(user)
+      .where(
+        or(
+          ...topScored.map((s) => eq(user.telegramId, String(s.telegramId))),
+        ),
+      );
+
+    const userMap = new Map(userRows.map((u) => [u.telegramId, u]));
+
+    return topScored
+      .map((s) => {
+        const u = userMap.get(String(s.telegramId));
+        return {
+          userId: u?.userId ?? "",
+          userName: u?.userName ?? "Unknown",
+          telegramUsername: u?.telegramUsername ?? null,
+          score: s.score,
+        };
+      })
+      .filter((r) => r.userId);
   },
 };
