@@ -11,6 +11,7 @@ import { fundRoutes } from "./routes/funds";
 import { reputationRoutes } from "./routes/reputation";
 import { venueRoutes } from "./routes/venues";
 import { botRoutes } from "./routes/bot";
+import { statsRoutes } from "./routes/stats";
 import { AppError } from "./lib/errors";
 import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
 import { env } from "./env";
@@ -104,6 +105,7 @@ export const app = new Elysia()
   .use(fundRoutes)
   .use(venueRoutes)
   .use(reputationRoutes)
-  .use(botRoutes);
+  .use(botRoutes)
+  .use(statsRoutes);
 
 export type App = typeof app;

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
@@ -29,6 +29,7 @@ function LandingPage() {
       <HeroSection />
       <FeaturesSection />
       <ProjectsShowcase />
+      <MembershipGrowth />
       <Footer />
     </div>
   );
@@ -228,7 +229,7 @@ function ProjectsShowcase() {
         ))}
       </div>
 
-      <Link to="/projects" className="group block mt-12">
+      <Link to="/projects" className="group block mt-6">
         <div className="relative rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-all duration-500 p-8 sm:p-10 text-center overflow-hidden">
           {/* Hover glow */}
           <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-blue-600/10 via-indigo-600/10 to-cyan-500/10 blur-xl -z-10" />
@@ -397,6 +398,233 @@ function MemberAvatars({
         </div>
       )}
     </div>
+  );
+}
+
+/* ─── Membership Growth ──────────────────────────────────────── */
+
+function MembershipGrowth() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["membership-growth"],
+    queryFn: () => api.api.v1.stats["membership-growth"].get(),
+  });
+
+  const points = (data?.data ?? []) as {
+    month: string;
+    cumulative_members: number;
+  }[];
+
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const padding = { top: 60, right: 20, bottom: 40, left: 50 };
+  const width = 800;
+  const height = 340;
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  const maxVal = Math.max(...points.map((p) => p.cumulative_members), 1);
+  const yMax = Math.ceil(maxVal / 50) * 50;
+
+  const getX = useCallback(
+    (i: number) => padding.left + (i / Math.max(points.length - 1, 1)) * chartW,
+    [points.length, chartW],
+  );
+  const getY = useCallback(
+    (val: number) => padding.top + chartH - (val / yMax) * chartH,
+    [chartH, yMax],
+  );
+
+  const linePath = useMemo(() => {
+    if (points.length === 0) return "";
+    return points
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(p.cumulative_members)}`)
+      .join(" ");
+  }, [points, getX, getY]);
+
+  const areaPath = useMemo(() => {
+    if (points.length === 0) return "";
+    const bottom = padding.top + chartH;
+    return `${linePath} L ${getX(points.length - 1)} ${bottom} L ${getX(0)} ${bottom} Z`;
+  }, [linePath, points.length, getX, chartH]);
+
+  // Year labels for X axis
+  const yearLabels = useMemo(() => {
+    const labels: { x: number; label: string }[] = [];
+    let lastYear = "";
+    points.forEach((p, i) => {
+      const year = p.month.split("-")[0] ?? "";
+      if (year !== lastYear) {
+        labels.push({ x: getX(i), label: year });
+        lastYear = year;
+      }
+    });
+    return labels;
+  }, [points, getX]);
+
+  // Y axis grid lines
+  const yTicks = useMemo(() => {
+    const step = yMax <= 100 ? 25 : yMax <= 300 ? 50 : 100;
+    const ticks: number[] = [];
+    for (let v = 0; v <= yMax; v += step) {
+      ticks.push(v);
+    }
+    return ticks;
+  }, [yMax]);
+
+  if (isLoading) {
+    return (
+      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-32">
+        <div className="h-[400px] rounded-2xl border border-white/5 bg-white/[0.02] animate-pulse" />
+      </section>
+    );
+  }
+
+  if (points.length === 0) return null;
+
+  const latest = points[points.length - 1]!;
+  const firstYear = points[0]!.month.split("-")[0]!;
+  const hovered = hoveredIndex !== null ? points[hoveredIndex] : null;
+
+  return (
+    <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-32">
+      <div className="text-center mb-16">
+        <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          Community <span className="gradient-text">Growth</span>
+        </h2>
+        <p className="text-gray-400 max-w-xl mx-auto">
+          An invite-only community with organic growth since {firstYear},
+          attracting {latest.cumulative_members.toLocaleString()}+ quality tech
+          professionals across the region.
+        </p>
+      </div>
+
+      <div className="relative rounded-2xl border border-white/5 bg-white/[0.02] p-6 sm:p-8 overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+        {/* Tooltip */}
+        {hovered && (
+          <div className="absolute top-6 right-6 sm:top-8 sm:right-8 text-right">
+            <div className="text-2xl font-bold text-white">
+              {hovered.cumulative_members.toLocaleString()} members
+            </div>
+            <div className="text-sm text-gray-400">
+              {new Date(hovered.month + "-01").toLocaleDateString("en-SG", {
+                month: "long",
+                year: "numeric",
+              })}
+            </div>
+          </div>
+        )}
+
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="relative w-full h-auto"
+          preserveAspectRatio="xMidYMid meet"
+          onMouseLeave={() => setHoveredIndex(null)}
+        >
+          <defs>
+            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#60a5fa" />
+              <stop offset="50%" stopColor="#818cf8" />
+              <stop offset="100%" stopColor="#22d3ee" />
+            </linearGradient>
+          </defs>
+
+          {/* Y-axis grid lines */}
+          {yTicks.map((v) => (
+            <g key={v}>
+              <line
+                x1={padding.left}
+                y1={getY(v)}
+                x2={width - padding.right}
+                y2={getY(v)}
+                stroke="white"
+                strokeOpacity="0.05"
+              />
+              <text
+                x={padding.left - 10}
+                y={getY(v) + 4}
+                textAnchor="end"
+                fill="white"
+                fillOpacity="0.3"
+                fontSize="11"
+              >
+                {v}
+              </text>
+            </g>
+          ))}
+
+          {/* Year labels */}
+          {yearLabels.map((yl) => (
+            <text
+              key={yl.label}
+              x={yl.x}
+              y={height - 10}
+              textAnchor="middle"
+              fill="white"
+              fillOpacity="0.3"
+              fontSize="11"
+            >
+              {yl.label}
+            </text>
+          ))}
+
+          {/* Area fill */}
+          <path d={areaPath} fill="url(#areaGradient)" />
+
+          {/* Line */}
+          <path
+            d={linePath}
+            fill="none"
+            stroke="url(#lineGradient)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Hover dot */}
+          {hovered && hoveredIndex !== null && (
+            <>
+              <line
+                x1={getX(hoveredIndex)}
+                y1={padding.top}
+                x2={getX(hoveredIndex)}
+                y2={padding.top + chartH}
+                stroke="white"
+                strokeOpacity="0.1"
+                strokeDasharray="4 4"
+              />
+              <circle
+                cx={getX(hoveredIndex)}
+                cy={getY(hovered.cumulative_members)}
+                r="5"
+                fill="#60a5fa"
+                stroke="white"
+                strokeWidth="2"
+              />
+            </>
+          )}
+
+          {/* Invisible hover zones */}
+          {points.map((_, i) => (
+            <rect
+              key={i}
+              x={getX(i) - chartW / points.length / 2}
+              y={padding.top}
+              width={chartW / points.length}
+              height={chartH}
+              fill="transparent"
+              onMouseEnter={() => setHoveredIndex(i)}
+            />
+          ))}
+        </svg>
+      </div>
+    </section>
   );
 }
 
