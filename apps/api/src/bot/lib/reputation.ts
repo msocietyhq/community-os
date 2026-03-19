@@ -58,8 +58,11 @@ export async function processKeyword(
     // Prevent self-reputation
     if (fromUser.user.id === toUser.user.id) return { status: "self_vote" };
 
-    // Check vote quota
-    const quota = await reputationService.getVoteQuota(fromUser.user.id);
+    // Check vote quota (exclude current message — already inserted by logger middleware)
+    const quota = await reputationService.getVoteQuota(fromUser.user.id, {
+      chatId: event.chatId,
+      messageId: event.messageId,
+    });
     if (quota.votesRemaining <= 0) {
       return {
         status: "quota_exceeded",

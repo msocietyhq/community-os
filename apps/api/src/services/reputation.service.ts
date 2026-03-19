@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, asc, isNotNull } from "drizzle-orm";
+import { eq, desc, and, gte, asc, isNotNull, not } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { reputationTriggers } from "../db/schema/reputation";
@@ -202,8 +202,13 @@ export const reputationService = {
     return result;
   },
 
-  /** Count keyword-matching reply messages from a user in the quota window. */
-  async getVoteQuota(fromUserId: string) {
+  /** Count keyword-matching reply messages from a user in the quota window.
+   *  Pass excludeMessage to omit the current message (already inserted by the
+   *  logger middleware before the reputation handler runs). */
+  async getVoteQuota(
+    fromUserId: string,
+    excludeMessage?: { chatId: string; messageId: string },
+  ) {
     const hours = VOTE_QUOTA_DURATION_HOURS;
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
 
@@ -229,6 +234,17 @@ export const reputationService = {
             gte(telegramMessages.date, cutoff),
             isNotNull(telegramMessages.replyToMessageId),
             isNotNull(telegramMessages.text),
+            excludeMessage
+              ? not(
+                  and(
+                    eq(telegramMessages.chatId, excludeMessage.chatId),
+                    eq(
+                      telegramMessages.messageId,
+                      Number(excludeMessage.messageId),
+                    ),
+                  )!,
+                )
+              : undefined,
           ),
         )
         .orderBy(asc(telegramMessages.date));
