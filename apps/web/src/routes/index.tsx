@@ -409,7 +409,7 @@ function MembershipGrowth() {
     queryFn: () => api.api.v1.stats["membership-growth"].get(),
   });
 
-  const points = (data?.data ?? []) as {
+  const points = (data?.data?.points ?? []) as {
     month: string;
     cumulative_members: number;
   }[];

@@ -1,52 +1,61 @@
-import { sql } from "drizzle-orm";
+import { and, eq, isNotNull, min, sql } from "drizzle-orm";
 import { db } from "../db";
+import { telegramMessages } from "../db/schema/bot";
+
+let cache: { points: { month: string; cumulative_members: number }[] } | null =
+	null;
 
 export const statsService = {
 	async membershipGrowth() {
-		const rows = await db.execute<{
-			month: string;
-			cumulative_members: number;
-		}>(sql`
-			WITH monthly_first_seen AS (
-				SELECT
-					from_user_id,
-					date_trunc('month', MIN(date)) AS first_month
-				FROM telegram_messages
-				WHERE chat_type IN ('group', 'supergroup')
-					AND from_user_id IS NOT NULL
-					AND from_is_bot = false
-				GROUP BY from_user_id
-			),
-			monthly_new AS (
-				SELECT first_month AS month, COUNT(*) AS new_members
-				FROM monthly_first_seen
-				GROUP BY first_month
-			),
-			date_range AS (
-				SELECT MIN(month) AS start_month, date_trunc('month', now()) AS end_month
-				FROM monthly_new
-			),
-			all_months AS (
-				SELECT generate_series(start_month, end_month, '1 month'::interval) AS month
-				FROM date_range
-			),
-			filled AS (
-				SELECT
-					am.month,
-					COALESCE(mn.new_members, 0) AS new_members
-				FROM all_months am
-				LEFT JOIN monthly_new mn ON mn.month = am.month
+		if (cache) return cache;
+		// Get the first month each user appeared in a group chat
+		const rows = await db
+			.select({
+				firstMonth:
+					sql<string>`to_char(${min(telegramMessages.date)}, 'YYYY-MM')`.as(
+						"first_month",
+					),
+				count: sql<number>`count(*)::int`.as("count"),
+			})
+			.from(telegramMessages)
+			.where(
+				and(
+					sql`${telegramMessages.chatType} IN ('group', 'supergroup')`,
+					isNotNull(telegramMessages.fromUserId),
+					eq(telegramMessages.fromIsBot, false),
+				),
 			)
-			SELECT
-				to_char(month, 'YYYY-MM') AS month,
-				SUM(new_members) OVER (ORDER BY month)::int AS cumulative_members
-			FROM filled
-			ORDER BY month
-		`);
+			.groupBy(telegramMessages.fromUserId)
+			.then((userRows) => {
+				// Count new members per month
+				const monthlyCounts = new Map<string, number>();
+				for (const row of userRows) {
+					const month = row.firstMonth;
+					monthlyCounts.set(month, (monthlyCounts.get(month) ?? 0) + 1);
+				}
+				return monthlyCounts;
+			});
 
-		return rows as unknown as {
-			month: string;
-			cumulative_members: number;
-		}[];
+		// Build continuous timeseries with cumulative sum
+		const months = [...rows.keys()].sort();
+		if (months.length === 0) return { points: [] };
+
+		const start = new Date(`${months[0]}-01`);
+		const end = new Date();
+		end.setDate(1);
+
+		const points: { month: string; cumulative_members: number }[] = [];
+		let cumulative = 0;
+		const cursor = new Date(start);
+
+		while (cursor <= end) {
+			const key = cursor.toISOString().slice(0, 7);
+			cumulative += rows.get(key) ?? 0;
+			points.push({ month: key, cumulative_members: cumulative });
+			cursor.setMonth(cursor.getMonth() + 1);
+		}
+
+		cache = { points };
+		return cache;
 	},
 };
