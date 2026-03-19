@@ -1,17 +1,28 @@
+import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth";
+import { z } from "zod";
+
+type Nature = "community" | "startup" | "side_project";
+
+const projectSearchSchema = z.object({
+  search: z.string().optional().catch(undefined),
+  nature: z.enum(["community", "startup", "side_project"]).optional().catch(undefined),
+});
 
 export const Route = createFileRoute("/projects/")({
   component: PublicProjectsPage,
+  validateSearch: projectSearchSchema,
 });
 
-const NATURE_LABELS: Record<string, string> = {
-  community: "Community Projects",
-  startup: "Startups",
-  side_project: "Side Projects",
-};
+const NATURE_OPTIONS = [
+  { value: "", label: "All", active: "bg-white/15 text-white border-white/20", hover: "hover:bg-white/10 hover:text-gray-200" },
+  { value: "community", label: "Community", active: "bg-blue-500/20 text-blue-400 border-blue-500/30", hover: "hover:bg-blue-500/10 hover:text-blue-400" },
+  { value: "startup", label: "Startup", active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", hover: "hover:bg-emerald-500/10 hover:text-emerald-400" },
+  { value: "side_project", label: "Side Project", active: "bg-rose-500/20 text-rose-400 border-rose-500/30", hover: "hover:bg-rose-500/10 hover:text-rose-400" },
+] as const;
 
 const PLATFORM_LABELS: Record<string, string> = {
   web_app: "Web App",
@@ -28,15 +39,33 @@ type Project = NonNullable<
 
 function PublicProjectsPage() {
   const { user, isLoading: authLoading } = useAuth();
+  const searchParams = Route.useSearch();
+  const [search, setSearch] = useState(searchParams.search ?? "");
+  const [nature, setNature] = useState<Nature | "">(searchParams.nature ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => api.api.v1.projects.get({ query: { page: 1, limit: 50 } }),
+    queryFn: () =>
+      api.api.v1.projects.get({ query: { page: 1, limit: 100 } }),
   });
 
-  const projects = data?.data?.projects ?? [];
-  const grouped = Object.groupBy(projects, (p) => p.nature);
-  const categoryOrder = ["community", "startup", "side_project"] as const;
+  const allProjects = data?.data?.projects ?? [];
+
+  const projects = useMemo(() => {
+    let filtered = allProjects;
+    if (nature) {
+      filtered = filtered.filter((p) => p.nature === nature);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q),
+      );
+    }
+    return filtered;
+  }, [allProjects, search, nature]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white relative overflow-hidden">
@@ -58,14 +87,9 @@ function PublicProjectsPage() {
       <header className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
         <Link
           to="/"
-          className="flex items-center gap-3 text-white hover:text-gray-300 transition-colors"
+          className="text-lg font-semibold tracking-tight text-white hover:text-gray-300 transition-colors"
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">M</span>
-          </div>
-          <span className="text-lg font-semibold tracking-tight">
-            MSOCIETY
-          </span>
+          MSOCIETY
         </Link>
         {!authLoading && user && (
           <Link
@@ -88,6 +112,53 @@ function PublicProjectsPage() {
         </p>
       </section>
 
+      {/* Filters */}
+      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+        <div className="flex flex-col sm:flex-row gap-4">
+          {/* Search */}
+          <div className="relative flex-1">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-white/10 bg-white/5 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
+            />
+          </div>
+
+          {/* Nature filter */}
+          <div className="flex gap-2">
+            {NATURE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setNature(option.value as Nature | "")}
+                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                  nature === option.value
+                    ? option.active
+                    : `border-white/10 bg-white/5 text-gray-400 ${option.hover}`
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Projects grid */}
       <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
         {isLoading ? (
@@ -100,24 +171,15 @@ function PublicProjectsPage() {
             ))}
           </div>
         ) : projects.length === 0 ? (
-          <p className="text-center text-gray-500">No projects yet.</p>
+          <p className="text-center text-gray-500 py-12">
+            {search || nature ? "No projects match your filters." : "No projects yet."}
+          </p>
         ) : (
-          categoryOrder.map((nature) => {
-            const items = grouped[nature];
-            if (!items?.length) return null;
-            return (
-              <div key={nature} className="mb-12 last:mb-0">
-                <h2 className="text-xl font-semibold mb-6 text-gray-200">
-                  {NATURE_LABELS[nature] ?? nature}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {items.map((project) => (
-                    <ProjectCard key={project.id} project={project} />
-                  ))}
-                </div>
-              </div>
-            );
-          })
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
+          </div>
         )}
       </section>
 
@@ -134,15 +196,35 @@ function PublicProjectsPage() {
   );
 }
 
+const NATURE_HOVER_STYLES = {
+  community: {
+    glow: "from-blue-600/20 via-indigo-600/20 to-cyan-500/20",
+    text: "group-hover:from-blue-400 group-hover:to-cyan-400",
+    line: "via-blue-500/50",
+  },
+  startup: {
+    glow: "from-emerald-600/20 via-green-600/20 to-teal-500/20",
+    text: "group-hover:from-emerald-400 group-hover:to-teal-400",
+    line: "via-emerald-500/50",
+  },
+  side_project: {
+    glow: "from-rose-600/20 via-red-600/20 to-orange-500/20",
+    text: "group-hover:from-rose-400 group-hover:to-orange-400",
+    line: "via-rose-500/50",
+  },
+};
+
 function ProjectCard({ project }: { project: Project }) {
+  const styles = NATURE_HOVER_STYLES[project.nature as keyof typeof NATURE_HOVER_STYLES] ?? NATURE_HOVER_STYLES.community;
+
   const content = (
     <div className="group relative rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.05] shadow-xl hover:shadow-2xl transition-all duration-500 overflow-hidden h-full flex flex-col">
-      <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-blue-600/20 via-indigo-600/20 to-cyan-500/20 blur-xl -z-10" />
+      <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br ${styles.glow} blur-xl -z-10`} />
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
       <div className="relative p-6 flex flex-col flex-1">
         <div className="flex items-start justify-between gap-3 mb-2">
-          <h3 className="font-bold text-xl leading-tight text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-400 group-hover:to-cyan-400 group-hover:bg-clip-text transition-all duration-300">
+          <h3 className={`font-bold text-xl leading-tight text-white group-hover:text-transparent group-hover:bg-gradient-to-r ${styles.text} group-hover:bg-clip-text transition-all duration-300`}>
             {project.name}
           </h3>
           {(() => {
@@ -188,7 +270,7 @@ function ProjectCard({ project }: { project: Project }) {
         )}
       </div>
 
-      <div className="h-[2px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
+      <div className={`h-[2px] bg-gradient-to-r from-transparent ${styles.line} to-transparent transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500`} />
     </div>
   );
 

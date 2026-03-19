@@ -81,7 +81,10 @@ export const projectsService = {
 			conditions.push(eq(projects.nature, query.nature));
 		}
 		if (query.search) {
-			conditions.push(ilike(projects.name, `%${query.search}%`));
+			const pattern = `%${query.search}%`;
+			conditions.push(
+				sql`(${ilike(projects.name, pattern)} OR ${ilike(projects.description, pattern)})`,
+			);
 		}
 
 		const where = and(...conditions);

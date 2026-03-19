@@ -154,13 +154,11 @@ function AuthenticatedLayout() {
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-          <Link to="/dashboard" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">M</span>
-            </div>
-            <span className="text-lg font-semibold text-sidebar-foreground tracking-tight">
-              MSOCIETY
-            </span>
+          <Link
+            to="/dashboard"
+            className="text-lg font-semibold text-sidebar-foreground tracking-tight"
+          >
+            MSOCIETY
           </Link>
         </div>
 

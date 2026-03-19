@@ -70,6 +70,12 @@
   body {
     @apply bg-background text-foreground;
   }
+  a,
+  button,
+  [role="button"],
+  [onclick] {
+    cursor: pointer;
+  }
 }
 
 @keyframes float-1 {

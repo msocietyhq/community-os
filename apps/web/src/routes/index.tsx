@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
@@ -153,12 +154,6 @@ function FeatureCard({
   );
 }
 
-const NATURE_LABELS: Record<string, string> = {
-  community: "Community Projects",
-  startup: "Startups",
-  side_project: "Side Projects",
-};
-
 const PLATFORM_LABELS: Record<string, string> = {
   web_app: "Web App",
   mobile_app: "Mobile App",
@@ -171,10 +166,15 @@ const PLATFORM_LABELS: Record<string, string> = {
 function ProjectsShowcase() {
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => api.api.v1.projects.get({ query: { page: 1, limit: 20 } }),
+    queryFn: () => api.api.v1.projects.get({ query: { page: 1, limit: 100 } }),
   });
 
-  const projects = data?.data?.projects ?? [];
+  const allProjects = data?.data?.projects ?? [];
+
+  const randomProjects = useMemo(() => {
+    const shuffled = [...allProjects].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 6);
+  }, [allProjects]);
 
   if (isLoading) {
     return (
@@ -195,10 +195,7 @@ function ProjectsShowcase() {
     );
   }
 
-  if (projects.length === 0) return null;
-
-  const grouped = Object.groupBy(projects, (p) => p.nature);
-  const categoryOrder = ["community", "startup", "side_project"] as const;
+  if (allProjects.length === 0) return null;
 
   return (
     <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
@@ -208,22 +205,33 @@ function ProjectsShowcase() {
         &amp; side projects to startups.
       </p>
 
-      {categoryOrder.map((nature) => {
-        const items = grouped[nature];
-        if (!items?.length) return null;
-        return (
-          <div key={nature} className="mb-12 last:mb-0">
-            <h3 className="text-xl font-semibold mb-6 text-gray-200">
-              {NATURE_LABELS[nature] ?? nature}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {items.map((project) => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {randomProjects.map((project) => (
+          <ProjectCard key={project.id} project={project} />
+        ))}
+      </div>
+
+      <div className="text-center mt-10">
+        <Link
+          to="/projects"
+          className="inline-flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+        >
+          View all projects
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+            />
+          </svg>
+        </Link>
+      </div>
     </section>
   );
 }
@@ -232,17 +240,37 @@ type Project = NonNullable<
   Awaited<ReturnType<typeof api.api.v1.projects.get>>["data"]
 >["projects"][number];
 
+const NATURE_HOVER_STYLES = {
+  community: {
+    glow: "from-blue-600/20 via-indigo-600/20 to-cyan-500/20",
+    text: "group-hover:from-blue-400 group-hover:to-cyan-400",
+    line: "via-blue-500/50",
+  },
+  startup: {
+    glow: "from-emerald-600/20 via-green-600/20 to-teal-500/20",
+    text: "group-hover:from-emerald-400 group-hover:to-teal-400",
+    line: "via-emerald-500/50",
+  },
+  side_project: {
+    glow: "from-rose-600/20 via-red-600/20 to-orange-500/20",
+    text: "group-hover:from-rose-400 group-hover:to-orange-400",
+    line: "via-rose-500/50",
+  },
+};
+
 function ProjectCard({ project }: { project: Project }) {
+  const styles = NATURE_HOVER_STYLES[project.nature as keyof typeof NATURE_HOVER_STYLES] ?? NATURE_HOVER_STYLES.community;
+
   const content = (
     <div className="group relative rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.05] shadow-xl hover:shadow-2xl transition-all duration-500 overflow-hidden h-full flex flex-col">
       {/* Gradient glow on hover */}
-      <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-blue-600/20 via-indigo-600/20 to-cyan-500/20 blur-xl -z-10" />
+      <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br ${styles.glow} blur-xl -z-10`} />
       {/* Shine sweep */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
       <div className="relative p-6 flex flex-col flex-1">
         <div className="flex items-start justify-between gap-3 mb-2">
-          <h4 className="font-bold text-xl leading-tight text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-400 group-hover:to-cyan-400 group-hover:bg-clip-text transition-all duration-300">
+          <h4 className={`font-bold text-xl leading-tight text-white group-hover:text-transparent group-hover:bg-gradient-to-r ${styles.text} group-hover:bg-clip-text transition-all duration-300`}>
             {project.name}
           </h4>
           {(project as any).members?.length > 0 && (
@@ -283,7 +311,7 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
 
       {/* Bottom gradient line */}
-      <div className="h-[2px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
+      <div className={`h-[2px] bg-gradient-to-r from-transparent ${styles.line} to-transparent transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500`} />
     </div>
   );
 
