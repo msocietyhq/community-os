@@ -3,6 +3,7 @@ import { conversations } from "@grammyjs/conversations";
 import { bot } from "./bot";
 import { helpHandler } from "./handlers/help";
 import { eventsHandler } from "./handlers/events";
+import { projectsHandler } from "./handlers/projects";
 import { reputationHandler } from "./handlers/reputation";
 import { membershipHandler } from "./handlers/membership";
 import { aiChatHandler } from "./handlers/ai-chat";
@@ -91,6 +92,7 @@ export async function initBot(): Promise<void> {
   bot.use(loginHandler);
   bot.use(profileHandler);
   bot.use(eventsHandler);
+  bot.use(projectsHandler);
   bot.use(reputationHandler);
   bot.use(membershipHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions

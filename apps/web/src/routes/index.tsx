@@ -171,7 +171,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 function ProjectsShowcase() {
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => api.api.v1.projects.get(),
+    queryFn: () => api.api.v1.projects.get({ query: { page: 1, limit: 20 } }),
   });
 
   const projects = data?.data?.projects ?? [];

@@ -99,6 +99,7 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("read", "Project");
     can("create", "Project");
     can("update", "Project", { ownerId: user.id });
+    can("delete", "Project", { ownerId: user.id });
     can("read", "Venue");
     can("read", "Reputation");
     can("create", "Reputation");

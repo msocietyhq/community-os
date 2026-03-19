@@ -85,9 +85,19 @@ export function createTools(ctx: ToolContext) {
           .enum(["active", "paused", "archived"])
           .optional()
           .describe("Filter by project status"),
+        page: z.number().int().positive().default(1).describe("Page number"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(10)
+          .default(5)
+          .describe("Items per page"),
       }),
-      execute: async () => {
-        const { data, error } = await ctx.api.api.v1.projects.get();
+      execute: async ({ status, page, limit }) => {
+        const { data, error } = await ctx.api.api.v1.projects.get({
+          query: { status, page, limit },
+        });
         if (error) return { status: error.status, value: error.value };
         return data;
       },
