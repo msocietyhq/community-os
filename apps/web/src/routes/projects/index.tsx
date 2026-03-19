@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api-client";
-import { useAuth } from "../lib/auth";
+import { api } from "../../lib/api-client";
+import { useAuth } from "../../lib/auth";
 
-export const Route = createFileRoute("/projects")({
+export const Route = createFileRoute("/projects/")({
   component: PublicProjectsPage,
 });
 
@@ -193,7 +193,7 @@ function ProjectCard({ project }: { project: Project }) {
   );
 
   return (
-    <Link to="/projects/$id" params={{ id: project.id }}>
+    <Link to="/projects/$slug" params={{ slug: project.slug }}>
       {content}
     </Link>
   );

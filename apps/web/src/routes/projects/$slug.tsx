@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api-client";
-import { useAuth } from "../lib/auth";
+import { api } from "../../lib/api-client";
+import { useAuth } from "../../lib/auth";
 
-export const Route = createFileRoute("/projects/$id")({
+export const Route = createFileRoute("/projects/$slug")({
   component: ProjectDetailPage,
 });
 
@@ -29,13 +29,13 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 function ProjectDetailPage() {
-  const { id } = Route.useParams();
+  const { slug } = Route.useParams();
   const { user, isLoading: authLoading } = useAuth();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["project", id],
+    queryKey: ["project", slug],
     queryFn: async () => {
-      const res = await api.api.v1.projects({ id }).get();
+      const res = await api.api.v1.projects({ id: slug }).get();
       if (res.error) throw new Error("Failed to fetch project");
       return res.data;
     },

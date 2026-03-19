@@ -9,11 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
+import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
+import { Route as ProjectsSlugRouteImport } from './routes/projects/$slug'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardProjectsRouteImport } from './routes/_authenticated/dashboard/projects'
 import { Route as AuthenticatedDashboardMembersRouteImport } from './routes/_authenticated/dashboard/members'
@@ -21,11 +21,6 @@ import { Route as AuthenticatedDashboardInfraRouteImport } from './routes/_authe
 import { Route as AuthenticatedDashboardFundsRouteImport } from './routes/_authenticated/dashboard/funds'
 import { Route as AuthenticatedDashboardEventsRouteImport } from './routes/_authenticated/dashboard/events'
 
-const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -40,10 +35,15 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsIdRoute = ProjectsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ProjectsRoute,
+const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
+  id: '/projects/',
+  path: '/projects/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsSlugRoute = ProjectsSlugRouteImport.update({
+  id: '/projects/$slug',
+  path: '/projects/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
@@ -85,8 +85,8 @@ const AuthenticatedDashboardEventsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/projects': typeof ProjectsRouteWithChildren
-  '/projects/$id': typeof ProjectsIdRoute
+  '/projects/$slug': typeof ProjectsSlugRoute
+  '/projects/': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
   '/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
@@ -97,8 +97,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/projects': typeof ProjectsRouteWithChildren
-  '/projects/$id': typeof ProjectsIdRoute
+  '/projects/$slug': typeof ProjectsSlugRoute
+  '/projects': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
   '/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
@@ -111,8 +111,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
-  '/projects': typeof ProjectsRouteWithChildren
-  '/projects/$id': typeof ProjectsIdRoute
+  '/projects/$slug': typeof ProjectsSlugRoute
+  '/projects/': typeof ProjectsIndexRoute
   '/_authenticated/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/_authenticated/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
   '/_authenticated/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
@@ -125,8 +125,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
-    | '/projects'
-    | '/projects/$id'
+    | '/projects/$slug'
+    | '/projects/'
     | '/dashboard/events'
     | '/dashboard/funds'
     | '/dashboard/infra'
@@ -137,8 +137,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/projects/$slug'
     | '/projects'
-    | '/projects/$id'
     | '/dashboard/events'
     | '/dashboard/funds'
     | '/dashboard/infra'
@@ -150,8 +150,8 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/login'
-    | '/projects'
-    | '/projects/$id'
+    | '/projects/$slug'
+    | '/projects/'
     | '/_authenticated/dashboard/events'
     | '/_authenticated/dashboard/funds'
     | '/_authenticated/dashboard/infra'
@@ -164,18 +164,12 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
-  ProjectsRoute: typeof ProjectsRouteWithChildren
+  ProjectsSlugRoute: typeof ProjectsSlugRoute
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/projects': {
-      id: '/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -197,12 +191,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects/$id': {
-      id: '/projects/$id'
-      path: '/$id'
-      fullPath: '/projects/$id'
-      preLoaderRoute: typeof ProjectsIdRouteImport
-      parentRoute: typeof ProjectsRoute
+    '/projects/': {
+      id: '/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof ProjectsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects/$slug': {
+      id: '/projects/$slug'
+      path: '/projects/$slug'
+      fullPath: '/projects/$slug'
+      preLoaderRoute: typeof ProjectsSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/dashboard/': {
       id: '/_authenticated/dashboard/'
@@ -271,23 +272,12 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
-interface ProjectsRouteChildren {
-  ProjectsIdRoute: typeof ProjectsIdRoute
-}
-
-const ProjectsRouteChildren: ProjectsRouteChildren = {
-  ProjectsIdRoute: ProjectsIdRoute,
-}
-
-const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
-  ProjectsRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
-  ProjectsRoute: ProjectsRouteWithChildren,
+  ProjectsSlugRoute: ProjectsSlugRoute,
+  ProjectsIndexRoute: ProjectsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

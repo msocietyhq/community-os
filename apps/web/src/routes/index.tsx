@@ -287,13 +287,9 @@ function ProjectCard({ project }: { project: Project }) {
     </div>
   );
 
-  if (project.url) {
-    return (
-      <a href={project.url} target="_blank" rel="noopener noreferrer">
-        {content}
-      </a>
-    );
-  }
-
-  return content;
+  return (
+    <Link to="/projects/$slug" params={{ slug: project.slug }}>
+      {content}
+    </Link>
+  );
 }
