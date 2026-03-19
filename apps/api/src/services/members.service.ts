@@ -138,10 +138,13 @@ export const membersService = {
     return member;
   },
 
-  async createIfNotExists(userId: string): Promise<{ created: boolean }> {
+  async createIfNotExists(
+    userId: string,
+    opts?: { joinedAt?: Date },
+  ): Promise<{ created: boolean }> {
     const [member] = await db
       .insert(members)
-      .values({ userId })
+      .values({ userId, ...(opts?.joinedAt ? { joinedAt: opts.joinedAt } : {}) })
       .onConflictDoNothing({ target: members.userId })
       .returning();
 

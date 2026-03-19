@@ -2,6 +2,7 @@ import { app } from "./app";
 import { initBot, shutdownBot } from "./bot/init";
 import { backfillMissingMembers } from "./db/backfill-members";
 import { backfillMissingEmbeddings } from "./services/embeddings.service";
+import { reputationService } from "./services/reputation.service";
 import { env } from "./env";
 
 app.listen(env.PORT);
@@ -20,6 +21,10 @@ backfillMissingMembers().catch((err) => {
 
 backfillMissingEmbeddings().catch((err) => {
   console.error("Embedding backfill failed:", err);
+});
+
+reputationService.recalculateAllScores().catch((err) => {
+  console.error("Reputation recalculation failed:", err);
 });
 
 const shutdown = async () => {

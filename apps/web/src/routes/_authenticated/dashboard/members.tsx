@@ -141,10 +141,12 @@ function MembersPage() {
         ) : (
           <>
             {/* Table header */}
-            <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] gap-4 px-6 py-3 bg-muted border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="hidden sm:grid sm:grid-cols-[1fr_auto_1fr_1fr_1fr_auto] gap-4 px-6 py-3 bg-muted border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
               <span>Member</span>
+              <span>Telegram</span>
               <span>Role</span>
               <span>Skills</span>
+              <span>Interests</span>
               <span className="text-right">Joined</span>
             </div>
 
@@ -213,28 +215,54 @@ function MemberRow({
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 sm:gap-4 px-6 py-4 items-center hover:bg-accent/50 transition-colors cursor-pointer"
+      className="w-full text-left grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_1fr_1fr_auto] gap-2 sm:gap-4 px-6 py-4 items-center hover:bg-accent/50 transition-colors cursor-pointer"
     >
       {/* Member info */}
       <div className="flex items-center gap-3">
         <Avatar name={member.user.name} image={member.user.image} size="sm" />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">
-            {member.user.name}
-          </p>
-          {(member.currentTitle || member.currentCompany) && (
-            <p className="text-xs text-muted-foreground truncate">
-              {[member.currentTitle, member.currentCompany]
-                .filter(Boolean)
-                .join(" at ")}
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-foreground truncate">
+              {member.user.name}
             </p>
-          )}
+            {(member.user.role === "admin" ||
+              member.user.role === "superadmin") && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-500">
+                {member.user.role}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Role */}
-      <div>
-        <RoleBadge role={member.user.role} />
+      {/* Telegram */}
+      <div className="min-w-0">
+        {member.user.telegramUsername ? (
+          <a
+            href={`https://t.me/${member.user.telegramUsername}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-indigo-500 hover:underline truncate"
+          >
+            @{member.user.telegramUsername}
+          </a>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">&mdash;</span>
+        )}
+      </div>
+
+      {/* Role (title at company) */}
+      <div className="min-w-0">
+        {member.currentTitle || member.currentCompany ? (
+          <p className="text-sm text-foreground truncate">
+            {[member.currentTitle, member.currentCompany]
+              .filter(Boolean)
+              .join(" at ")}
+          </p>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">&mdash;</span>
+        )}
       </div>
 
       {/* Skills */}
@@ -250,6 +278,23 @@ function MemberRow({
         {member.skills && member.skills.length > 3 && (
           <span className="text-xs text-muted-foreground">
             +{member.skills.length - 3}
+          </span>
+        )}
+      </div>
+
+      {/* Interests */}
+      <div className="flex flex-wrap gap-1">
+        {member.interests?.slice(0, 3).map((interest) => (
+          <span
+            key={interest}
+            className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-500/10 text-xs text-indigo-500"
+          >
+            {interest}
+          </span>
+        ))}
+        {member.interests && member.interests.length > 3 && (
+          <span className="text-xs text-muted-foreground">
+            +{member.interests.length - 3}
           </span>
         )}
       </div>
@@ -460,10 +505,11 @@ function Avatar({
 }
 
 function RoleBadge({ role }: { role?: string | null }) {
+  const isPrivileged = role === "admin" || role === "superadmin";
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-        role === "admin"
+        isPrivileged
           ? "bg-indigo-500/10 text-indigo-500"
           : "bg-muted text-muted-foreground"
       }`}
