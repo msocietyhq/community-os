@@ -54,6 +54,7 @@ helpHandler.command("start", async (ctx) => {
       `I help manage the MSOCIETY community. Here's what I can do:\n\n` +
       `/events — View upcoming events\n` +
       `/projects — Browse community projects\n` +
+      `/create_project — Submit a new project\n` +
       `/reputation — Check your reputation score\n` +
       `/profile — View or edit your community profile\n` +
       `/help — Show this help message\n\n` +
@@ -66,6 +67,7 @@ helpHandler.command("help", async (ctx) => {
     `*MSOCIETY Bot Commands*\n\n` +
       `📅 /events — View upcoming events\n` +
       `🚀 /projects — Browse community projects\n` +
+      `➕ /create_project — Submit a new project\n` +
       `⭐ /reputation — Check your reputation score\n` +
       `👤 /profile — View or edit your community profile\n` +
       `❓ /help — Show this help message\n\n` +

@@ -13,6 +13,7 @@ import { runGithubAgent } from "./agents/github";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
+import { createProjectsAgent } from "./agents/projects";
 import { searchMessagesHybrid } from "../../services/messages.service";
 import { getRecentChatMessages } from "../lib/telegram-message-logger";
 import { formatGroupHistory } from "../lib/chat-context";
@@ -25,6 +26,7 @@ export function createTools(ctx: ToolContext) {
   const runEventsAgent = createEventsAgent(ctx);
   const runMembersAgent = createMembersAgent(ctx);
   const runVenuesAgent = createVenuesAgent(ctx);
+  const runProjectsAgent = createProjectsAgent(ctx);
 
   return {
     events: tool({
@@ -78,28 +80,20 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    list_projects: tool({
-      description: "List community projects",
+    projects: tool({
+      description:
+        "Look up or manage community projects: list, view details, create, update, delete projects, and manage project team members",
       inputSchema: z.object({
-        status: z
-          .enum(["active", "paused", "archived"])
-          .optional()
-          .describe("Filter by project status"),
-        page: z.number().int().positive().default(1).describe("Page number"),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(10)
-          .default(5)
-          .describe("Items per page"),
+        query: z.string().describe("What to look up or do with projects"),
       }),
-      execute: async ({ status, page, limit }) => {
-        const { data, error } = await ctx.api.api.v1.projects.get({
-          query: { status, page, limit },
-        });
-        if (error) return { status: error.status, value: error.value };
-        return data;
+      execute: async ({ query }) => {
+        console.log("[main-agent] → projects sub-agent, query:", query);
+        const result = await runProjectsAgent(query);
+        console.log(
+          "[main-agent] ← projects sub-agent, response:",
+          result.slice(0, 120),
+        );
+        return result;
       },
     }),
 
