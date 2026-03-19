@@ -43,20 +43,49 @@ async function getTelegramId(userId: string): Promise<string | null> {
  * Score a set of reply message texts against keyword triggers.
  * Returns the sum of first-match trigger values.
  */
+/**
+ * Score messages with per-voter daily quota enforcement.
+ * Each voter can contribute at most VOTE_QUOTA keyword messages per 24h window
+ * toward a recipient's score. Messages must have fromUserId and date for quota
+ * enforcement; messages missing either field are skipped.
+ */
 function scoreMessages(
-  messages: { text: string | null }[],
+  messages: {
+    text: string | null;
+    fromUserId: number | null;
+    date: Date | null;
+  }[],
   keywordTriggers: TriggerRow[],
 ): number {
+  // Sort by date ascending so we process earliest votes first
+  const sorted = [...messages].sort(
+    (a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0),
+  );
+
+  // Track per-voter vote timestamps to enforce rolling 24h quota
+  const voterVoteTimes = new Map<number, Date[]>();
   let total = 0;
-  for (const row of messages) {
+
+  for (const row of sorted) {
+    if (!row.fromUserId || !row.date) continue;
+
     const text = (row.text ?? "").toLowerCase();
-    for (const trigger of keywordTriggers) {
-      if (text.includes(trigger.triggerValue)) {
-        total += trigger.reputationValue;
-        break; // first match only
-      }
-    }
+    const matchedTrigger = keywordTriggers.find((t) =>
+      text.includes(t.triggerValue),
+    );
+    if (!matchedTrigger) continue;
+
+    // Count how many votes this voter cast in the 24h window before this message
+    const cutoff = new Date(row.date.getTime() - VOTE_QUOTA_DURATION_HOURS * 60 * 60 * 1000);
+    const priorVotes = voterVoteTimes.get(row.fromUserId) ?? [];
+    const votesInWindow = priorVotes.filter((d) => d >= cutoff).length;
+
+    if (votesInWindow >= VOTE_QUOTA) continue; // quota exceeded, skip
+
+    total += matchedTrigger.reputationValue;
+    voterVoteTimes.set(row.fromUserId, [...priorVotes, row.date]);
   }
+
   return total;
 }
 
@@ -96,7 +125,11 @@ export const reputationService = {
     // Self-join: find reply messages where the original was authored by this user
     const origMsg = alias(telegramMessages, "orig");
     const replyMessages = await db
-      .select({ text: telegramMessages.text })
+      .select({
+        text: telegramMessages.text,
+        fromUserId: telegramMessages.fromUserId,
+        date: telegramMessages.date,
+      })
       .from(telegramMessages)
       .innerJoin(
         origMsg,

@@ -1,5 +1,6 @@
 import { app } from "./app";
 import { initBot, shutdownBot } from "./bot/init";
+import { backfillMissingMembers } from "./db/backfill-members";
 import { backfillMissingEmbeddings } from "./services/embeddings.service";
 import { env } from "./env";
 
@@ -11,6 +12,10 @@ console.log(
 
 initBot().catch((err) => {
   console.error("Failed to initialize bot:", err);
+});
+
+backfillMissingMembers().catch((err) => {
+  console.error("Member backfill failed:", err);
 });
 
 backfillMissingEmbeddings().catch((err) => {
