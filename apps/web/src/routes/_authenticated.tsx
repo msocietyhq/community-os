@@ -315,7 +315,7 @@ function AuthenticatedLayout() {
         </div>
 
         {/* Page content */}
-        <main className="p-4 sm:p-6 lg:p-8">
+        <main className="p-4 sm:p-6 lg:p-8 max-w-screen-xl mx-auto">
           <Outlet />
         </main>
       </div>

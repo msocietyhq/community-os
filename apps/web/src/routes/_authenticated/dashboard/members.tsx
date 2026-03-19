@@ -141,10 +141,8 @@ function MembersPage() {
         ) : (
           <>
             {/* Table header */}
-            <div className="hidden sm:grid sm:grid-cols-[1fr_auto_1fr_1fr_1fr_auto] gap-4 px-6 py-3 bg-muted border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] gap-4 px-6 py-3 bg-muted border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
               <span>Member</span>
-              <span>Telegram</span>
-              <span>Role</span>
               <span>Skills</span>
               <span>Interests</span>
               <span className="text-right">Joined</span>
@@ -215,7 +213,7 @@ function MemberRow({
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_1fr_1fr_auto] gap-2 sm:gap-4 px-6 py-4 items-center hover:bg-accent/50 transition-colors cursor-pointer"
+      className="w-full text-left grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 sm:gap-4 px-6 py-4 items-center hover:bg-accent/50 transition-colors cursor-pointer"
     >
       {/* Member info */}
       <div className="flex items-center gap-3">
@@ -232,37 +230,14 @@ function MemberRow({
               </span>
             )}
           </div>
+          {(member.currentTitle || member.currentCompany) && (
+            <p className="text-xs text-muted-foreground truncate">
+              {[member.currentTitle, member.currentCompany]
+                .filter(Boolean)
+                .join(" at ")}
+            </p>
+          )}
         </div>
-      </div>
-
-      {/* Telegram */}
-      <div className="min-w-0">
-        {member.user.telegramUsername ? (
-          <a
-            href={`https://t.me/${member.user.telegramUsername}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-xs text-indigo-500 hover:underline truncate"
-          >
-            @{member.user.telegramUsername}
-          </a>
-        ) : (
-          <span className="text-xs text-muted-foreground/50">&mdash;</span>
-        )}
-      </div>
-
-      {/* Role (title at company) */}
-      <div className="min-w-0">
-        {member.currentTitle || member.currentCompany ? (
-          <p className="text-sm text-foreground truncate">
-            {[member.currentTitle, member.currentCompany]
-              .filter(Boolean)
-              .join(" at ")}
-          </p>
-        ) : (
-          <span className="text-xs text-muted-foreground/50">&mdash;</span>
-        )}
       </div>
 
       {/* Skills */}
