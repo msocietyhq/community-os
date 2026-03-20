@@ -6,3 +6,13 @@ export const paginationSchema = z.object({
 });
 
 export type PaginationInput = z.infer<typeof paginationSchema>;
+
+export const paginationMetaSchema = z.object({
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+  hasNext: z.boolean(),
+  hasPrev: z.boolean(),
+});
+
+export type PaginationMeta = z.infer<typeof paginationMetaSchema>;

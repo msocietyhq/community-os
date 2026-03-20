@@ -20,6 +20,7 @@ import { formatGroupHistory } from "../lib/chat-context";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
+  graphql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
 }
 
 export function createTools(ctx: ToolContext) {
@@ -29,6 +30,22 @@ export function createTools(ctx: ToolContext) {
   const runProjectsAgent = createProjectsAgent(ctx);
 
   return {
+    graphql_query: tool({
+      description:
+        "Query community data via GraphQL. Write a GraphQL query selecting only the fields you need. Available types: events, projects, venues, members. Use for any read/search/list operation.",
+      inputSchema: z.object({
+        query: z.string().describe("GraphQL query string"),
+        variables: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("GraphQL variables"),
+      }),
+      execute: async ({ query, variables }) => {
+        console.log("[main-agent:graphql_query]", query.slice(0, 120));
+        return ctx.graphql(query, variables);
+      },
+    }),
+
     events: tool({
       description:
         "Look up or manage community events: list upcoming events, get event details, RSVP, or create/update/delete events (admin)",

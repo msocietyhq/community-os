@@ -13,6 +13,7 @@ import { venueRoutes } from "./routes/venues";
 import { botRoutes } from "./routes/bot";
 import { statsRoutes } from "./routes/stats";
 import { AppError } from "./lib/errors";
+import { yoga } from "./graphql";
 import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
 import { env } from "./env";
 
@@ -106,6 +107,7 @@ export const app = new Elysia()
   .use(venueRoutes)
   .use(reputationRoutes)
   .use(statsRoutes)
+  .all("/graphql", ({ request }) => yoga.handle(request))
   // botRoutes must be last — it breaks CORS for routes registered after it
   .use(botRoutes);
 

@@ -2,6 +2,7 @@ import { eq, count, desc, ilike, or, and } from "drizzle-orm";
 import { db } from "../db";
 import { venues } from "../db/schema/venues";
 import { AppError } from "../lib/errors";
+import { paginatedResult, listOffset } from "../lib/pagination";
 import type {
   CreateVenueInput,
   UpdateVenueInput,
@@ -43,7 +44,7 @@ export const venuesService = {
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
-    const offset = (query.page - 1) * query.limit;
+    const offset = listOffset(query.page, query.limit);
 
     const [venueList, totalResult] = await Promise.all([
       db
@@ -56,7 +57,7 @@ export const venuesService = {
       db.select({ total: count() }).from(venues).where(where),
     ]);
 
-    return { venues: venueList, total: totalResult[0]?.total ?? 0 };
+    return paginatedResult("venues", venueList, query.page, query.limit, totalResult[0]?.total ?? 0);
   },
 
   async getById(id: string) {

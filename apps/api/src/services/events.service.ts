@@ -5,6 +5,7 @@ import { venues } from "../db/schema/venues";
 import { account } from "../db/schema/auth";
 import { user } from "../db/schema/auth";
 import { AppError } from "../lib/errors";
+import { paginatedResult, listOffset } from "../lib/pagination";
 import type {
   CreateEventInput,
   UpdateEventInput,
@@ -88,19 +89,61 @@ export const eventsService = {
     }
 
     const where = and(...conditions);
-    const offset = (query.page - 1) * query.limit;
+    const offset = listOffset(query.page, query.limit);
 
     const orderBy =
       query.startsBefore && !query.startsAfter
         ? [desc(events.startsAt)]
         : [asc(events.startsAt)];
 
-    const [eventList, totalResult] = await Promise.all([
-      db.select().from(events).where(where).orderBy(...orderBy).limit(query.limit).offset(offset),
+    const attendeeCountSq = db
+      .select({
+        eventId: eventAttendees.eventId,
+        attendeeCount: count().as("attendee_count"),
+      })
+      .from(eventAttendees)
+      .where(eq(eventAttendees.rsvpStatus, "going"))
+      .groupBy(eventAttendees.eventId)
+      .as("attendee_counts");
+
+    const maybeCountSq = db
+      .select({
+        eventId: eventAttendees.eventId,
+        maybeCount: count().as("maybe_count"),
+      })
+      .from(eventAttendees)
+      .where(eq(eventAttendees.rsvpStatus, "maybe"))
+      .groupBy(eventAttendees.eventId)
+      .as("maybe_counts");
+
+    const [rows, totalResult] = await Promise.all([
+      db
+        .select({
+          event: events,
+          venueName: venues.name,
+          attendeeCount: sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(Number),
+          maybeCount: sql<number>`coalesce(${maybeCountSq.maybeCount}, 0)`.mapWith(Number),
+        })
+        .from(events)
+        .leftJoin(venues, eq(events.venueId, venues.id))
+        .leftJoin(attendeeCountSq, eq(events.id, attendeeCountSq.eventId))
+        .leftJoin(maybeCountSq, eq(events.id, maybeCountSq.eventId))
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(query.limit)
+        .offset(offset),
       db.select({ total: count() }).from(events).where(where),
     ]);
 
-    return { events: eventList, total: totalResult[0]?.total ?? 0 };
+    const total = totalResult[0]?.total ?? 0;
+    const enriched = rows.map((row) => ({
+      ...row.event,
+      venueName: row.venueName,
+      attendeeCount: row.attendeeCount,
+      maybeCount: row.maybeCount,
+    }));
+
+    return paginatedResult("events", enriched, query.page, query.limit, total);
   },
 
   async getById(idOrSlug: string) {

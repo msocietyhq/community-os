@@ -9,6 +9,7 @@ import { db } from "../db";
 import { projectMembers, projects } from "../db/schema";
 import { user } from "../db/schema/auth";
 import { AppError } from "../lib/errors";
+import { paginatedResult, listOffset } from "../lib/pagination";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -88,7 +89,7 @@ export const projectsService = {
 		}
 
 		const where = and(...conditions);
-		const offset = (query.page - 1) * query.limit;
+		const offset = listOffset(query.page, query.limit);
 
 		const memberCountSq = db
 			.select({
@@ -102,7 +103,17 @@ export const projectsService = {
 		const [projectList, totalResult] = await Promise.all([
 			db
 				.select({
-					project: projects,
+					id: projects.id,
+					name: projects.name,
+					slug: projects.slug,
+					description: projects.description,
+					nature: projects.nature,
+					platforms: projects.platforms,
+					status: projects.status,
+					url: projects.url,
+					repoUrl: projects.repoUrl,
+					isEndorsed: projects.isEndorsed,
+					createdAt: projects.createdAt,
 					memberCount:
 						sql<number>`coalesce(${memberCountSq.memberCount}, 0)`.mapWith(
 							Number,
@@ -117,7 +128,7 @@ export const projectsService = {
 			db.select({ total: count() }).from(projects).where(where),
 		]);
 
-		const projectIds = projectList.map((r) => r.project.id);
+		const projectIds = projectList.map((r) => r.id);
 
 		const memberPreviews =
 			projectIds.length > 0
@@ -146,14 +157,13 @@ export const projectsService = {
 			membersByProject.set(m.projectId, list);
 		}
 
-		return {
-			projects: projectList.map((r) => ({
-				...r.project,
-				memberCount: r.memberCount,
-				members: (membersByProject.get(r.project.id) ?? []).slice(0, 3),
-			})),
-			total: totalResult[0]?.total ?? 0,
-		};
+		const total = totalResult[0]?.total ?? 0;
+		const enriched = projectList.map((r) => ({
+			...r,
+			members: (membersByProject.get(r.id) ?? []).slice(0, 3),
+		}));
+
+		return paginatedResult("projects", enriched, query.page, query.limit, total);
 	},
 
 	async getById(idOrSlug: string) {

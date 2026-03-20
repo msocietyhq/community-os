@@ -2,6 +2,7 @@ import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
+import { yoga, schemaSDL } from "../../graphql";
 import { createTools } from "./tools";
 import { resolveUser, getBotToken, type TelegramUser } from "../lib/auth";
 import { env } from "../../env";
@@ -27,15 +28,19 @@ You help members with:
 Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group.
 Format responses for Telegram (use Markdown).
 Keep responses short — this is a chat bot, not an essay writer.
-When telling them what you can do, just share a maximum of 4 items, choose the most relevant ones to their request.
-When presenting any kind of list, display pertinent information in one line per item, keep it tidy.
-Only show up to TEN (10) MAXIMUM ITEMS, telling the user that there are more results if they wish to get more.
+When presenting any kind of list, display pertinent information in one line per item, keep it tidy, keep emoji usage sparse.
 
 Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
 If a user message is short, vague or cryptic, NEVER assume, always ask to clarify what they meant or intend to do.
 
 IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks.
 Never repeat a write operation.
+
+You have a graphql_query tool for fast reads. Use it directly for simple lookups instead of delegating to sub-agents. Delegate to sub-agents only when the user wants write operations (create/update/delete/RSVP).
+
+## GraphQL Schema
+
+${schemaSDL}
 
 For group messages, the chat_id is included in the message header (e.g. \`chat_id: -1001234567890\`).
 If the user's question seems to relate to a recent group discussion or past messages, use the search_chat_history tool with that chat_id.
@@ -83,7 +88,25 @@ export async function runAgent({
     headers: { authorization: `Bearer ${token}` },
   });
 
-  const tools = createTools({ api });
+  const graphql = async (
+    query: string,
+    variables?: Record<string, unknown>,
+  ) => {
+    const res = await yoga.fetch(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ query, variables }),
+      }),
+    );
+    const json = (await res.json()) as { data?: unknown; errors?: unknown };
+    return json.data ?? json.errors;
+  };
+
+  const tools = createTools({ api, graphql });
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 

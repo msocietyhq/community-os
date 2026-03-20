@@ -4,6 +4,7 @@ import { members } from "../db/schema/members";
 import { user } from "../db/schema/auth";
 import { bot } from "../bot/bot";
 import { env } from "../env";
+import { paginatedResult, listOffset } from "../lib/pagination";
 import type {
   CreateMemberInput,
   MemberListQuery,
@@ -60,7 +61,7 @@ export const membersService = {
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
-    const offset = (query.page - 1) * query.limit;
+    const offset = listOffset(query.page, query.limit);
 
     const [memberList, totalResult] = await Promise.all([
       db
@@ -99,7 +100,7 @@ export const membersService = {
         .where(where),
     ]);
 
-    return { members: memberList, total: totalResult[0]?.total ?? 0 };
+    return paginatedResult("members", memberList, query.page, query.limit, totalResult[0]?.total ?? 0);
   },
 
   async update(
