@@ -21,14 +21,6 @@ digestHandler.command("digest_history", async (ctx) => {
   }
 
   const message = formatHistoryDigest(history);
-  const canReply =
-    history.replyToMessageId &&
-    history.replyToChatId === String(ctx.chat.id);
 
-  await ctx.reply(message, {
-    parse_mode: "Markdown",
-    ...(canReply
-      ? { reply_to_message_id: history.replyToMessageId }
-      : {}),
-  });
+  await ctx.reply(message, { parse_mode: "Markdown" });
 });

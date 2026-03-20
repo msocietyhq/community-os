@@ -63,15 +63,8 @@ export function startDigestScheduler(): void {
 
           const message = formatHistoryDigest(history);
 
-          const canReply =
-            history.replyToMessageId &&
-            history.replyToChatId === groupId;
-
           await bot.api.sendMessage(groupId, message, {
             parse_mode: "Markdown",
-            ...(canReply
-              ? { reply_to_message_id: history.replyToMessageId }
-              : {}),
           });
 
           console.log("History digest sent successfully");

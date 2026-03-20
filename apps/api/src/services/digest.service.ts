@@ -25,8 +25,8 @@ export interface ThisWeekInHistory {
   year: number;
   summary: string;
   type: "topics" | "anniversary";
-  replyToMessageId?: number;
-  replyToChatId?: string;
+  highlightedMessage?: string;
+  highlightedMessageAuthor?: string;
 }
 
 export interface WeeklyDigest {
@@ -175,7 +175,8 @@ export const digestService = {
       year: number;
       messageCount: number;
       messages: string[];
-      bestMessageId: number | null;
+      highlightedMessage: string | null;
+      highlightedMessageAuthor: string | null;
       eventTitles: string[];
       projectNames: string[];
     }[] = [];
@@ -214,6 +215,8 @@ export const digestService = {
               text: telegramMessages.text,
               messageId: telegramMessages.messageId,
               replyToMessageId: telegramMessages.replyToMessageId,
+              fromFirstName: telegramMessages.fromFirstName,
+              fromUsername: telegramMessages.fromUsername,
             })
             .from(telegramMessages)
             .where(
@@ -255,7 +258,7 @@ export const digestService = {
         messageCount + yearEvents.length + yearProjects.length;
 
       if (totalActivity > 0) {
-        // Find the most-replied-to message to use as reply target
+        // Find the most-replied-to message to highlight
         const replyCounts = new Map<number, number>();
         for (const m of messagesRaw) {
           if (m.replyToMessageId) {
@@ -265,14 +268,47 @@ export const digestService = {
             );
           }
         }
-        let bestMessageId: number | null = null;
+
+        let highlightedMessage: string | null = null;
+        let highlightedMessageAuthor: string | null = null;
+
+        const resolveAuthor = (msg: { fromUsername: string | null; fromFirstName: string | null }) =>
+          msg.fromUsername ? `@${msg.fromUsername}` : msg.fromFirstName ?? null;
+
         if (replyCounts.size > 0) {
-          bestMessageId = [...replyCounts.entries()].sort(
+          const bestId = [...replyCounts.entries()].sort(
             (a, b) => b[1] - a[1],
           )[0]![0];
-        } else if (messagesRaw.length > 0) {
-          // Fall back to the first message in the sample
-          bestMessageId = messagesRaw[0]!.messageId;
+          // The parent message may not be in the sample — look it up
+          const bestMsg = messagesRaw.find((m) => m.messageId === bestId);
+          if (bestMsg?.text) {
+            highlightedMessage = bestMsg.text;
+            highlightedMessageAuthor = resolveAuthor(bestMsg);
+          } else {
+            const [found] = await db
+              .select({
+                text: telegramMessages.text,
+                fromFirstName: telegramMessages.fromFirstName,
+                fromUsername: telegramMessages.fromUsername,
+              })
+              .from(telegramMessages)
+              .where(
+                and(
+                  eq(telegramMessages.messageId, bestId),
+                  groupFilter
+                    ? eq(telegramMessages.chatId, groupId!)
+                    : undefined,
+                ),
+              )
+              .limit(1);
+            highlightedMessage = found?.text ?? null;
+            highlightedMessageAuthor = found ? resolveAuthor(found) : null;
+          }
+        }
+        if (!highlightedMessage && messagesRaw.length > 0) {
+          const first = messagesRaw[0]!;
+          highlightedMessage = first.text ?? null;
+          highlightedMessageAuthor = resolveAuthor(first);
         }
 
         yearData.push({
@@ -281,7 +317,8 @@ export const digestService = {
           messages: messagesRaw
             .map((m) => m.text)
             .filter((t): t is string => !!t),
-          bestMessageId,
+          highlightedMessage,
+          highlightedMessageAuthor,
           eventTitles: yearEvents.map((e) => e.title),
           projectNames: yearProjects.map((p) => p.name),
         });
@@ -330,8 +367,8 @@ Write a short, engaging 2-3 sentence summary. Be a little witty or nostalgic. Ma
           year: best.year,
           summary: result.text.trim(),
           type: "topics",
-          replyToMessageId: best.bestMessageId ?? undefined,
-          replyToChatId: groupId ?? undefined,
+          highlightedMessage: best.highlightedMessage ?? undefined,
+          highlightedMessageAuthor: best.highlightedMessageAuthor ?? undefined,
         };
       } catch (err) {
         console.error("AI generation failed for history digest:", err);
