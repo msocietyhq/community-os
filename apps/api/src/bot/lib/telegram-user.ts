@@ -15,15 +15,24 @@ export async function telegramUserFromContext(
 
   try {
     const photos = await api.getUserProfilePhotos(from.id, { limit: 1 });
+    if (photos.total_count === 0) {
+      console.warn(`[photo-sync] telegram ID ${from.id}: no visible profile photos (total_count=0)`);
+    }
     if (photos.total_count > 0 && photos.photos[0]) {
       // Last element = highest resolution
       const sizes = photos.photos[0];
       const best = sizes[sizes.length - 1];
       if (best) {
         const file = await api.getFile(best.file_id);
+        if (!file.file_path) {
+          console.warn(`[photo-sync] telegram ID ${from.id}: getFile returned no file_path (file_id=${best.file_id})`);
+        }
         if (file.file_path) {
           const url = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
           const res = await fetch(url);
+          if (!res.ok) {
+            console.warn(`[photo-sync] telegram ID ${from.id}: file download failed with status ${res.status}`);
+          }
           if (res.ok) {
             const buf = await res.arrayBuffer();
             const base64 = Buffer.from(buf).toString("base64");

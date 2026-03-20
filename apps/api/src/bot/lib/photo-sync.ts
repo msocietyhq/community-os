@@ -11,13 +11,13 @@ const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Middleware that syncs a user's Telegram profile photo to the DB
- * on any private-chat interaction, at most once every 24 hours.
+ * on any interaction (group or private), at most once every 24 hours.
  */
 export async function photoSyncMiddleware(
   ctx: BotContext,
   next: NextFunction,
 ): Promise<void> {
-  if (ctx.chat?.type !== "private" || !ctx.from || ctx.from.is_bot) {
+  if (!ctx.from || ctx.from.is_bot) {
     return next();
   }
 

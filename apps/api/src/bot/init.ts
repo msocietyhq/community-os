@@ -80,7 +80,7 @@ export async function initBot(): Promise<void> {
   bot.use(telegramMessageLoggerMiddleware);
   // Auto-register group members before session/handlers
   bot.use(autoRegisterMiddleware);
-  // Sync profile photo in private chats (at most once per 24h)
+  // Sync profile photo on any interaction (at most once per 24h)
   bot.use(photoSyncMiddleware);
 
   // Session must be registered before conversations and handlers
