@@ -6,3 +6,4 @@ export * from "./funds";
 export * from "./reputation";
 export * from "./auth";
 export * from "./venues";
+export * from "./search";

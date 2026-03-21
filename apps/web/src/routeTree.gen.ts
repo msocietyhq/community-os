@@ -16,6 +16,7 @@ import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as EventsIndexRouteImport } from './routes/events/index'
 import { Route as ProjectsSlugRouteImport } from './routes/projects/$slug'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
+import { Route as AuthenticatedDashboardSearchRouteImport } from './routes/_authenticated/dashboard/search'
 import { Route as AuthenticatedDashboardProjectsRouteImport } from './routes/_authenticated/dashboard/projects'
 import { Route as AuthenticatedDashboardMembersRouteImport } from './routes/_authenticated/dashboard/members'
 import { Route as AuthenticatedDashboardInfraRouteImport } from './routes/_authenticated/dashboard/infra'
@@ -55,6 +56,12 @@ const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/dashboard/',
     path: '/dashboard/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedDashboardSearchRoute =
+  AuthenticatedDashboardSearchRouteImport.update({
+    id: '/dashboard/search',
+    path: '/dashboard/search',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedDashboardProjectsRoute =
@@ -99,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
   '/dashboard/members': typeof AuthenticatedDashboardMembersRoute
   '/dashboard/projects': typeof AuthenticatedDashboardProjectsRoute
+  '/dashboard/search': typeof AuthenticatedDashboardSearchRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesByTo {
@@ -112,6 +120,7 @@ export interface FileRoutesByTo {
   '/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
   '/dashboard/members': typeof AuthenticatedDashboardMembersRoute
   '/dashboard/projects': typeof AuthenticatedDashboardProjectsRoute
+  '/dashboard/search': typeof AuthenticatedDashboardSearchRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesById {
@@ -127,6 +136,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
   '/_authenticated/dashboard/members': typeof AuthenticatedDashboardMembersRoute
   '/_authenticated/dashboard/projects': typeof AuthenticatedDashboardProjectsRoute
+  '/_authenticated/dashboard/search': typeof AuthenticatedDashboardSearchRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRouteTypes {
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/dashboard/infra'
     | '/dashboard/members'
     | '/dashboard/projects'
+    | '/dashboard/search'
     | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/dashboard/infra'
     | '/dashboard/members'
     | '/dashboard/projects'
+    | '/dashboard/search'
     | '/dashboard'
   id:
     | '__root__'
@@ -169,6 +181,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/infra'
     | '/_authenticated/dashboard/members'
     | '/_authenticated/dashboard/projects'
+    | '/_authenticated/dashboard/search'
     | '/_authenticated/dashboard/'
   fileRoutesById: FileRoutesById
 }
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/dashboard/search': {
+      id: '/_authenticated/dashboard/search'
+      path: '/dashboard/search'
+      fullPath: '/dashboard/search'
+      preLoaderRoute: typeof AuthenticatedDashboardSearchRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard/projects': {
       id: '/_authenticated/dashboard/projects'
       path: '/dashboard/projects'
@@ -276,6 +296,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDashboardInfraRoute: typeof AuthenticatedDashboardInfraRoute
   AuthenticatedDashboardMembersRoute: typeof AuthenticatedDashboardMembersRoute
   AuthenticatedDashboardProjectsRoute: typeof AuthenticatedDashboardProjectsRoute
+  AuthenticatedDashboardSearchRoute: typeof AuthenticatedDashboardSearchRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
 }
 
@@ -285,6 +306,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardInfraRoute: AuthenticatedDashboardInfraRoute,
   AuthenticatedDashboardMembersRoute: AuthenticatedDashboardMembersRoute,
   AuthenticatedDashboardProjectsRoute: AuthenticatedDashboardProjectsRoute,
+  AuthenticatedDashboardSearchRoute: AuthenticatedDashboardSearchRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
 }
 
