@@ -10,7 +10,7 @@ import { env } from "../../env";
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 function getSystemPrompt(): string {
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
   return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
 
 Today's date is ${today}. Use this when creating events or interpreting relative dates.
