@@ -104,6 +104,8 @@ aiChatHandler.on("message:text", async (ctx) => {
       telegramId,
       telegramUser: ctx.from,
       chatHistory,
+      chatId: String(ctx.chat.id),
+      senderTelegramId: ctx.from?.id ?? null,
     });
 
     const sentMsg = await ctx.reply(markdownToHtml(responseText), {

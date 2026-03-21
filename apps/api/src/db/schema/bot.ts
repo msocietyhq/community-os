@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -9,6 +10,8 @@ import {
   primaryKey,
   index,
   customType,
+  uuid,
+  real,
 } from "drizzle-orm/pg-core";
 
 const vector = customType<{
@@ -119,5 +122,39 @@ export const telegramMessages = pgTable(
     ),
     index("telegram_messages_from_user_idx").on(table.fromUserId),
     index("telegram_messages_chat_type_idx").on(table.chatType),
+  ],
+);
+
+export const botMemories = pgTable(
+  "bot_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    content: text("content").notNull(),
+    category: text("category").notNull(), // person_fact | community_preference | decision | technical | event_related | general
+    subject: text("subject"),
+    subjectTelegramId: bigint("subject_telegram_id", { mode: "number" }),
+    sourceChatId: text("source_chat_id"),
+    sourceMessageId: integer("source_message_id"),
+    supersededBy: uuid("superseded_by"),
+    supersededAt: timestamp("superseded_at"),
+    confidence: real("confidence").notNull().default(0.8),
+    accessCount: integer("access_count").notNull().default(0),
+    lastAccessedAt: timestamp("last_accessed_at"),
+    embedding: vector("embedding", { dimensions: 512 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("bot_memories_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+    index("bot_memories_subject_idx").on(table.subject),
+    index("bot_memories_subject_telegram_id_idx").on(table.subjectTelegramId),
+    index("bot_memories_category_idx").on(table.category),
+    index("bot_memories_active_idx")
+      .on(table.id)
+      .where(sql`superseded_by IS NULL`),
+    index("bot_memories_source_idx").on(table.sourceChatId, table.sourceMessageId),
   ],
 );

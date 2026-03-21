@@ -6,10 +6,16 @@ import { yoga, schemaSDL } from "../../graphql";
 import { createTools } from "./tools";
 import { resolveUser, getBotToken, type TelegramUser } from "../lib/auth";
 import { env } from "../../env";
+import {
+  recallMemories,
+  recallMemoriesForSubject,
+  incrementAccessCount,
+  type RecalledMemory,
+} from "../../services/memory.service";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-function getSystemPrompt(): string {
+function getSystemPrompt(memories: RecalledMemory[]): string {
   const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
   return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
 
@@ -45,6 +51,19 @@ ${schemaSDL}
 For group messages, the chat_id is included in the message header (e.g. \`chat_id: -1001234567890\`).
 If the user's question seems to relate to a recent group discussion or past messages, use the search_chat_history tool with that chat_id.
 Use it with a \`query\` for semantic/keyword search, or without a \`query\` for chronological recent messages.
+
+## Long-term Memory
+
+You have long-term memory of facts learned from community conversations.
+Relevant memories are included below — use them naturally in responses.
+Don't say "I remember" unless directly asked about your memory.
+When you learn something noteworthy, use save_memory to store it.
+If someone asks you to forget something, use forget_memory.
+${
+  memories.length > 0
+    ? `\n## Relevant Memories\n\n${memories.map((m) => `- [${m.category}] ${m.content} (subject: ${m.subject ?? "general"})`).join("\n")}`
+    : ""
+}
 `;
 }
 
@@ -53,6 +72,8 @@ interface AgentParams {
   telegramId: string;
   telegramUser: TelegramUser;
   chatHistory: ModelMessage[];
+  chatId: string;
+  senderTelegramId: number | null;
 }
 
 interface AgentResult {
@@ -65,6 +86,8 @@ export async function runAgent({
   telegramId,
   telegramUser,
   chatHistory,
+  chatId,
+  senderTelegramId,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
@@ -106,20 +129,39 @@ export async function runAgent({
     return json.data ?? json.errors;
   };
 
-  const tools = createTools({ api, graphql });
+  const tools = createTools({ api, graphql, chatId, senderTelegramId });
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
+
+  // Recall relevant memories
+  const memoryPromises: Promise<RecalledMemory[]>[] = [
+    recallMemories(query).catch((err) => {
+      console.error("[main-agent] memory recall failed:", err);
+      return [];
+    }),
+  ];
+  if (senderTelegramId) {
+    memoryPromises.push(
+      recallMemoriesForSubject(senderTelegramId, 5).catch(() => []),
+    );
+  }
+  const memoryResults = await Promise.all(memoryPromises);
+  const allMemories = memoryResults.flat();
+
+  // Deduplicate by ID
+  const uniqueMemories = [
+    ...new Map(allMemories.map((m) => [m.id, m])).values(),
+  ];
 
   const messages: ModelMessage[] = [
     ...chatHistory,
     { role: "user", content: query },
   ];
 
-
   try {
     const result = await generateText({
       model: anthropic("claude-haiku-4-5-20251001"),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(uniqueMemories),
       messages,
       tools,
       stopWhen: stepCountIs(10),
@@ -133,6 +175,11 @@ export async function runAgent({
 
     const text =
       result.text || "I couldn't generate a response. Please try again.";
+
+    // Fire-and-forget: track which memories were used
+    if (uniqueMemories.length > 0) {
+      incrementAccessCount(uniqueMemories.map((m) => m.id));
+    }
 
     return {
       text,

@@ -6,6 +6,10 @@ import { telegramMessages } from "../../db/schema/bot";
 import type { BotContext } from "../types";
 import { generateEmbedding } from "../../services/embeddings.service";
 import { setMessageEmbedding } from "../../services/messages.service";
+import {
+  shouldExtractMemory,
+  extractMemories,
+} from "./memory-extractor";
 
 type MediaType =
   | "photo"
@@ -163,6 +167,20 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
         .catch((err: unknown) => {
           console.error("[message-logger] embedding failed:", err);
         });
+
+      // Memory extraction is fire-and-forget
+      if (shouldExtractMemory(content, from?.is_bot ?? false)) {
+        extractMemories(
+          content,
+          from?.first_name ?? "Unknown",
+          from?.username ?? null,
+          from?.id ?? null,
+          row.chatId,
+          row.messageId,
+        ).catch((err) => {
+          console.error("[memory-extractor] failed:", err);
+        });
+      }
     }
   }
 

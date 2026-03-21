@@ -99,6 +99,13 @@
       "when": 1773852101180,
       "tag": "0013_simplify_reputation",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1774061235286,
+      "tag": "0014_bot_memories",
+      "breakpoints": true
     }
   ]
 }

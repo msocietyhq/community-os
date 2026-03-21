@@ -17,10 +17,17 @@ import { createProjectsAgent } from "./agents/projects";
 import { searchMessagesHybrid } from "../../services/messages.service";
 import { getRecentChatMessages } from "../lib/telegram-message-logger";
 import { formatGroupHistory } from "../lib/chat-context";
+import {
+  saveMemory,
+  forgetMemoriesBySubject,
+  forgetMemory,
+} from "../../services/memory.service";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
   graphql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
+  chatId: string;
+  senderTelegramId: number | null;
 }
 
 export function createTools(ctx: ToolContext) {
@@ -243,6 +250,74 @@ export function createTools(ctx: ToolContext) {
             date: r.date.toISOString(),
           })),
         };
+      },
+    }),
+
+    save_memory: tool({
+      description:
+        "Save a noteworthy fact to long-term memory. Use when you learn something worth remembering about a person, the community, a decision, or an event.",
+      inputSchema: z.object({
+        content: z
+          .string()
+          .describe(
+            "The fact to remember, as a standalone statement (e.g. 'Ali works at Stripe')",
+          ),
+        category: z
+          .enum([
+            "person_fact",
+            "community_preference",
+            "decision",
+            "technical",
+            "event_related",
+            "general",
+          ])
+          .describe("Category of the memory"),
+        subject: z
+          .string()
+          .describe("Who or what this fact is about"),
+        confidence: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .default(0.9)
+          .describe("Confidence level 0-1 (default 0.9)"),
+      }),
+      execute: async ({ content, category, subject, confidence }) => {
+        console.log("[main-agent:save_memory]", content);
+        const result = await saveMemory({
+          content,
+          category,
+          subject,
+          subjectTelegramId: ctx.senderTelegramId,
+          sourceChatId: ctx.chatId,
+          confidence,
+        });
+        if (result.status === "skipped_duplicate") {
+          return { saved: false, reason: "Duplicate memory already exists" };
+        }
+        return { saved: true, id: result.id, status: result.status };
+      },
+    }),
+
+    forget_memory: tool({
+      description:
+        "Forget memories about a subject. Use when someone asks you to forget something about them or a topic.",
+      inputSchema: z.object({
+        subject: z
+          .string()
+          .describe("Who or what to forget about"),
+        content_hint: z
+          .string()
+          .optional()
+          .describe(
+            "Optional keyword/phrase to narrow which memories to forget",
+          ),
+      }),
+      execute: async ({ subject, content_hint }) => {
+        console.log("[main-agent:forget_memory]", subject, content_hint);
+        const count = await forgetMemoriesBySubject(subject, content_hint);
+        return { forgotten: count };
       },
     }),
 
