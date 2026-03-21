@@ -145,7 +145,7 @@ export function createEventsAgent(ctx: ToolContext) {
     console.log("[events-agent] query:", query);
     const today = new Date().toISOString().split("T")[0];
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-5-20250929"),
+      model: anthropic("claude-haiku-4-5-20251001"),
       system: `You are an events assistant for the MSOCIETY community. Help with listing, viewing, RSVPing to, and managing events. Today's date is ${today}. Use ISO 8601 for dates. Only perform write operations (create/update/delete) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name/title before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.

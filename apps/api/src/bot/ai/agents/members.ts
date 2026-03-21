@@ -122,7 +122,7 @@ export function createMembersAgent(ctx: ToolContext) {
   return async function runMembersAgent(query: string): Promise<string> {
     console.log("[members-agent] query:", query);
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-5-20250929"),
+      model: anthropic("claude-haiku-4-5-20251001"),
       system: `You are a members assistant for the MSOCIETY community. Help with finding members, viewing profiles, updating the user's own profile, and checking reputation scores. Be concise, format for Telegram Markdown.
 
 Use the graphql_query tool for searching/browsing members. Use get_my_profile for the user's own profile. Paginate when hasNext is true.

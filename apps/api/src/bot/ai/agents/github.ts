@@ -132,7 +132,7 @@ const githubTools = {
 
 export async function runGithubAgent(query: string): Promise<string> {
   const result = await generateText({
-    model: anthropic("claude-sonnet-4-5-20250929"),
+    model: anthropic("claude-haiku-4-5-20251001"),
     system: `You are a GitHub assistant. You can browse any public GitHub repository, org, or user.
 The MSOCIETY community's default org is ${DEFAULT_ORG} — use it when no owner is specified.
 Be concise. Format for Telegram Markdown. Present lists as compact one-liners.`,

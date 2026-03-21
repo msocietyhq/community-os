@@ -152,7 +152,7 @@ export function createProjectsAgent(ctx: ToolContext) {
   return async function runProjectsAgent(query: string): Promise<string> {
     console.log("[projects-agent] query:", query);
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-5-20250929"),
+      model: anthropic("claude-haiku-4-5-20251001"),
       system: `You are a projects assistant for the MSOCIETY community. Help with listing, viewing, creating, and managing projects and their team members. Only perform write operations (create/update/delete/add member/remove member) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.

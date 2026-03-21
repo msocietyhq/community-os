@@ -117,7 +117,7 @@ export async function runAgent({
 
   try {
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-5-20250929"),
+      model: anthropic("claude-haiku-4-5-20251001"),
       system: getSystemPrompt(),
       messages,
       tools,
