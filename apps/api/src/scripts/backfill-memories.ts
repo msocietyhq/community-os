@@ -4,7 +4,8 @@
  *
  * Usage: bun run --cwd apps/api src/scripts/backfill-memories.ts
  */
-import Anthropic from "@anthropic-ai/sdk";
+import { generateText } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { sql, and, eq, gte, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
@@ -12,7 +13,7 @@ import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../ser
 import { shouldExtractMemory } from "../bot/lib/memory-extractor";
 import { env } from "../env";
 
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 const BATCH_SIZE = 10;
 const CHUNK_SIZE = 100; // DB fetch chunk
@@ -66,19 +67,19 @@ async function extractBatch(
 
   console.log(`[backfill:batch-${batchIndex}] sending ${messages.length} messages to Haiku...`);
 
-  const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 2048,
-    messages: [{ role: "user", content: formatted }],
+  const result = await generateText({
+    model: anthropic("claude-haiku-4-5-20251001"),
     system: BATCH_EXTRACTION_PROMPT,
+    messages: [{ role: "user", content: formatted }],
+    maxOutputTokens: 2048,
   });
 
   const llmMs = Math.round(performance.now() - batchStart);
-  console.log(`[backfill:batch-${batchIndex}] Haiku responded in ${llmMs}ms (${response.usage.input_tokens}in/${response.usage.output_tokens}out)`);
+  const { inputTokens, outputTokens } = result.usage;
+  console.log(`[backfill:batch-${batchIndex}] Haiku responded in ${llmMs}ms (${inputTokens ?? 0}in/${outputTokens ?? 0}out)`);
 
-  const firstBlock = response.content[0];
-  if (!firstBlock || firstBlock.type !== "text") {
-    console.warn(`[backfill:batch-${batchIndex}] empty or non-text response`);
+  if (!result.text) {
+    console.warn(`[backfill:batch-${batchIndex}] empty response`);
     return [];
   }
 
@@ -91,10 +92,10 @@ async function extractBatch(
   }>;
 
   try {
-    const jsonMatch = firstBlock.text.match(/\[[\s\S]*\]/);
-    facts = JSON.parse(jsonMatch ? jsonMatch[0] : firstBlock.text);
+    const jsonMatch = result.text.match(/\[[\s\S]*\]/);
+    facts = JSON.parse(jsonMatch ? jsonMatch[0] : result.text);
   } catch {
-    console.error(`[backfill:batch-${batchIndex}] failed to parse response:`, firstBlock.text.slice(0, 300));
+    console.error(`[backfill:batch-${batchIndex}] failed to parse response:`, result.text.slice(0, 300));
     return [];
   }
 

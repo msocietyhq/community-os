@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { generateText } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { env } from "../../env";
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
 
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 const NOISE_REGEX =
   /^(ok|lol|haha|heh|nice|thanks|thank you|yes|no|yep|nope|yeah|nah|sure|wow|bruh|bro|gg|true|same|fr|ikr|damn|aight|bet|salam|ws|wa'alaikumussalam|walaikumsalam)[\s!.?]*$/i;
@@ -53,20 +54,19 @@ export async function extractMemories(
     ? `${senderName} (@${senderUsername})`
     : senderName;
 
-  const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 256,
+  const result = await generateText({
+    model: anthropic("claude-haiku-4-5-20251001"),
+    system: EXTRACTION_PROMPT,
     messages: [
       {
         role: "user",
         content: `Message from ${senderLabel}:\n"${text}"`,
       },
     ],
-    system: EXTRACTION_PROMPT,
+    maxOutputTokens: 256,
   });
 
-  const firstBlock = response.content[0];
-  if (!firstBlock || firstBlock.type !== "text") return;
+  if (!result.text) return;
 
   let facts: Array<{
     content: string;
@@ -76,10 +76,10 @@ export async function extractMemories(
   }>;
 
   try {
-    const jsonMatch = firstBlock.text.match(/\[[\s\S]*\]/);
-    facts = JSON.parse(jsonMatch ? jsonMatch[0] : firstBlock.text);
+    const jsonMatch = result.text.match(/\[[\s\S]*\]/);
+    facts = JSON.parse(jsonMatch ? jsonMatch[0] : result.text);
   } catch {
-    console.error("[memory-extractor] failed to parse response:", firstBlock.text);
+    console.error("[memory-extractor] failed to parse response:", result.text);
     return;
   }
 
