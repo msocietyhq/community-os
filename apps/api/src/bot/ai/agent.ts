@@ -9,6 +9,7 @@ import { env } from "../../env";
 import {
   recallMemories,
   recallMemoriesForSubject,
+  resolveSubjectTelegramId,
   incrementAccessCount,
   type RecalledMemory,
 } from "../../services/memory.service";
@@ -59,12 +60,69 @@ Relevant memories are included below — use them naturally in responses.
 Don't say "I remember" unless directly asked about your memory.
 When you learn something noteworthy, use save_memory to store it.
 If someone asks you to forget something, use forget_memory.
+If you need to recall specific facts not already loaded below, use recall_memory to search your memory.
 ${
   memories.length > 0
     ? `\n## Relevant Memories\n\n${memories.map((m) => `- [${m.category}] ${m.content} (subject: ${m.subject ?? "general"})`).join("\n")}`
     : ""
 }
 `;
+}
+
+/**
+ * Extract subject names mentioned in recent chat history messages.
+ * Looks for @username mentions and "From: Name" headers in group messages.
+ */
+function extractMentionedSubjects(
+  chatHistory: ModelMessage[],
+  currentQuery: string,
+): string[] {
+  const subjects = new Set<string>();
+  const allText = [
+    currentQuery,
+    ...chatHistory
+      .filter((m) => m.role === "user")
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+  ].join(" ");
+
+  // Match @username mentions
+  const atMentions = allText.match(/@(\w+)/g);
+  if (atMentions) {
+    for (const mention of atMentions) {
+      subjects.add(mention.slice(1).toLowerCase());
+    }
+  }
+
+  // Match "From: Name" headers (group message format)
+  const fromMatches = allText.match(/From:\s*([^\n(]+)/g);
+  if (fromMatches) {
+    for (const match of fromMatches) {
+      const name = match.replace(/From:\s*/, "").trim();
+      if (name) subjects.add(name.toLowerCase());
+    }
+  }
+
+  return [...subjects];
+}
+
+/**
+ * Recall memories for mentioned subjects by resolving their telegram IDs.
+ */
+async function recallMemoriesForMentionedSubjects(
+  subjects: string[],
+  limit: number,
+): Promise<RecalledMemory[]> {
+  const results: RecalledMemory[] = [];
+  for (const subject of subjects.slice(0, 5)) {
+    const telegramId = await resolveSubjectTelegramId(subject);
+    if (telegramId) {
+      const memories = await recallMemoriesForSubject(telegramId, limit).catch(
+        () => [],
+      );
+      results.push(...memories);
+    }
+  }
+  return results;
 }
 
 interface AgentParams {
@@ -133,7 +191,7 @@ export async function runAgent({
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 
-  // Recall relevant memories
+  // Recall relevant memories: semantic search + sender + mentioned subjects
   const memoryPromises: Promise<RecalledMemory[]>[] = [
     recallMemories(query).catch((err) => {
       console.error("[main-agent] memory recall failed:", err);
@@ -145,6 +203,15 @@ export async function runAgent({
       recallMemoriesForSubject(senderTelegramId, 5).catch(() => []),
     );
   }
+
+  // Also recall memories about subjects mentioned in the conversation
+  const mentionedSubjects = extractMentionedSubjects(chatHistory, query);
+  if (mentionedSubjects.length > 0) {
+    memoryPromises.push(
+      recallMemoriesForMentionedSubjects(mentionedSubjects, 3).catch(() => []),
+    );
+  }
+
   const memoryResults = await Promise.all(memoryPromises);
   const allMemories = memoryResults.flat();
 

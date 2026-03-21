@@ -19,8 +19,12 @@ import { getRecentChatMessages } from "../lib/telegram-message-logger";
 import { formatGroupHistory } from "../lib/chat-context";
 import {
   saveMemory,
+  recallMemories,
+  recallMemoriesForSubject,
   forgetMemoriesBySubject,
   forgetMemory,
+  incrementAccessCount,
+  resolveSubjectTelegramId,
 } from "../../services/memory.service";
 
 export interface ToolContext {
@@ -318,6 +322,90 @@ export function createTools(ctx: ToolContext) {
         console.log("[main-agent:forget_memory]", subject, content_hint);
         const count = await forgetMemoriesBySubject(subject, content_hint);
         return { forgotten: count };
+      },
+    }),
+
+    recall_memory: tool({
+      description:
+        "Search your long-term memory for facts you've previously learned. Use when you need to recall specific information about a person, decision, event, or community topic that isn't in the auto-loaded memories.",
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe(
+            "Natural-language search query describing what you want to recall (e.g. 'what does Ali do for work')",
+          ),
+        category: z
+          .enum([
+            "person_fact",
+            "community_preference",
+            "decision",
+            "technical",
+            "event_related",
+            "general",
+          ])
+          .optional()
+          .describe("Optional category filter to narrow results"),
+        subject: z
+          .string()
+          .optional()
+          .describe(
+            "Optional subject name to also fetch all memories about this person/topic",
+          ),
+        limit: z
+          .number()
+          .min(1)
+          .max(20)
+          .optional()
+          .default(5)
+          .describe("Max number of results (default 5)"),
+      }),
+      execute: async ({ query, category, subject, limit }) => {
+        console.log("[main-agent:recall_memory]", { query, category, subject });
+
+        const promises: Promise<
+          { id: string; content: string; category: string; subject: string | null; confidence: number; similarity: number; createdAt: Date }[]
+        >[] = [
+          recallMemories(query, { limit: limit ?? 5 }),
+        ];
+
+        // If a subject is specified, also fetch their memories by telegram ID
+        if (subject) {
+          const telegramId = await resolveSubjectTelegramId(subject);
+          if (telegramId) {
+            promises.push(recallMemoriesForSubject(telegramId, limit ?? 5));
+          }
+        }
+
+        const results = (await Promise.all(promises)).flat();
+
+        // Deduplicate by ID
+        const unique = [...new Map(results.map((m) => [m.id, m])).values()];
+
+        // Filter by category if specified
+        const filtered = category
+          ? unique.filter((m) => m.category === category)
+          : unique;
+
+        // Sort by similarity descending
+        filtered.sort((a, b) => b.similarity - a.similarity);
+
+        const final = filtered.slice(0, limit ?? 5);
+
+        // Track access
+        if (final.length > 0) {
+          incrementAccessCount(final.map((m) => m.id));
+        }
+
+        return {
+          count: final.length,
+          memories: final.map((m) => ({
+            content: m.content,
+            category: m.category,
+            subject: m.subject,
+            confidence: m.confidence,
+            similarity: m.similarity,
+          })),
+        };
       },
     }),
 
