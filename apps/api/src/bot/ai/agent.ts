@@ -193,7 +193,7 @@ export async function runAgent({
 
   // Recall relevant memories: semantic search + sender + mentioned subjects
   const memoryPromises: Promise<RecalledMemory[]>[] = [
-    recallMemories(query).catch((err) => {
+    recallMemories(query, { limit: 10 }).catch((err) => {
       console.error("[main-agent] memory recall failed:", err);
       return [];
     }),
