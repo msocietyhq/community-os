@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   buildTelegramMeta,
   buildEnrichedQuery,
-  getRecentHistory,
-  ONE_HOUR_MS,
-  MAX_HISTORY,
+  buildMessagesFromHistory,
 } from "./chat-context";
-import type { ChatTurn } from "../types";
 import type { ModelMessage } from "ai";
+import type { telegramMessages } from "../../db/schema/bot";
+
+type TelegramMessageRow = typeof telegramMessages.$inferSelect;
 
 // ─── buildTelegramMeta ────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ describe("buildTelegramMeta", () => {
     expect(meta.replyTo?.text).toBe("Hello world");
   });
 
-  test("reply to the bot → replyTo omitted", () => {
+  test("reply to the bot → replyTo IS populated (no longer filtered)", () => {
     const msg = {
       ...baseMsg,
       reply_to_message: {
@@ -55,7 +55,9 @@ describe("buildTelegramMeta", () => {
       },
     };
     const meta = buildTelegramMeta(msg, baseFrom, "group", BOT_ID);
-    expect(meta.replyTo).toBeUndefined();
+    expect(meta.replyTo).toBeDefined();
+    expect(meta.replyTo?.from?.id).toBe(BOT_ID);
+    expect(meta.replyTo?.text).toBe("I can help you with that.");
   });
 
   test("no username → firstName is accessible via from.firstName", () => {
@@ -146,72 +148,126 @@ describe("buildEnrichedQuery", () => {
   });
 });
 
-// ─── getRecentHistory ─────────────────────────────────────────────────────────
+// ─── buildMessagesFromHistory ────────────────────────────────────────────────
 
-describe("getRecentHistory", () => {
-  const now = Date.now();
+describe("buildMessagesFromHistory", () => {
+  const BOT_USER_ID = 999;
 
-  function makeTurn(ageMs: number, msgCount = 2): ChatTurn {
-    const messages: ModelMessage[] = Array.from({ length: msgCount }, (_, i) => ({
-      role: i % 2 === 0 ? "user" : "assistant",
-      content: `message ${i}`,
-    }));
-    return { timestamp: now - ageMs, messages };
+  function makeRow(overrides: Partial<TelegramMessageRow>): TelegramMessageRow {
+    return {
+      chatId: "-100123",
+      chatType: "supergroup",
+      messageId: 1,
+      messageThreadId: null,
+      isTopicMessage: null,
+      isAutomaticForward: null,
+      fromUserId: 42,
+      fromFirstName: "Aziz",
+      fromLastName: null,
+      fromUsername: "aziz_sg",
+      fromIsBot: false,
+      fromIsPremium: null,
+      fromLanguageCode: null,
+      senderChatId: null,
+      senderChatUsername: null,
+      senderChatTitle: null,
+      authorSignature: null,
+      text: "hello",
+      caption: null,
+      mediaType: null,
+      entities: null,
+      date: new Date("2026-03-18T14:30:00Z"),
+      createdAt: new Date("2026-03-18T14:30:00Z"),
+      ...overrides,
+    } as TelegramMessageRow;
   }
 
-  test("empty turns → returns empty arrays", () => {
-    const { recentTurns, chatHistory } = getRecentHistory([], now, ONE_HOUR_MS, MAX_HISTORY);
-    expect(recentTurns).toHaveLength(0);
-    expect(chatHistory).toHaveLength(0);
-  });
-
-  test("all turns within window → all returned", () => {
-    const turns = [makeTurn(10_000), makeTurn(20_000), makeTurn(30_000)];
-    const { recentTurns, chatHistory } = getRecentHistory(turns, now, ONE_HOUR_MS, MAX_HISTORY);
-    expect(recentTurns).toHaveLength(3);
-    expect(chatHistory).toHaveLength(6); // 3 turns × 2 messages
-  });
-
-  test("some turns expired → expired ones dropped, recent kept", () => {
-    const turns = [
-      makeTurn(30 * 60 * 1000),       // 30 min ago — within window
-      makeTurn(90 * 60 * 1000),       // 90 min ago — expired
+  test("human messages → user role with sender info, date on first message only (same day)", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 42, fromUsername: "aziz_sg", text: "hello" }),
+      makeRow({ messageId: 2, fromUserId: 77, fromUsername: null, fromFirstName: "Hafiz", text: "hey there" }),
     ];
-    const { recentTurns, chatHistory } = getRecentHistory(turns, now, ONE_HOUR_MS, MAX_HISTORY);
-    expect(recentTurns).toHaveLength(1);
-    expect(chatHistory).toHaveLength(2);
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result).toHaveLength(2);
+    expect(result[0]?.role).toBe("user");
+    expect(result[0]?.content).toContain("@aziz_sg");
+    expect(result[0]?.content).toContain("hello");
+    // First message includes date
+    expect(result[0]?.content).toContain("18 Mar 2026");
+    expect(result[1]?.role).toBe("user");
+    expect(result[1]?.content).toContain("Hafiz");
+    expect(result[1]?.content).toContain("hey there");
+    // Same day — no date
+    expect(result[1]?.content).not.toContain("Mar");
   });
 
-  test("all turns expired → empty arrays", () => {
-    const turns = [makeTurn(2 * ONE_HOUR_MS), makeTurn(3 * ONE_HOUR_MS)];
-    const { recentTurns, chatHistory } = getRecentHistory(turns, now, ONE_HOUR_MS, MAX_HISTORY);
-    expect(recentTurns).toHaveLength(0);
-    expect(chatHistory).toHaveLength(0);
-  });
-
-  test("flattened messages exceed maxMessages → sliced to last N", () => {
-    // 6 turns × 3 messages = 18 messages; cap at 10
-    const turns = Array.from({ length: 6 }, () => makeTurn(5_000, 3));
-    const { chatHistory } = getRecentHistory(turns, now, ONE_HOUR_MS, 10);
-    expect(chatHistory).toHaveLength(10);
-  });
-
-  test("chatHistory.length correctly indexes into updatedHistory for new-turn extraction", () => {
-    const turns = [makeTurn(5_000, 4)]; // 4 existing messages
-    const { chatHistory } = getRecentHistory(turns, now, ONE_HOUR_MS, MAX_HISTORY);
-    expect(chatHistory).toHaveLength(4);
-
-    // Simulate agent returning existing + 2 new messages
-    const simulatedUpdatedHistory: ModelMessage[] = [
-      ...chatHistory,
-      { role: "user", content: "new question" },
-      { role: "assistant", content: "new answer" },
+  test("bot message with matching aiResponses → expands stored messages", () => {
+    // Simulate real AI SDK response messages (tool call chain + final text)
+    const storedMessages = [
+      { role: "assistant", content: "thinking..." },
+      { role: "assistant", content: "processing..." },
+      { role: "assistant", content: "No events found." },
+    ] as ModelMessage[];
+    const rows = [
+      makeRow({ messageId: 10, fromUserId: BOT_USER_ID, fromIsBot: true, text: "No events found." }),
     ];
-    const newTurnMessages = simulatedUpdatedHistory.slice(chatHistory.length);
-    expect(newTurnMessages).toHaveLength(2);
-    // biome-ignore lint/style/noNonNullAssertion: length asserted above
-    expect(newTurnMessages[0]!.content).toBe("new question");
-    // biome-ignore lint/style/noNonNullAssertion: length asserted above
-    expect(newTurnMessages[1]!.content).toBe("new answer");
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, { 10: storedMessages });
+    expect(result).toHaveLength(3);
+    expect(result[0]?.role).toBe("assistant");
+    expect(result[2]?.role).toBe("assistant");
+    expect(result[2]?.content).toBe("No events found.");
+  });
+
+  test("bot message without aiResponses → fallback to assistant text", () => {
+    const rows = [
+      makeRow({ messageId: 10, fromUserId: BOT_USER_ID, fromIsBot: true, text: "Sure, I can help!" }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result).toHaveLength(1);
+    expect(result[0]?.role).toBe("assistant");
+    expect(result[0]?.content).toBe("Sure, I can help!");
+  });
+
+  test("chronological ordering maintained", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 42, text: "question 1", date: new Date("2026-03-18T14:30:00Z") }),
+      makeRow({ messageId: 2, fromUserId: BOT_USER_ID, text: "answer 1", date: new Date("2026-03-18T14:30:05Z") }),
+      makeRow({ messageId: 3, fromUserId: 42, text: "question 2", date: new Date("2026-03-18T14:31:00Z") }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result).toHaveLength(3);
+    expect(result[0]?.role).toBe("user");
+    expect(result[1]?.role).toBe("assistant");
+    expect(result[2]?.role).toBe("user");
+  });
+
+  test("date included when day changes between messages", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 42, text: "evening msg", date: new Date("2026-03-17T23:50:00Z") }),
+      makeRow({ messageId: 2, fromUserId: 77, fromFirstName: "Hafiz", fromUsername: null, text: "morning msg", date: new Date("2026-03-18T08:10:00Z") }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result).toHaveLength(2);
+    // First message gets date
+    expect(result[0]?.content).toContain("17 Mar 2026");
+    // Second message on different day also gets date
+    expect(result[1]?.content).toContain("18 Mar 2026");
+  });
+
+  test("empty content rows are skipped for human messages", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 42, text: null, caption: null, mediaType: null }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result).toHaveLength(0);
+  });
+
+  test("media-only human message → uses media type placeholder", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 42, text: null, caption: null, mediaType: "photo" }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result).toHaveLength(1);
+    expect(result[0]?.content).toContain("[photo]");
   });
 });

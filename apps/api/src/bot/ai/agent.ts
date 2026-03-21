@@ -57,7 +57,7 @@ interface AgentParams {
 
 interface AgentResult {
   text: string;
-  updatedHistory: ModelMessage[];
+  responseMessages: ModelMessage[]; // AI SDK response messages for session storage
 }
 
 export async function runAgent({
@@ -70,7 +70,7 @@ export async function runAgent({
   if (!resolved) {
     return {
       text: "Your profile is not set up yet. Please use /profile first to set up your community profile!",
-      updatedHistory: chatHistory,
+      responseMessages: [],
     };
   }
 
@@ -79,7 +79,7 @@ export async function runAgent({
   if (!token) {
     return {
       text: "I'm having trouble authenticating you. Please try again later.",
-      updatedHistory: chatHistory,
+      responseMessages: [],
     };
   }
 
@@ -115,6 +115,7 @@ export async function runAgent({
     { role: "user", content: query },
   ];
 
+
   try {
     const result = await generateText({
       model: anthropic("claude-haiku-4-5-20251001"),
@@ -125,25 +126,23 @@ export async function runAgent({
       maxOutputTokens: 1024,
     });
 
+    const { inputTokens, outputTokens } = result.usage;
     console.log(
-      `[main-agent] done — steps:${result.steps.length} text:"${result.text?.slice(0, 120)}"`,
+      `[main-agent] done — steps:${result.steps.length} tokens:${inputTokens ?? 0}in/${outputTokens ?? 0}out text:"${result.text?.slice(0, 120)}"`,
     );
 
     const text =
       result.text || "I couldn't generate a response. Please try again.";
 
-    // Preserve full conversation context (tool calls + results) for multi-turn
-    const updatedHistory: ModelMessage[] = [
-      ...messages,
-      ...(result.response.messages as ModelMessage[]),
-    ];
-
-    return { text, updatedHistory };
+    return {
+      text,
+      responseMessages: result.response.messages as ModelMessage[],
+    };
   } catch (error) {
     if (error instanceof Error && error.message.includes("rate limit")) {
       return {
         text: "I'm being rate-limited right now. Please try again in a minute or two 🙏",
-        updatedHistory: [...messages],
+        responseMessages: [],
       };
     }
     throw error;

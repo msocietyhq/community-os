@@ -5,11 +5,10 @@ import { env } from "../../env";
 import {
   buildTelegramMeta,
   buildEnrichedQuery,
-  getRecentHistory,
+  buildMessagesFromHistory,
   ONE_HOUR_MS,
-  MAX_HISTORY,
 } from "../lib/chat-context";
-import { logBotMessage } from "../lib/telegram-message-logger";
+import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
 
 // Convert Markdown output from AI into Telegram HTML.
 // Escapes HTML entities first, then maps ** / * / _ / ` to tags.
@@ -71,7 +70,6 @@ aiChatHandler.on("message:text", async (ctx) => {
   }
 
   const telegramId = String(ctx.from!.id);
-  const now = Date.now();
 
   const meta = buildTelegramMeta(
     ctx.message,
@@ -86,32 +84,48 @@ aiChatHandler.on("message:text", async (ctx) => {
     isGroup ? String(ctx.chat.id) : undefined,
   );
 
-  const { recentTurns, chatHistory } = getRecentHistory(
-    ctx.session.chatTurns ?? [],
-    now,
+  // Fetch recent messages from DB
+  const recentMessages = await getRecentChatMessages(
+    String(ctx.chat.id),
+    ctx.message.message_thread_id,
     ONE_HOUR_MS,
-    MAX_HISTORY,
+    50,
+    ctx.message.message_id, // exclude current (it's in enrichedQuery)
   );
+
+  // Build ModelMessage[] from DB rows + session AI context
+  const aiResponses = ctx.session.aiResponses ?? {};
+  const chatHistory = buildMessagesFromHistory(recentMessages, ctx.me.id, aiResponses);
 
   try {
     await ctx.replyWithChatAction("typing");
-    const { text: responseText, updatedHistory } = await runAgent({
+    const { text: responseText, responseMessages } = await runAgent({
       query: enrichedQuery,
       telegramId,
       telegramUser: ctx.from,
       chatHistory,
     });
 
-    const newTurnMessages = updatedHistory.slice(chatHistory.length);
-    ctx.session.chatTurns = [
-      ...recentTurns,
-      { timestamp: now, meta, messages: newTurnMessages },
-    ];
-
     const sentMsg = await ctx.reply(markdownToHtml(responseText), {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
       parse_mode: "HTML",
     });
+
+    // Store AI context in session, keyed by bot message ID
+    aiResponses[sentMsg.message_id] = responseMessages;
+
+    // Prune old entries (keep only message IDs present in recent DB rows)
+    const recentBotMessageIds = new Set(
+      recentMessages.filter((r) => r.fromUserId === ctx.me.id).map((r) => r.messageId),
+    );
+    recentBotMessageIds.add(sentMsg.message_id);
+    for (const key of Object.keys(aiResponses)) {
+      if (!recentBotMessageIds.has(Number(key))) {
+        delete aiResponses[Number(key)];
+      }
+    }
+    ctx.session.aiResponses = aiResponses;
+
     logBotMessage(sentMsg, ctx.me, chatType, responseText);
   } catch (error) {
     console.error("AI chat error:", error);

@@ -1,9 +1,8 @@
 import type { ModelMessage } from "ai";
-import type { ChatTurn, TelegramMeta } from "../types";
+import type { TelegramMeta } from "../types";
 import type { telegramMessages } from "../../db/schema/bot";
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
-export const MAX_HISTORY = 30;
 
 const REPLY_TEXT_MAX = 120;
 
@@ -32,7 +31,7 @@ interface RawFrom {
 
 /**
  * Builds a TelegramMeta object from a raw grammY message and sender.
- * `meId` is the bot's own Telegram user ID — replies from the bot are omitted.
+ * `meId` is the bot's own Telegram user ID — used to tag replies to the bot.
  */
 export function buildTelegramMeta(
   msg: RawMessage,
@@ -53,7 +52,7 @@ export function buildTelegramMeta(
   };
 
   const replyMsg = msg.reply_to_message;
-  if (replyMsg && replyMsg.from && replyMsg.from.id !== meId) {
+  if (replyMsg && replyMsg.from) {
     meta.replyTo = {
       messageId: replyMsg.message_id,
       date: replyMsg.date,
@@ -140,28 +139,49 @@ export function buildEnrichedQuery(
   return `${header}\n${query}`;
 }
 
+function getDateString(date: Date): string {
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 /**
- * Filters turns to within the rolling window, flattens messages, and caps to
- * `maxMessages`. Returns both the filtered turns and the flattened history so
- * the caller can compute new-turn messages via `updatedHistory.slice(chatHistory.length)`.
+ * Merges DB message rows with stored AI SDK context from session into ModelMessage[].
+ * Bot messages are enriched with tool call chains from aiResponses when available.
+ * Includes the date only when it differs from the previous message's date.
  */
-export function getRecentHistory(
-  turns: ChatTurn[],
-  now: number,
-  windowMs: number,
-  maxMessages: number,
-): { recentTurns: ChatTurn[]; chatHistory: ModelMessage[] } {
-  const cutoff = now - windowMs;
-  const recentTurns = turns.filter((t) => t.timestamp >= cutoff);
+export function buildMessagesFromHistory(
+  rows: TelegramMessageRow[],
+  botUserId: number,
+  aiResponses: Record<number, ModelMessage[]>,
+): ModelMessage[] {
+  const messages: ModelMessage[] = [];
+  let lastDateStr = "";
 
-  // Flatten all messages from recent turns
-  const allMessages: ModelMessage[] = recentTurns.flatMap((t) => t.messages);
+  for (const row of rows) {
+    if (row.fromUserId === botUserId) {
+      // Bot message — use stored AI context if available
+      const stored = aiResponses[row.messageId];
+      if (stored && stored.length > 0) {
+        messages.push(...stored);
+      } else if (row.text) {
+        messages.push({ role: "assistant", content: row.text });
+      }
+    } else {
+      // Human message — include sender info
+      const name = row.fromUsername ? `@${row.fromUsername}` : (row.fromFirstName ?? "someone");
+      const time = formatTelegramDate(Math.floor(row.date.getTime() / 1000));
+      const dateStr = getDateString(row.date);
+      const datePart = dateStr !== lastDateStr ? `${dateStr} ` : "";
+      const content = row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : "");
+      if (content) {
+        messages.push({ role: "user", content: `[${datePart}${time} ${name}]\n${content}` });
+      }
+    }
+    lastDateStr = getDateString(row.date);
+  }
 
-  // Cap to the last maxMessages messages
-  const chatHistory =
-    allMessages.length > maxMessages
-      ? allMessages.slice(allMessages.length - maxMessages)
-      : allMessages;
-
-  return { recentTurns, chatHistory };
+  return messages;
 }
