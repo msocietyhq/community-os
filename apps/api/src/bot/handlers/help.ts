@@ -64,7 +64,7 @@ helpHandler.command("start", async (ctx) => {
 
 helpHandler.command("help", async (ctx) => {
   await ctx.reply(
-    `*MSOCIETY Bot Commands*\n\n` +
+    `<b>MSOCIETY Bot Commands</b>\n\n` +
       `📅 /events — View upcoming events\n` +
       `🚀 /projects — Browse community projects\n` +
       `➕ /create_project — Submit a new project\n` +
@@ -72,6 +72,6 @@ helpHandler.command("help", async (ctx) => {
       `👤 /profile — View or edit your community profile\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
-    { parse_mode: "Markdown" },
+    { parse_mode: "HTML" },
   );
 });
