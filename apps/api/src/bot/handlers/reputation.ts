@@ -13,7 +13,10 @@ export const reputationHandler = new Composer<BotContext>();
 // Handle keyword-based reputation (reply or @mention)
 reputationHandler.on("message:text", async (ctx, next) => {
   const entities = ctx.message.entities ?? [];
-  const hasReply = !!ctx.message.reply_to_message;
+  const isImplicitTopicReply =
+    ctx.message.is_topic_message &&
+    ctx.message.reply_to_message?.message_id === ctx.message.message_thread_id;
+  const hasReply = !!ctx.message.reply_to_message && !isImplicitTopicReply;
 
   // Find @mention or text_mention entities
   const mentionEntity = entities.find(

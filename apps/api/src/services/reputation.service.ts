@@ -141,6 +141,7 @@ export const reputationService = {
       .where(
         and(
           eq(origMsg.fromUserId, Number(telegramId)),
+          not(eq(telegramMessages.fromUserId, Number(telegramId))),
           isNotNull(telegramMessages.text),
         ),
       );
@@ -194,6 +195,7 @@ export const reputationService = {
       .where(
         and(
           eq(origMsg.fromUserId, Number(telegramId)),
+          not(eq(telegramMessages.fromUserId, Number(telegramId))),
           isNotNull(telegramMessages.text),
         ),
       )
