@@ -125,6 +125,29 @@ export const telegramMessages = pgTable(
   ],
 );
 
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    model: text("model").notNull(),
+    caller: text("caller").notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    telegramUserId: bigint("telegram_user_id", { mode: "number" }),
+    chatId: text("chat_id"),
+    success: boolean("success").notNull().default(true),
+    errorMessage: text("error_message"),
+    durationMs: integer("duration_ms"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("ai_usage_caller_idx").on(table.caller),
+    index("ai_usage_created_at_idx").on(table.createdAt),
+    index("ai_usage_telegram_user_idx").on(table.telegramUserId),
+    index("ai_usage_model_idx").on(table.model),
+  ],
+);
+
 export const botMemories = pgTable(
   "bot_memories",
   {

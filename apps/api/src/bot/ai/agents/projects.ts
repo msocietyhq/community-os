@@ -1,9 +1,10 @@
-import { generateText, stepCountIs, tool } from "ai";
+import { stepCountIs, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { env } from "../../../env";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import { trackedGenerateText } from "../../lib/tracked-generate-text";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
@@ -151,20 +152,23 @@ export function createProjectsAgent(ctx: ToolContext) {
 
   return async function runProjectsAgent(query: string): Promise<string> {
     console.log("[projects-agent] query:", query);
-    const result = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
-      system: `You are a projects assistant for the MSOCIETY community. Help with listing, viewing, creating, and managing projects and their team members. Only perform write operations (create/update/delete/add member/remove member) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
+    const result = await trackedGenerateText(
+      {
+        model: anthropic("claude-haiku-4-5-20251001"),
+        system: `You are a projects assistant for the MSOCIETY community. Help with listing, viewing, creating, and managing projects and their team members. Only perform write operations (create/update/delete/add member/remove member) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.
 
 ## GraphQL Schema
 
 ${schemaSDL}`,
-      messages: [{ role: "user", content: query }],
-      tools: projectsTools,
-      stopWhen: stepCountIs(5),
-      maxOutputTokens: 512,
-    });
+        messages: [{ role: "user", content: query }],
+        tools: projectsTools,
+        stopWhen: stepCountIs(5),
+        maxOutputTokens: 512,
+      },
+      { caller: "projects-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+    );
 
     console.log("[projects-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
     return result.text || "No project information found.";

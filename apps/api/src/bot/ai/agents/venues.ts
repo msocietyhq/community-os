@@ -1,9 +1,10 @@
-import { generateText, stepCountIs, tool } from "ai";
+import { stepCountIs, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { env } from "../../../env";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import { trackedGenerateText } from "../../lib/tracked-generate-text";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
@@ -113,20 +114,23 @@ export function createVenuesAgent(ctx: ToolContext) {
 
   return async function runVenuesAgent(query: string): Promise<string> {
     console.log("[venues-agent] query:", query);
-    const result = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
-      system: `You are a venues assistant for the MSOCIETY community. Help with listing, creating, updating, and deleting community venues. Only perform write operations when explicitly asked. Be concise, format for Telegram Markdown.
+    const result = await trackedGenerateText(
+      {
+        model: anthropic("claude-haiku-4-5-20251001"),
+        system: `You are a venues assistant for the MSOCIETY community. Help with listing, creating, updating, and deleting community venues. Only perform write operations when explicitly asked. Be concise, format for Telegram Markdown.
 
 Use the graphql_query tool for reads. Paginate when hasNext is true.
 
 ## GraphQL Schema
 
 ${schemaSDL}`,
-      messages: [{ role: "user", content: query }],
-      tools: venuesTools,
-      stopWhen: stepCountIs(5),
-      maxOutputTokens: 512,
-    });
+        messages: [{ role: "user", content: query }],
+        tools: venuesTools,
+        stopWhen: stepCountIs(5),
+        maxOutputTokens: 512,
+      },
+      { caller: "venues-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+    );
 
     console.log("[venues-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
     return result.text || "No venue information found.";

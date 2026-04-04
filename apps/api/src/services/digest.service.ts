@@ -9,8 +9,8 @@ import {
   desc,
   sql,
 } from "drizzle-orm";
-import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { trackedGenerateText } from "../bot/lib/tracked-generate-text";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { members } from "../db/schema/members";
@@ -19,6 +19,7 @@ import { projects, projectMembers } from "../db/schema/projects";
 import { events } from "../db/schema/events";
 import { eventsService } from "./events.service";
 import { reputationService } from "./reputation.service";
+import { aiUsageService } from "./ai-usage.service";
 import { env } from "../env";
 
 export interface ThisWeekInHistory {
@@ -52,6 +53,12 @@ export interface WeeklyDigest {
     userName: string;
     telegramUsername: string | null;
     score: number;
+  }[];
+  aiUsage: {
+    telegramUserId: number | null;
+    telegramUsername: string | null;
+    firstName: string;
+    totalTokens: number;
   }[];
 }
 
@@ -147,6 +154,9 @@ export const digestService = {
       5,
     );
 
+    // Top AI users this week
+    const aiUsage = await aiUsageService.getTopUsersByTokens(weekAgo, 3);
+
     return {
       periodStart: weekAgo,
       periodEnd: now,
@@ -162,6 +172,7 @@ export const digestService = {
       upcomingEvents,
       newProjects,
       reputationLeaders,
+      aiUsage,
     };
   },
 
@@ -350,9 +361,10 @@ export const digestService = {
             ? `Projects launched: ${best.projectNames.join(", ")}`
             : "No new projects that week.";
 
-        const result = await generateText({
-          model: anthropic("claude-haiku-4-5-20251001"),
-          prompt: `You're writing a "This week in ${best.year}" flashback for a Muslim tech community newsletter (MSOCIETY, Singapore).
+        const result = await trackedGenerateText(
+          {
+            model: anthropic("claude-haiku-4-5-20251001"),
+            prompt: `You're writing a "This week in ${best.year}" flashback for a Muslim tech community newsletter (MSOCIETY, Singapore).
 
 Here's what happened during this week in ${best.year}:
 - ${best.messageCount} chat messages were exchanged. Here are some of them:
@@ -361,7 +373,9 @@ Here's what happened during this week in ${best.year}:
 - ${projectList}
 
 Write a short, engaging 2-3 sentence summary. Be a little witty or nostalgic. Match the tone to the content — if serious topics came up, be respectful. Don't use emojis. Start with "This week in ${best.year}," and keep it under 280 characters.`,
-        });
+          },
+          { caller: "digest" },
+        );
 
         return {
           year: best.year,

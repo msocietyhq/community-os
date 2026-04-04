@@ -22,6 +22,12 @@ const SG_TIME = new Intl.DateTimeFormat("en-SG", {
   timeZone: "Asia/Singapore",
 });
 
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+  return String(tokens);
+}
+
 function escapeMarkdown(text: string): string {
   return text.replace(/[_*`[\]]/g, "\\$&");
 }
@@ -101,6 +107,16 @@ export function formatWeeklyDigest(digest: WeeklyDigest): string {
     for (const [i, r] of digest.reputationLeaders.entries()) {
       const name = displayName(r.telegramUsername, r.userName);
       lines.push(` ${i + 1}. ${name} (${r.score} pts)`);
+    }
+  }
+
+  // AI Usage
+  if (digest.aiUsage.length > 0) {
+    lines.push("");
+    lines.push("*AI Usage*");
+    for (const [i, u] of digest.aiUsage.entries()) {
+      const name = displayName(u.telegramUsername, u.firstName);
+      lines.push(` ${i + 1}. ${name} (${formatTokenCount(u.totalTokens)} tokens)`);
     }
   }
 

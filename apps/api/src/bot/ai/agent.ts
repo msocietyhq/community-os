@@ -1,4 +1,5 @@
-import { generateText, stepCountIs, type ModelMessage } from "ai";
+import { stepCountIs, type ModelMessage } from "ai";
+import { trackedGenerateText } from "../lib/tracked-generate-text";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
@@ -226,18 +227,20 @@ export async function runAgent({
   ];
 
   try {
-    const result = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
-      system: getSystemPrompt(uniqueMemories),
-      messages,
-      tools,
-      stopWhen: stepCountIs(10),
-      maxOutputTokens: 1024,
-    });
+    const result = await trackedGenerateText(
+      {
+        model: anthropic("claude-haiku-4-5-20251001"),
+        system: getSystemPrompt(uniqueMemories),
+        messages,
+        tools,
+        stopWhen: stepCountIs(10),
+        maxOutputTokens: 1024,
+      },
+      { caller: "main-agent", telegramUserId: senderTelegramId, chatId },
+    );
 
-    const { inputTokens, outputTokens } = result.usage;
     console.log(
-      `[main-agent] done — steps:${result.steps.length} tokens:${inputTokens ?? 0}in/${outputTokens ?? 0}out text:"${result.text?.slice(0, 120)}"`,
+      `[main-agent] done — steps:${result.steps.length} tokens:${result.usage.inputTokens ?? 0}in/${result.usage.outputTokens ?? 0}out text:"${result.text?.slice(0, 120)}"`,
     );
 
     const text =

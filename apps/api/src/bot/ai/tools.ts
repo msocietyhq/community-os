@@ -153,7 +153,10 @@ export function createTools(ctx: ToolContext) {
         query: z.string().describe("What to look up on GitHub"),
       }),
       execute: async ({ query }) => {
-        return runGithubAgent(query);
+        return runGithubAgent(query, {
+          telegramUserId: ctx.senderTelegramId,
+          chatId: ctx.chatId,
+        });
       },
     }),
 

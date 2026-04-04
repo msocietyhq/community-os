@@ -1,7 +1,7 @@
-import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { env } from "../../env";
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
+import { trackedGenerateText } from "./tracked-generate-text";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
@@ -54,17 +54,20 @@ export async function extractMemories(
     ? `${senderName} (@${senderUsername})`
     : senderName;
 
-  const result = await generateText({
-    model: anthropic("claude-haiku-4-5-20251001"),
-    system: EXTRACTION_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Message from ${senderLabel}:\n"${text}"`,
-      },
-    ],
-    maxOutputTokens: 256,
-  });
+  const result = await trackedGenerateText(
+    {
+      model: anthropic("claude-haiku-4-5-20251001"),
+      system: EXTRACTION_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Message from ${senderLabel}:\n"${text}"`,
+        },
+      ],
+      maxOutputTokens: 256,
+    },
+    { caller: "memory-extractor", telegramUserId: senderTelegramId, chatId },
+  );
 
   if (!result.text) return;
 

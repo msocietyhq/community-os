@@ -1,9 +1,10 @@
-import { generateText, stepCountIs, tool } from "ai";
+import { stepCountIs, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { env } from "../../../env";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import { trackedGenerateText } from "../../lib/tracked-generate-text";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
@@ -121,20 +122,23 @@ export function createMembersAgent(ctx: ToolContext) {
 
   return async function runMembersAgent(query: string): Promise<string> {
     console.log("[members-agent] query:", query);
-    const result = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
-      system: `You are a members assistant for the MSOCIETY community. Help with finding members, viewing profiles, updating the user's own profile, and checking reputation scores. Be concise, format for Telegram Markdown.
+    const result = await trackedGenerateText(
+      {
+        model: anthropic("claude-haiku-4-5-20251001"),
+        system: `You are a members assistant for the MSOCIETY community. Help with finding members, viewing profiles, updating the user's own profile, and checking reputation scores. Be concise, format for Telegram Markdown.
 
 Use the graphql_query tool for searching/browsing members. Use get_my_profile for the user's own profile. Paginate when hasNext is true.
 
 ## GraphQL Schema
 
 ${schemaSDL}`,
-      messages: [{ role: "user", content: query }],
-      tools: membersTools,
-      stopWhen: stepCountIs(5),
-      maxOutputTokens: 512,
-    });
+        messages: [{ role: "user", content: query }],
+        tools: membersTools,
+        stopWhen: stepCountIs(5),
+        maxOutputTokens: 512,
+      },
+      { caller: "members-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+    );
 
     console.log("[members-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
     return result.text || "No member information found.";

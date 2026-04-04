@@ -1,7 +1,8 @@
-import { generateText, stepCountIs, tool } from "ai";
+import { stepCountIs, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { env } from "../../../env";
+import { trackedGenerateText } from "../../lib/tracked-generate-text";
 
 const GITHUB_API = "https://api.github.com";
 const DEFAULT_ORG = "msocietyhq";
@@ -130,17 +131,23 @@ const githubTools = {
   }),
 };
 
-export async function runGithubAgent(query: string): Promise<string> {
-  const result = await generateText({
-    model: anthropic("claude-haiku-4-5-20251001"),
-    system: `You are a GitHub assistant. You can browse any public GitHub repository, org, or user.
+export async function runGithubAgent(
+  query: string,
+  trackingCtx?: { telegramUserId?: number | null; chatId?: string | null },
+): Promise<string> {
+  const result = await trackedGenerateText(
+    {
+      model: anthropic("claude-haiku-4-5-20251001"),
+      system: `You are a GitHub assistant. You can browse any public GitHub repository, org, or user.
 The MSOCIETY community's default org is ${DEFAULT_ORG} — use it when no owner is specified.
 Be concise. Format for Telegram Markdown. Present lists as compact one-liners.`,
-    messages: [{ role: "user", content: query }],
-    tools: githubTools,
-    stopWhen: stepCountIs(5),
-    maxOutputTokens: 512,
-  });
+      messages: [{ role: "user", content: query }],
+      tools: githubTools,
+      stopWhen: stepCountIs(5),
+      maxOutputTokens: 512,
+    },
+    { caller: "github-agent", ...trackingCtx },
+  );
 
   return result.text || "No GitHub information found.";
 }

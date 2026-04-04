@@ -1,9 +1,10 @@
-import { generateText, stepCountIs, tool } from "ai";
+import { stepCountIs, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { env } from "../../../env";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import { trackedGenerateText } from "../../lib/tracked-generate-text";
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
@@ -144,20 +145,23 @@ export function createEventsAgent(ctx: ToolContext) {
   return async function runEventsAgent(query: string): Promise<string> {
     console.log("[events-agent] query:", query);
     const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
-    const result = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
-      system: `You are an events assistant for the MSOCIETY community. Help with listing, viewing, RSVPing to, and managing events. Today's date is ${today}. Use ISO 8601 for dates. Only perform write operations (create/update/delete) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
+    const result = await trackedGenerateText(
+      {
+        model: anthropic("claude-haiku-4-5-20251001"),
+        system: `You are an events assistant for the MSOCIETY community. Help with listing, viewing, RSVPing to, and managing events. Today's date is ${today}. Use ISO 8601 for dates. Only perform write operations (create/update/delete) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name/title before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.
 
 ## GraphQL Schema
 
 ${schemaSDL}`,
-      messages: [{ role: "user", content: query }],
-      tools: eventsTools,
-      stopWhen: stepCountIs(5),
-      maxOutputTokens: 512,
-    });
+        messages: [{ role: "user", content: query }],
+        tools: eventsTools,
+        stopWhen: stepCountIs(5),
+        maxOutputTokens: 512,
+      },
+      { caller: "events-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+    );
 
     console.log("[events-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
     return result.text || "No event information found.";

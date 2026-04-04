@@ -1,10 +1,13 @@
 import { Elysia } from "elysia";
 import { env } from "../env";
 import { loginLinkService } from "../services/login-link.service";
+import { aiUsageService } from "../services/ai-usage.service";
 import { authModel } from "./models/auth";
+import { botModel } from "./models/bot";
 
 export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
   .use(authModel)
+  .use(botModel)
   .get(
     "/login",
     async ({ query }) => {
@@ -37,4 +40,24 @@ export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
       tags: ["Bot"],
       summary: "Bot health check",
     },
-  });
+  })
+  .get(
+    "/usage",
+    async ({ query }) => {
+      return aiUsageService.getUsageStats({
+        from: query.from,
+        to: query.to,
+        caller: query.caller,
+        model: query.model,
+      });
+    },
+    {
+      query: "bot.usageQuery",
+      detail: {
+        tags: ["Bot"],
+        summary: "Get AI usage statistics",
+        description:
+          "Returns aggregated AI SDK usage stats including total tokens, cost estimates, and breakdowns by caller, model, and day.",
+      },
+    },
+  );
