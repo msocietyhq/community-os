@@ -12,6 +12,7 @@ import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
 import { profileHandler } from "./handlers/profile";
 import { loginHandler } from "./handlers/login";
+import { usageHandler } from "./handlers/usage";
 import { PostgresSessionStorage } from "./session-storage";
 import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
@@ -97,6 +98,7 @@ export async function initBot(): Promise<void> {
   bot.use(projectsHandler);
   bot.use(reputationHandler);
   bot.use(digestHandler);
+  bot.use(usageHandler);
   bot.use(membershipHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);

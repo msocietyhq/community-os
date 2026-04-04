@@ -114,6 +114,56 @@ export const aiUsageService = {
     };
   },
 
+  async getUsageSummary(since: Date, telegramUserId?: number) {
+    const conditions = [
+      gte(aiUsage.createdAt, since),
+      eq(aiUsage.success, true),
+    ];
+    if (telegramUserId) {
+      conditions.push(eq(aiUsage.telegramUserId, telegramUserId));
+    }
+
+    const where = and(...conditions);
+
+    const rows = await db
+      .select({
+        model: aiUsage.model,
+        inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
+        outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+      })
+      .from(aiUsage)
+      .where(where)
+      .groupBy(aiUsage.model);
+
+    let totalInput = 0;
+    let totalOutput = 0;
+    let totalCost = 0;
+
+    for (const row of rows) {
+      totalInput += row.inputTokens;
+      totalOutput += row.outputTokens;
+      totalCost += estimateCost(row.model, row.inputTokens, row.outputTokens);
+    }
+
+    return {
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      estimatedCost: totalCost,
+    };
+  },
+
+  async resolveUserByUsername(username: string) {
+    const [row] = await db
+      .select({
+        telegramId: user.telegramId,
+        telegramUsername: user.telegramUsername,
+      })
+      .from(user)
+      .where(eq(sql`lower(${user.telegramUsername})`, username.toLowerCase()))
+      .limit(1);
+    return row ?? null;
+  },
+
   async getTopUsersByTokens(since: Date, limit: number) {
     return db
       .select({
