@@ -132,12 +132,13 @@ async function buildMessage(
 export const usageHandler = new Composer<BotContext>();
 
 usageHandler.command("usage", async (ctx) => {
-  const arg = ctx.match?.trim();
   const isPrivate = ctx.chat?.type === "private";
 
+  // Extract @username mention from the message (skip the bot_command entity)
+  const mention = ctx.message?.entities?.find((e) => e.type === "mention" && e.offset > 0);
   let username: string | undefined;
-  if (arg) {
-    username = arg.startsWith("@") ? arg.slice(1) : arg;
+  if (mention && ctx.message?.text) {
+    username = ctx.message.text.substring(mention.offset + 1, mention.offset + mention.length);
   } else if (isPrivate && ctx.from?.username) {
     username = ctx.from.username;
   }

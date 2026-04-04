@@ -103,10 +103,10 @@ export function formatWeeklyDigest(digest: WeeklyDigest): string {
   // Reputation Leaders
   if (digest.reputationLeaders.length > 0) {
     lines.push("");
-    lines.push("*Reputation Leaders*");
+    lines.push("*Reputation*");
     for (const [i, r] of digest.reputationLeaders.entries()) {
       const name = displayName(r.telegramUsername, r.userName);
-      lines.push(` ${i + 1}. ${name} (${r.score} pts)`);
+      lines.push(` ${i + 1}. ${name} (+${r.score} pts)`);
     }
   }
 
