@@ -189,6 +189,35 @@ function ProjectContent({ project }: { project: ProjectData }) {
     }
   ).members;
 
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/projects/${project.slug}`;
+    const shareData = {
+      title: `${project.name} — MSOCIETY`,
+      text: project.description ?? `${project.name} on MSOCIETY`,
+      url: shareUrl,
+    };
+
+    if (typeof navigator !== "undefined" && "share" in navigator) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err) {
+        // User aborted or share failed — fall through to clipboard only if not abort
+        if ((err as DOMException)?.name === "AbortError") return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareStatus("copied");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    } catch {
+      // Clipboard unavailable — nothing to do
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Title + badges */}
@@ -220,9 +249,53 @@ function ProjectContent({ project }: { project: ProjectData }) {
           </span>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
-          {project.name}
-        </h1>
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+            {project.name}
+          </h1>
+          <button
+            type="button"
+            onClick={handleShare}
+            aria-label="Share project"
+            className="shrink-0 inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+          >
+            {shareStatus === "copied" ? (
+              <>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m4.5 12.75 6 6 9-13.5"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Copied</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Share</span>
+              </>
+            )}
+          </button>
+        </div>
 
         {project.description && (
           <p className="text-lg text-gray-400 leading-relaxed">
