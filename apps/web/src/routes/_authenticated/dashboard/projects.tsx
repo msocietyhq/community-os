@@ -355,7 +355,7 @@ function ProjectCard({
       </div>
 
       {project.description && (
-        <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+        <p className="mt-2 text-sm text-muted-foreground line-clamp-3">
           {project.description}
         </p>
       )}
