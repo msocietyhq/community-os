@@ -56,6 +56,8 @@ helpHandler.command("start", async (ctx) => {
       `/projects — Browse community projects\n` +
       `/create_project — Submit a new project\n` +
       `/reputation — Check your reputation score\n` +
+      `/leaderboard — Top reputation scores\n` +
+      `/usage — View your AI usage stats\n` +
       `/profile — View or edit your community profile\n` +
       `/help — Show this help message\n\n` +
       `You can also mention @msocietybot with any question about the community!`,
@@ -69,6 +71,8 @@ helpHandler.command("help", async (ctx) => {
       `🚀 /projects — Browse community projects\n` +
       `➕ /create_project — Submit a new project\n` +
       `⭐ /reputation — Check your reputation score\n` +
+      `🏆 /leaderboard — Top reputation scores\n` +
+      `📊 /usage — View your AI usage stats\n` +
       `👤 /profile — View or edit your community profile\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
