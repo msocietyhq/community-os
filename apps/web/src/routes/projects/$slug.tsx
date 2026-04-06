@@ -1,8 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { api } from "../../lib/api-client";
+import { api, apiBase } from "../../lib/api-client";
 import { PublicHeader } from "../../components/public-header";
+
+const DEFAULT_TITLE = "MSOCIETY";
+const DEFAULT_DESCRIPTION = "MSOCIETY Community Portal";
+const DEFAULT_OG_IMAGE = "https://msociety.dev/og-default.png";
+
+function setMetaTag(key: string, content: string, attr: "name" | "property" = "name") {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+}
 
 export const Route = createFileRoute("/projects/$slug")({
   component: ProjectDetailPage,
@@ -48,6 +62,41 @@ function ProjectDetailPage() {
       return res.data;
     },
   });
+
+  useEffect(() => {
+    if (!data) return;
+
+    const title = `${data.name} — MSOCIETY`;
+    const description =
+      data.description ?? `${data.name} on MSOCIETY`;
+    const ogImage = `${apiBase}/api/v1/projects/${slug}/og-image`;
+    const pageUrl = `${window.location.origin}/projects/${slug}`;
+
+    document.title = title;
+    setMetaTag("description", description);
+    setMetaTag("og:title", title, "property");
+    setMetaTag("og:description", description, "property");
+    setMetaTag("og:image", ogImage, "property");
+    setMetaTag("og:url", pageUrl, "property");
+    setMetaTag("og:type", "article", "property");
+    setMetaTag("twitter:card", "summary_large_image");
+    setMetaTag("twitter:title", title);
+    setMetaTag("twitter:description", description);
+    setMetaTag("twitter:image", ogImage);
+
+    return () => {
+      document.title = DEFAULT_TITLE;
+      setMetaTag("description", DEFAULT_DESCRIPTION);
+      setMetaTag("og:title", DEFAULT_TITLE, "property");
+      setMetaTag("og:description", DEFAULT_DESCRIPTION, "property");
+      setMetaTag("og:image", DEFAULT_OG_IMAGE, "property");
+      setMetaTag("og:url", "https://msociety.dev", "property");
+      setMetaTag("og:type", "website", "property");
+      setMetaTag("twitter:title", DEFAULT_TITLE);
+      setMetaTag("twitter:description", DEFAULT_DESCRIPTION);
+      setMetaTag("twitter:image", DEFAULT_OG_IMAGE);
+    };
+  }, [data, slug]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white relative overflow-hidden">

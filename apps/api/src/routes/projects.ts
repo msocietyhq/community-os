@@ -4,6 +4,7 @@ import { createAuditEntry } from "../middleware/audit";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission, checkPermissionOn } from "../middleware/permissions";
 import { projectsService } from "../services/projects.service";
+import { generateProjectOgImage } from "../services/og.service";
 import { projectModel } from "./models/project";
 
 const idParams = z.object({ id: z.string().min(1) });
@@ -48,6 +49,30 @@ export const projectRoutes = new Elysia({ prefix: "/api/v1/projects" })
 		{
 			params: idParams,
 			detail: { tags: ["Projects"], summary: "Get project by ID or slug" },
+		},
+	)
+	.get(
+		"/:id/og-image",
+		async ({ params: { id } }) => {
+			const project = await projectsService.getById(id);
+			const png = await generateProjectOgImage(project);
+			// Copy into a fresh ArrayBuffer-backed Uint8Array to satisfy strict BodyInit typing.
+			const body = new Uint8Array(png.byteLength);
+			body.set(png);
+			return new Response(body, {
+				headers: {
+					"Content-Type": "image/png",
+					"Cache-Control":
+						"public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
+				},
+			});
+		},
+		{
+			params: idParams,
+			detail: {
+				tags: ["Projects"],
+				summary: "Generate OG image for a project (PNG, 1200x630)",
+			},
 		},
 	)
 	.guard({ auth: true }, (app) =>
