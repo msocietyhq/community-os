@@ -1,7 +1,8 @@
-import { eq, and, or, ilike, count, asc, sql } from "drizzle-orm";
+import { eq, and, or, ilike, isNull, count, asc, desc, sql } from "drizzle-orm";
 import { db } from "../db";
 import { members } from "../db/schema/members";
 import { user } from "../db/schema/auth";
+import { projects, projectMembers } from "../db/schema/projects";
 import { bot } from "../bot/bot";
 import { env } from "../env";
 import { paginatedResult, listOffset } from "../lib/pagination";
@@ -184,6 +185,66 @@ export const membersService = {
       .limit(1);
 
     return result[0] ?? null;
+  },
+
+  async findByUsername(username: string) {
+    const result = await db
+      .select({
+        id: members.id,
+        userId: members.userId,
+        githubHandle: members.githubHandle,
+        bio: members.bio,
+        skills: members.skills,
+        interests: members.interests,
+        currentCompany: members.currentCompany,
+        currentTitle: members.currentTitle,
+        education: members.education,
+        linkedinUrl: members.linkedinUrl,
+        websiteUrl: members.websiteUrl,
+        joinedAt: members.joinedAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+          telegramUsername: user.telegramUsername,
+        },
+      })
+      .from(members)
+      .innerJoin(user, eq(members.userId, user.id))
+      .where(ilike(user.telegramUsername, username))
+      .limit(1);
+
+    if (!result[0]) return null;
+
+    const member = result[0];
+
+    const memberProjects = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        slug: projects.slug,
+        description: projects.description,
+        nature: projects.nature,
+        platforms: projects.platforms,
+        status: projects.status,
+        url: projects.url,
+        repoUrl: projects.repoUrl,
+        isEndorsed: projects.isEndorsed,
+        role: projectMembers.role,
+        createdAt: projects.createdAt,
+      })
+      .from(projectMembers)
+      .innerJoin(projects, eq(projectMembers.projectId, projects.id))
+      .where(
+        and(
+          eq(projectMembers.userId, member.userId),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .orderBy(desc(projects.createdAt));
+
+    return { ...member, projects: memberProjects };
   },
 
   async ban(userId: string, opts?: { skipTelegram?: boolean }) {

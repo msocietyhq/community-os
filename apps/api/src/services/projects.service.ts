@@ -186,6 +186,7 @@ export const projectsService = {
 				name: user.name,
 				image: user.image,
 				role: projectMembers.role,
+				telegramUsername: user.telegramUsername,
 			})
 			.from(projectMembers)
 			.innerJoin(user, eq(projectMembers.userId, user.id))

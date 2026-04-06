@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { api } from "../../lib/api-client";
 import { PublicHeader } from "../../components/public-header";
 
@@ -30,7 +31,14 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 function ProjectDetailPage() {
   const { slug } = Route.useParams();
+  const [canGoBack, setCanGoBack] = useState(false);
 
+  useEffect(() => {
+    const fromSameOrigin =
+      !!document.referrer &&
+      new URL(document.referrer).origin === window.location.origin;
+    setCanGoBack(fromSameOrigin);
+  }, []);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["project", slug],
@@ -62,26 +70,49 @@ function ProjectDetailPage() {
       {/* Content */}
       <main className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-40 pb-24">
         {/* Back link */}
-        <Link
-          to="/projects"
-          search={data?.nature ? { nature: data.nature } : {}}
-          className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-8"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
+        {canGoBack ? (
+          <button
+            type="button"
+            onClick={() => window.history.back()}
+            className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-8"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
-            />
-          </svg>
-          Back to Projects
-        </Link>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+              />
+            </svg>
+            Back
+          </button>
+        ) : (
+          <Link
+            to="/projects"
+            search={data?.nature ? { nature: data.nature } : {}}
+            className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-8"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+              />
+            </svg>
+            Back to Projects
+          </Link>
+        )}
 
         {isLoading ? (
           <div className="space-y-6">
@@ -126,6 +157,7 @@ function ProjectContent({ project }: { project: ProjectData }) {
         name: string;
         image: string | null;
         role: string;
+        telegramUsername: string | null;
       }>;
     }
   ).members;
@@ -262,11 +294,9 @@ function ProjectContent({ project }: { project: ProjectData }) {
                 .join("")
                 .toUpperCase()
                 .slice(0, 2);
-              return (
-                <div
-                  key={member.id}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02]"
-                >
+
+              const cardContent = (
+                <>
                   {member.image ? (
                     <img
                       src={member.image}
@@ -288,6 +318,28 @@ function ProjectContent({ project }: { project: ProjectData }) {
                       {member.role}
                     </p>
                   </div>
+                </>
+              );
+
+              if (member.telegramUsername) {
+                return (
+                  <Link
+                    key={member.id}
+                    to="/member/$username"
+                    params={{ username: member.telegramUsername }}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
+                  >
+                    {cardContent}
+                  </Link>
+                );
+              }
+
+              return (
+                <div
+                  key={member.id}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02]"
+                >
+                  {cardContent}
                 </div>
               );
             })}

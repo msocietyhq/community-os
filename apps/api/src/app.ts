@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { auth, authOpenAPI } from "./auth";
 import { healthRoutes } from "./routes/health";
+import { publicMemberRoutes } from "./routes/public-members";
 import { memberRoutes } from "./routes/members";
 import { eventRoutes } from "./routes/events";
 import { projectRoutes } from "./routes/projects";
@@ -100,6 +101,7 @@ export const app = new Elysia()
   )
   .mount(auth.handler)
   .use(healthRoutes)
+  .use(publicMemberRoutes)
   .use(memberRoutes)
   .use(eventRoutes)
   .use(projectRoutes)

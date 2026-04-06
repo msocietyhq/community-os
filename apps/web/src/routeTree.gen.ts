@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as EventsIndexRouteImport } from './routes/events/index'
 import { Route as ProjectsSlugRouteImport } from './routes/projects/$slug'
+import { Route as MemberUsernameRouteImport } from './routes/member/$username'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSearchRouteImport } from './routes/_authenticated/dashboard/search'
 import { Route as AuthenticatedDashboardProjectsRouteImport } from './routes/_authenticated/dashboard/projects'
@@ -50,6 +51,11 @@ const EventsIndexRoute = EventsIndexRouteImport.update({
 const ProjectsSlugRoute = ProjectsSlugRouteImport.update({
   id: '/projects/$slug',
   path: '/projects/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemberUsernameRoute = MemberUsernameRouteImport.update({
+  id: '/member/$username',
+  path: '/member/$username',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedDashboardIndexRoute =
@@ -98,6 +104,7 @@ const AuthenticatedDashboardEventsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/member/$username': typeof MemberUsernameRoute
   '/projects/$slug': typeof ProjectsSlugRoute
   '/events/': typeof EventsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/member/$username': typeof MemberUsernameRoute
   '/projects/$slug': typeof ProjectsSlugRoute
   '/events': typeof EventsIndexRoute
   '/projects': typeof ProjectsIndexRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/member/$username': typeof MemberUsernameRoute
   '/projects/$slug': typeof ProjectsSlugRoute
   '/events/': typeof EventsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/member/$username'
     | '/projects/$slug'
     | '/events/'
     | '/projects/'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/member/$username'
     | '/projects/$slug'
     | '/events'
     | '/projects'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/login'
+    | '/member/$username'
     | '/projects/$slug'
     | '/events/'
     | '/projects/'
@@ -189,6 +201,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  MemberUsernameRoute: typeof MemberUsernameRoute
   ProjectsSlugRoute: typeof ProjectsSlugRoute
   EventsIndexRoute: typeof EventsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
@@ -236,6 +249,13 @@ declare module '@tanstack/react-router' {
       path: '/projects/$slug'
       fullPath: '/projects/$slug'
       preLoaderRoute: typeof ProjectsSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/member/$username': {
+      id: '/member/$username'
+      path: '/member/$username'
+      fullPath: '/member/$username'
+      preLoaderRoute: typeof MemberUsernameRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/dashboard/': {
@@ -318,6 +338,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
+  MemberUsernameRoute: MemberUsernameRoute,
   ProjectsSlugRoute: ProjectsSlugRoute,
   EventsIndexRoute: EventsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
