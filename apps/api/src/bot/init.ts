@@ -7,14 +7,13 @@ import { projectsHandler } from "./handlers/projects";
 import { reputationHandler } from "./handlers/reputation";
 import { digestHandler } from "./handlers/digest";
 import { startDigestScheduler, stopDigestScheduler } from "./lib/digest-scheduler";
-import { membershipHandler } from "./handlers/membership";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
 import { profileHandler } from "./handlers/profile";
 import { loginHandler } from "./handlers/login";
 import { usageHandler } from "./handlers/usage";
 import { PostgresSessionStorage } from "./session-storage";
-import { autoRegisterMiddleware, warmUpKnownIds } from "./lib/auto-register";
+import { membershipMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
 import { telegramMessageLoggerMiddleware } from "./lib/telegram-message-logger";
 import { env } from "../env";
@@ -80,7 +79,7 @@ export async function initBot(): Promise<void> {
   // Log all messages to DB for group context (after group guard)
   bot.use(telegramMessageLoggerMiddleware);
   // Auto-register group members before session/handlers
-  bot.use(autoRegisterMiddleware);
+  bot.use(membershipMiddleware);
   // Sync profile photo on any interaction (at most once per 24h)
   bot.use(photoSyncMiddleware);
 
@@ -99,7 +98,6 @@ export async function initBot(): Promise<void> {
   bot.use(reputationHandler);
   bot.use(digestHandler);
   bot.use(usageHandler);
-  bot.use(membershipHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);
 
