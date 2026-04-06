@@ -22,5 +22,5 @@ digestHandler.command("digest_history", async (ctx) => {
 
   const message = formatHistoryDigest(history);
 
-  await ctx.reply(message, { parse_mode: "Markdown" });
+  await ctx.reply(message, { parse_mode: "HTML" });
 });

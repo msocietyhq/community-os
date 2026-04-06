@@ -185,9 +185,12 @@ export const digestService = {
     const yearData: {
       year: number;
       messageCount: number;
-      messages: string[];
-      highlightedMessage: string | null;
-      highlightedMessageAuthor: string | null;
+      messages: {
+        messageId: number;
+        text: string;
+        fromUsername: string | null;
+        fromFirstName: string | null;
+      }[];
       eventTitles: string[];
       projectNames: string[];
     }[] = [];
@@ -269,89 +272,50 @@ export const digestService = {
         messageCount + yearEvents.length + yearProjects.length;
 
       if (totalActivity > 0) {
-        // Find the most-replied-to message to highlight
-        const replyCounts = new Map<number, number>();
-        for (const m of messagesRaw) {
-          if (m.replyToMessageId) {
-            replyCounts.set(
-              m.replyToMessageId,
-              (replyCounts.get(m.replyToMessageId) ?? 0) + 1,
-            );
-          }
-        }
-
-        let highlightedMessage: string | null = null;
-        let highlightedMessageAuthor: string | null = null;
-
-        const resolveAuthor = (msg: { fromUsername: string | null; fromFirstName: string | null }) =>
-          msg.fromUsername ? `@${msg.fromUsername}` : msg.fromFirstName ?? null;
-
-        if (replyCounts.size > 0) {
-          const bestId = [...replyCounts.entries()].sort(
-            (a, b) => b[1] - a[1],
-          )[0]![0];
-          // The parent message may not be in the sample — look it up
-          const bestMsg = messagesRaw.find((m) => m.messageId === bestId);
-          if (bestMsg?.text) {
-            highlightedMessage = bestMsg.text;
-            highlightedMessageAuthor = resolveAuthor(bestMsg);
-          } else {
-            const [found] = await db
-              .select({
-                text: telegramMessages.text,
-                fromFirstName: telegramMessages.fromFirstName,
-                fromUsername: telegramMessages.fromUsername,
-              })
-              .from(telegramMessages)
-              .where(
-                and(
-                  eq(telegramMessages.messageId, bestId),
-                  groupFilter
-                    ? eq(telegramMessages.chatId, groupId!)
-                    : undefined,
-                ),
-              )
-              .limit(1);
-            highlightedMessage = found?.text ?? null;
-            highlightedMessageAuthor = found ? resolveAuthor(found) : null;
-          }
-        }
-        if (!highlightedMessage && messagesRaw.length > 0) {
-          const first = messagesRaw[0]!;
-          highlightedMessage = first.text ?? null;
-          highlightedMessageAuthor = resolveAuthor(first);
-        }
-
         yearData.push({
           year: y,
           messageCount,
           messages: messagesRaw
-            .map((m) => m.text)
-            .filter((t): t is string => !!t),
-          highlightedMessage,
-          highlightedMessageAuthor,
+            .filter((m): m is typeof m & { text: string } => !!m.text)
+            .map((m) => ({
+              messageId: m.messageId,
+              text: m.text,
+              fromUsername: m.fromUsername,
+              fromFirstName: m.fromFirstName,
+            })),
           eventTitles: yearEvents.map((e) => e.title),
           projectNames: yearProjects.map((p) => p.name),
         });
       }
     }
 
-    // Pick the most active year
+    // Pick a year weighted by activity (more active years are more likely)
     if (yearData.length > 0) {
-      yearData.sort(
-        (a, b) =>
-          b.messageCount +
-          b.eventTitles.length +
-          b.projectNames.length -
-          (a.messageCount + a.eventTitles.length + a.projectNames.length),
+      const weights = yearData.map(
+        (d) => d.messageCount + d.eventTitles.length + d.projectNames.length,
       );
-      // Safe: yearData.length > 0 checked above
-      const best = yearData[0]!;
+      const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+      let rand = Math.random() * totalWeight;
+      let bestIndex = 0;
+      for (let i = 0; i < weights.length; i++) {
+        rand -= weights[i]!;
+        if (rand <= 0) {
+          bestIndex = i;
+          break;
+        }
+      }
+      const best = yearData[bestIndex]!;
 
       try {
         const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-        const messageSample = best.messages.slice(0, 30).join("\n- ");
+        const messageSample = best.messages
+          .slice(0, 30)
+          .map((m) => {
+            const author = m.fromUsername ? `@${m.fromUsername}` : m.fromFirstName ?? "unknown";
+            return `[${m.messageId}] ${author}: ${m.text}`;
+          })
+          .join("\n");
         const eventList =
           best.eventTitles.length > 0
             ? `Events held: ${best.eventTitles.join(", ")}`
@@ -368,21 +332,47 @@ export const digestService = {
 
 Here's what happened during this week in ${best.year}:
 - ${best.messageCount} chat messages were exchanged. Here are some of them:
-- ${messageSample}
+${messageSample}
 - ${eventList}
 - ${projectList}
 
-Write a short, engaging 2-3 sentence summary. Be a little witty or nostalgic. Match the tone to the content — if serious topics came up, be respectful. Don't use emojis. Start with "This week in ${best.year}," and keep it under 280 characters.`,
+Do two things (output raw content only — no headers, labels, or markdown formatting like "Summary:" or "Quote:"):
+1. Write a short, engaging 2-3 sentence flashback. Be a little witty or nostalgic. Match the tone to the content — if serious topics came up, be respectful. Don't use emojis. Start with "This week in ${best.year}," and keep it under 280 characters.
+2. Pick ONE message that would make the best standalone quote — something insightful, funny, or representative of the community vibe. On the very last line, output QUOTE: followed by the message ID number. If no message is quote-worthy, output QUOTE: none`,
           },
           { caller: "digest" },
         );
 
+        // Parse summary and quote ID from AI response
+        const responseText = result.text.trim();
+        const quoteMatch = responseText.match(/\nQUOTE:\s*(.+)$/i);
+        const summary = quoteMatch
+          ? responseText.slice(0, quoteMatch.index).trim()
+          : responseText;
+
+        let highlightedMessage: string | undefined;
+        let highlightedMessageAuthor: string | undefined;
+
+        if (quoteMatch) {
+          const quoteValue = quoteMatch[1]!.trim();
+          if (quoteValue !== "none") {
+            const quoteId = Number(quoteValue);
+            const quoted = best.messages.find((m) => m.messageId === quoteId);
+            if (quoted) {
+              highlightedMessage = quoted.text;
+              highlightedMessageAuthor = quoted.fromUsername
+                ? `@${quoted.fromUsername}`
+                : quoted.fromFirstName ?? undefined;
+            }
+          }
+        }
+
         return {
           year: best.year,
-          summary: result.text.trim(),
+          summary,
           type: "topics",
-          highlightedMessage: best.highlightedMessage ?? undefined,
-          highlightedMessageAuthor: best.highlightedMessageAuthor ?? undefined,
+          highlightedMessage,
+          highlightedMessageAuthor,
         };
       } catch (err) {
         console.error("AI generation failed for history digest:", err);

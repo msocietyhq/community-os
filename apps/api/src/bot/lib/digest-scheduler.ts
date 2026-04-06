@@ -64,7 +64,7 @@ export function startDigestScheduler(): void {
           const message = formatHistoryDigest(history);
 
           await bot.api.sendMessage(groupId, message, {
-            parse_mode: "Markdown",
+            parse_mode: "HTML",
           });
 
           console.log("History digest sent successfully");
