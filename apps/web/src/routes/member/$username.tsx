@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { api } from "../../lib/api-client";
+import { api, apiBase } from "../../lib/api-client";
+import { resetMetaToDefaults, setMetaTag } from "../../lib/meta";
 import { PublicHeader } from "../../components/public-header";
 
 export const Route = createFileRoute("/member/$username")({
@@ -39,6 +40,35 @@ function MemberProfilePage() {
       return res.data;
     },
   });
+
+  useEffect(() => {
+    if (!data || "message" in data) return;
+
+    const name = data.user.name;
+    const title = `${name} — MSOCIETY`;
+    const fallbackDesc =
+      [data.currentTitle, data.currentCompany].filter(Boolean).join(" · ") ||
+      `${name}'s projects on MSOCIETY`;
+    const description = data.bio ?? fallbackDesc;
+    const ogImage = `${apiBase}/api/v1/members/username/${username}/og-image`;
+    const pageUrl = `${window.location.origin}/member/${username}`;
+
+    document.title = title;
+    setMetaTag("description", description);
+    setMetaTag("og:title", title, "property");
+    setMetaTag("og:description", description, "property");
+    setMetaTag("og:image", ogImage, "property");
+    setMetaTag("og:url", pageUrl, "property");
+    setMetaTag("og:type", "profile", "property");
+    setMetaTag("twitter:card", "summary_large_image");
+    setMetaTag("twitter:title", title);
+    setMetaTag("twitter:description", description);
+    setMetaTag("twitter:image", ogImage);
+
+    return () => {
+      resetMetaToDefaults();
+    };
+  }, [data, username]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white relative overflow-hidden">

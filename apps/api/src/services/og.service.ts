@@ -19,6 +19,20 @@ type ProjectForOg = {
 	members: ProjectMember[];
 };
 
+export type MemberForOg = {
+	user: {
+		name: string;
+		image: string | null;
+		telegramUsername: string | null;
+	};
+	bio: string | null;
+	currentTitle: string | null;
+	currentCompany: string | null;
+	skills: string[] | null;
+	joinedAt: Date | string | null;
+	projectCount: number;
+};
+
 // Google Fonts serves TTF (rather than WOFF2) when a plain, non-browser
 // User-Agent is used. We fetch the CSS once, extract the TTF URLs for the
 // weights we need, download them, and cache in memory for the process lifetime.
@@ -65,6 +79,27 @@ async function loadFonts() {
 	return fontCache;
 }
 
+/**
+ * Fetch a remote image and return it as a base64 data URL so satori can embed
+ * it deterministically. Returns null on any failure (missing url, non-ok
+ * response, network error) — callers should fall back to a placeholder.
+ */
+async function fetchImageAsDataUrl(
+	url: string | null,
+): Promise<string | null> {
+	if (!url) return null;
+	try {
+		const res = await fetch(url);
+		if (!res.ok) return null;
+		const contentType = res.headers.get("content-type") ?? "image/jpeg";
+		const buf = await res.arrayBuffer();
+		const base64 = Buffer.from(buf).toString("base64");
+		return `data:${contentType};base64,${base64}`;
+	} catch {
+		return null;
+	}
+}
+
 const NATURE_LABELS: Record<ProjectForOg["nature"], string> = {
 	community: "Community",
 	startup: "Startup",
@@ -107,7 +142,7 @@ function getInitials(name: string): string {
 		.toUpperCase();
 }
 
-// Deterministic gradient palette for member avatars — picks one based on index.
+// Deterministic gradient palette for avatar placeholders — picks one by index.
 const AVATAR_GRADIENTS = [
 	"linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)",
 	"linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%)",
@@ -116,11 +151,26 @@ const AVATAR_GRADIENTS = [
 	"linear-gradient(135deg, #10b981 0%, #06b6d4 100%)",
 ];
 
+function gradientFor(seed: string): string {
+	let hash = 0;
+	for (let i = 0; i < seed.length; i++) {
+		hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+	}
+	return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
+}
+
+// ---------------------------------------------------------------------------
+// Satori VDOM primitives
+// ---------------------------------------------------------------------------
+
 type VNode = {
 	type: string;
 	props: {
 		style?: Record<string, string | number>;
 		children?: VNode | VNode[] | string | null;
+		src?: string;
+		width?: number;
+		height?: number;
 	};
 };
 
@@ -128,76 +178,75 @@ function el(
 	style: Record<string, string | number>,
 	children?: VNode | VNode[] | string | null,
 ): VNode {
-	return { type: "div", props: { style: { display: "flex", ...style }, children } };
+	return {
+		type: "div",
+		props: { style: { display: "flex", ...style }, children },
+	};
 }
 
-/**
- * Build a satori VDOM (React-less) for the OG image card.
- */
-function buildCard(project: ProjectForOg): VNode {
-	const natureColor = NATURE_COLORS[project.nature];
-	const name = truncate(project.name, 70);
-	const description = project.description
-		? truncate(project.description, 170)
-		: null;
-	const memberCount = project.members.length;
-	const webUrl = env.WEB_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
-	const backdropInitial = (name[0] ?? "M").toUpperCase();
-	const visibleMembers = project.members.slice(0, 3);
-	const overflow = Math.max(0, memberCount - visibleMembers.length);
+function spacer(): VNode {
+	return el({ flexGrow: 1, width: "100%" });
+}
 
-	// --- Background orbs ---
-	const topLeftOrb: VNode = {
-		type: "div",
-		props: {
-			style: {
-				display: "flex",
-				position: "absolute",
-				top: "-280px",
-				left: "-180px",
-				width: "720px",
-				height: "720px",
-				borderRadius: "9999px",
-				background:
-					"radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, rgba(59, 130, 246, 0) 65%)",
-			},
-		},
-	};
-	const bottomRightOrb: VNode = {
-		type: "div",
-		props: {
-			style: {
-				display: "flex",
-				position: "absolute",
-				bottom: "-300px",
-				right: "-200px",
-				width: "800px",
-				height: "800px",
-				borderRadius: "9999px",
-				background:
-					"radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(99, 102, 241, 0) 65%)",
-			},
-		},
-	};
-	const centerOrb: VNode = {
-		type: "div",
-		props: {
-			style: {
-				display: "flex",
-				position: "absolute",
-				top: "200px",
-				right: "300px",
-				width: "400px",
-				height: "400px",
-				borderRadius: "9999px",
-				background:
-					"radial-gradient(circle, rgba(14, 165, 233, 0.15) 0%, rgba(14, 165, 233, 0) 70%)",
-			},
-		},
-	};
+// ---------------------------------------------------------------------------
+// Shared frame pieces used by both project and member cards
+// ---------------------------------------------------------------------------
 
-	// --- Decorative giant initial in background ---
-	const backdrop: VNode = {
+function buildOrbs(): VNode[] {
+	return [
+		{
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					position: "absolute",
+					top: "-280px",
+					left: "-180px",
+					width: "720px",
+					height: "720px",
+					borderRadius: "9999px",
+					background:
+						"radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, rgba(59, 130, 246, 0) 65%)",
+				},
+			},
+		},
+		{
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					position: "absolute",
+					bottom: "-300px",
+					right: "-200px",
+					width: "800px",
+					height: "800px",
+					borderRadius: "9999px",
+					background:
+						"radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(99, 102, 241, 0) 65%)",
+				},
+			},
+		},
+		{
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					position: "absolute",
+					top: "200px",
+					right: "300px",
+					width: "400px",
+					height: "400px",
+					borderRadius: "9999px",
+					background:
+						"radial-gradient(circle, rgba(14, 165, 233, 0.15) 0%, rgba(14, 165, 233, 0) 70%)",
+				},
+			},
+		},
+	];
+}
+
+function buildBackdrop(char: string): VNode {
+	return {
 		type: "div",
 		props: {
 			style: {
@@ -211,11 +260,12 @@ function buildCard(project: ProjectForOg): VNode {
 				lineHeight: 1,
 				letterSpacing: "-0.05em",
 			},
-			children: backdropInitial,
+			children: char,
 		},
 	};
+}
 
-	// --- Logo mark + wordmark ---
+function buildWordmark(): VNode {
 	const logoMark: VNode = {
 		type: "div",
 		props: {
@@ -246,14 +296,10 @@ function buildCard(project: ProjectForOg): VNode {
 		},
 	};
 
-	const wordmark: VNode = {
+	return {
 		type: "div",
 		props: {
-			style: {
-				display: "flex",
-				alignItems: "center",
-				gap: "18px",
-			},
+			style: { display: "flex", alignItems: "center", gap: "18px" },
 			children: [
 				logoMark,
 				{
@@ -272,6 +318,118 @@ function buildCard(project: ProjectForOg): VNode {
 			],
 		},
 	};
+}
+
+function buildHeaderRow(rightSlot: VNode | null): VNode {
+	const children: VNode[] = [buildWordmark()];
+	if (rightSlot) children.push(rightSlot);
+	else children.push(el({})); // empty spacer for justify-content
+	return {
+		type: "div",
+		props: {
+			style: {
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "space-between",
+				width: "100%",
+			},
+			children,
+		},
+	};
+}
+
+function buildUrlPill(text: string): VNode {
+	return {
+		type: "div",
+		props: {
+			style: {
+				display: "flex",
+				alignItems: "center",
+				gap: "12px",
+				padding: "14px 24px",
+				borderRadius: "9999px",
+				border: "1px solid rgba(255, 255, 255, 0.1)",
+				backgroundColor: "rgba(255, 255, 255, 0.04)",
+			},
+			children: [
+				{
+					type: "div",
+					props: {
+						style: {
+							display: "flex",
+							fontSize: "22px",
+							fontWeight: 500,
+							color: "#e2e8f0",
+						},
+						children: text,
+					},
+				},
+				{
+					type: "div",
+					props: {
+						style: {
+							display: "flex",
+							fontSize: "22px",
+							fontWeight: 500,
+							color: "#60a5fa",
+						},
+						children: "→",
+					},
+				},
+			],
+		},
+	};
+}
+
+function buildRoot(
+	headerRight: VNode | null,
+	backdropChar: string,
+	body: VNode,
+	footer: VNode,
+): VNode {
+	return {
+		type: "div",
+		props: {
+			style: {
+				width: "1200px",
+				height: "630px",
+				display: "flex",
+				flexDirection: "column",
+				backgroundColor: "#020617",
+				padding: "72px",
+				position: "relative",
+				fontFamily: "Inter",
+				color: "#ffffff",
+				overflow: "hidden",
+			},
+			children: [
+				...buildOrbs(),
+				buildBackdrop(backdropChar),
+				buildHeaderRow(headerRight),
+				spacer(),
+				body,
+				spacer(),
+				footer,
+			],
+		},
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Project card
+// ---------------------------------------------------------------------------
+
+function buildProjectCard(project: ProjectForOg): VNode {
+	const natureColor = NATURE_COLORS[project.nature];
+	const name = truncate(project.name, 70);
+	const description = project.description
+		? truncate(project.description, 170)
+		: null;
+	const memberCount = project.members.length;
+	const webUrl = env.WEB_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+	const backdropInitial = (name[0] ?? "M").toUpperCase();
+	const visibleMembers = project.members.slice(0, 3);
+	const overflow = Math.max(0, memberCount - visibleMembers.length);
 
 	// --- Badges ---
 	const badges: VNode[] = [];
@@ -311,26 +469,11 @@ function buildCard(project: ProjectForOg): VNode {
 			children: NATURE_LABELS[project.nature],
 		},
 	});
-
-	const headerRow: VNode = {
+	const headerRight: VNode = {
 		type: "div",
 		props: {
-			style: {
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "space-between",
-				width: "100%",
-			},
-			children: [
-				wordmark,
-				{
-					type: "div",
-					props: {
-						style: { display: "flex", gap: "12px" },
-						children: badges,
-					},
-				},
-			],
+			style: { display: "flex", gap: "12px" },
+			children: badges,
 		},
 	};
 
@@ -492,47 +635,6 @@ function buildCard(project: ProjectForOg): VNode {
 		},
 	};
 
-	const urlBlock: VNode = {
-		type: "div",
-		props: {
-			style: {
-				display: "flex",
-				alignItems: "center",
-				gap: "12px",
-				padding: "14px 24px",
-				borderRadius: "9999px",
-				border: "1px solid rgba(255, 255, 255, 0.1)",
-				backgroundColor: "rgba(255, 255, 255, 0.04)",
-			},
-			children: [
-				{
-					type: "div",
-					props: {
-						style: {
-							display: "flex",
-							fontSize: "22px",
-							fontWeight: 500,
-							color: "#e2e8f0",
-						},
-						children: webUrl,
-					},
-				},
-				{
-					type: "div",
-					props: {
-						style: {
-							display: "flex",
-							fontSize: "22px",
-							fontWeight: 500,
-							color: "#60a5fa",
-						},
-						children: "→",
-					},
-				},
-			],
-		},
-	};
-
 	const footerRow: VNode = {
 		type: "div",
 		props: {
@@ -542,78 +644,309 @@ function buildCard(project: ProjectForOg): VNode {
 				justifyContent: "space-between",
 				width: "100%",
 			},
-			children: [membersBlock, urlBlock],
+			children: [membersBlock, buildUrlPill(`${webUrl}/projects/${project.slug}`)],
 		},
 	};
 
-	// --- Spacers ---
-	const spacer = (): VNode =>
-		el({ flexGrow: 1, width: "100%" });
+	return buildRoot(headerRight, backdropInitial, contentRow, footerRow);
+}
 
-	// --- Root ---
-	return {
+// ---------------------------------------------------------------------------
+// Member card
+// ---------------------------------------------------------------------------
+
+function formatJoinedLabel(joinedAt: Date | string | null): string | null {
+	if (!joinedAt) return null;
+	const d = joinedAt instanceof Date ? joinedAt : new Date(joinedAt);
+	if (Number.isNaN(d.getTime())) return null;
+	const month = d.toLocaleString("en-US", { month: "short" });
+	return `Member since ${month} ${d.getFullYear()}`;
+}
+
+function buildMemberCard(
+	member: MemberForOg,
+	avatarDataUrl: string | null,
+): VNode {
+	const name = truncate(member.user.name, 40);
+	const backdropInitial = (name[0] ?? "M").toUpperCase();
+	const telegramUsername = member.user.telegramUsername ?? "";
+	const webUrl = env.WEB_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+	// --- Header right slot: "Member since …" ---
+	const joinedLabel = formatJoinedLabel(member.joinedAt);
+	const headerRight: VNode | null = joinedLabel
+		? {
+				type: "div",
+				props: {
+					style: {
+						display: "flex",
+						fontSize: "20px",
+						fontWeight: 500,
+						color: "#94a3b8",
+					},
+					children: joinedLabel,
+				},
+			}
+		: null;
+
+	// --- Avatar block (image or gradient fallback) ---
+	const AVATAR_SIZE = 180;
+	const avatarBlock: VNode = avatarDataUrl
+		? {
+				type: "div",
+				props: {
+					style: {
+						display: "flex",
+						width: `${AVATAR_SIZE}px`,
+						height: `${AVATAR_SIZE}px`,
+						borderRadius: "9999px",
+						overflow: "hidden",
+						border: "4px solid rgba(255, 255, 255, 0.08)",
+						boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
+					},
+					children: {
+						type: "img",
+						props: {
+							src: avatarDataUrl,
+							width: AVATAR_SIZE,
+							height: AVATAR_SIZE,
+							style: {
+								width: `${AVATAR_SIZE}px`,
+								height: `${AVATAR_SIZE}px`,
+								objectFit: "cover",
+							},
+						},
+					},
+				},
+			}
+		: {
+				type: "div",
+				props: {
+					style: {
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						width: `${AVATAR_SIZE}px`,
+						height: `${AVATAR_SIZE}px`,
+						borderRadius: "9999px",
+						background: gradientFor(name),
+						border: "4px solid rgba(255, 255, 255, 0.08)",
+						boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
+						fontSize: "72px",
+						fontWeight: 700,
+						color: "#ffffff",
+						letterSpacing: "-0.02em",
+					},
+					children: getInitials(name) || "?",
+				},
+			};
+
+	// --- Identity column (name + title/company + bio) ---
+	const identityChildren: VNode[] = [];
+
+	identityChildren.push({
 		type: "div",
 		props: {
 			style: {
-				width: "1200px",
-				height: "630px",
+				display: "flex",
+				fontSize: "76px",
+				fontWeight: 700,
+				lineHeight: 1.05,
+				letterSpacing: "-0.03em",
+				color: "#ffffff",
+			},
+			children: name,
+		},
+	});
+
+	const titleLineParts: string[] = [];
+	if (member.currentTitle) titleLineParts.push(member.currentTitle);
+	if (member.currentCompany) titleLineParts.push(member.currentCompany);
+	const titleLine = titleLineParts.join(" · ");
+	if (titleLine) {
+		identityChildren.push({
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					fontSize: "28px",
+					fontWeight: 500,
+					color: "#cbd5e1",
+				},
+				children: truncate(titleLine, 80),
+			},
+		});
+	}
+
+	if (member.bio) {
+		identityChildren.push({
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					fontSize: "24px",
+					fontWeight: 400,
+					lineHeight: 1.4,
+					color: "#94a3b8",
+					marginTop: "8px",
+				},
+				children: truncate(member.bio, 160),
+			},
+		});
+	}
+
+	const identityColumn: VNode = {
+		type: "div",
+		props: {
+			style: {
 				display: "flex",
 				flexDirection: "column",
-				backgroundColor: "#020617",
-				padding: "72px",
-				position: "relative",
-				fontFamily: "Inter",
-				color: "#ffffff",
-				overflow: "hidden",
+				gap: "14px",
+				maxWidth: "820px",
 			},
-			children: [
-				topLeftOrb,
-				bottomRightOrb,
-				centerOrb,
-				backdrop,
-				headerRow,
-				spacer(),
-				contentRow,
-				spacer(),
-				footerRow,
-			],
+			children: identityChildren,
 		},
 	};
+
+	const contentRow: VNode = {
+		type: "div",
+		props: {
+			style: {
+				display: "flex",
+				alignItems: "center",
+				gap: "48px",
+				maxWidth: "1080px",
+			},
+			children: [avatarBlock, identityColumn],
+		},
+	};
+
+	// --- Footer: skill pills (or project count fallback) + url pill ---
+	const skills = (member.skills ?? []).filter(Boolean);
+	const visibleSkills = skills.slice(0, 3);
+	const skillOverflow = Math.max(0, skills.length - visibleSkills.length);
+
+	let footerLeft: VNode;
+	if (visibleSkills.length > 0) {
+		const pills: VNode[] = visibleSkills.map((skill) => ({
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					alignItems: "center",
+					fontSize: "20px",
+					fontWeight: 500,
+					padding: "10px 20px",
+					borderRadius: "9999px",
+					backgroundColor: "rgba(148, 163, 184, 0.1)",
+					color: "#cbd5e1",
+					border: "1px solid rgba(148, 163, 184, 0.25)",
+				},
+				children: truncate(skill, 20),
+			},
+		}));
+		if (skillOverflow > 0) {
+			pills.push({
+				type: "div",
+				props: {
+					style: {
+						display: "flex",
+						alignItems: "center",
+						fontSize: "20px",
+						fontWeight: 600,
+						padding: "10px 20px",
+						borderRadius: "9999px",
+						backgroundColor: "rgba(30, 41, 59, 0.8)",
+						color: "#cbd5e1",
+						border: "1px solid rgba(148, 163, 184, 0.2)",
+					},
+					children: `+${skillOverflow}`,
+				},
+			});
+		}
+		footerLeft = {
+			type: "div",
+			props: {
+				style: { display: "flex", alignItems: "center", gap: "10px" },
+				children: pills,
+			},
+		};
+	} else {
+		const count = member.projectCount;
+		const label =
+			count === 0
+				? "No projects yet"
+				: count === 1
+					? "1 project"
+					: `${count} projects`;
+		footerLeft = {
+			type: "div",
+			props: {
+				style: {
+					display: "flex",
+					fontSize: "22px",
+					fontWeight: 500,
+					color: "#94a3b8",
+				},
+				children: label,
+			},
+		};
+	}
+
+	const urlText = telegramUsername
+		? `${webUrl}/member/${telegramUsername}`
+		: webUrl;
+	const footerRow: VNode = {
+		type: "div",
+		props: {
+			style: {
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "space-between",
+				width: "100%",
+			},
+			children: [footerLeft, buildUrlPill(urlText)],
+		},
+	};
+
+	return buildRoot(headerRight, backdropInitial, contentRow, footerRow);
 }
 
-export async function generateProjectOgImage(
-	project: ProjectForOg,
-): Promise<Uint8Array> {
+// ---------------------------------------------------------------------------
+// Satori runner
+// ---------------------------------------------------------------------------
+
+async function renderVDomToPng(vdom: VNode): Promise<Uint8Array> {
 	const fonts = await loadFonts();
 
-	// satori's VDOM type is internal to the library
-	const svg = await satori(buildCard(project) as unknown as Parameters<typeof satori>[0], {
-		width: 1200,
-		height: 630,
-		fonts: [
-			{
-				name: "Inter",
-				data: fonts.regular,
-				weight: 400,
-				style: "normal",
-			},
-			{
-				name: "Inter",
-				data: fonts.semibold,
-				weight: 600,
-				style: "normal",
-			},
-			{
-				name: "Inter",
-				data: fonts.bold,
-				weight: 700,
-				style: "normal",
-			},
-		],
-	});
+	const svg = await satori(
+		vdom as unknown as Parameters<typeof satori>[0],
+		{
+			width: 1200,
+			height: 630,
+			fonts: [
+				{ name: "Inter", data: fonts.regular, weight: 400, style: "normal" },
+				{ name: "Inter", data: fonts.semibold, weight: 600, style: "normal" },
+				{ name: "Inter", data: fonts.bold, weight: 700, style: "normal" },
+			],
+		},
+	);
 
 	const resvg = new Resvg(svg, {
 		fitTo: { mode: "width", value: 1200 },
 	});
 	return resvg.render().asPng();
+}
+
+export async function generateProjectOgImage(
+	project: ProjectForOg,
+): Promise<Uint8Array> {
+	return renderVDomToPng(buildProjectCard(project));
+}
+
+export async function generateMemberOgImage(
+	member: MemberForOg,
+): Promise<Uint8Array> {
+	const avatarDataUrl = await fetchImageAsDataUrl(member.user.image);
+	return renderVDomToPng(buildMemberCard(member, avatarDataUrl));
 }
