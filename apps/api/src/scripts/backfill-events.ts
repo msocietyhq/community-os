@@ -9,9 +9,8 @@
  *   DRY_RUN=true bun run --cwd apps/api src/scripts/backfill-events.ts
  */
 
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { generateObject } from "ai";
 import { z } from "zod";
+import { aiService } from "../services/ai.service";
 import { db } from "../db";
 import { events } from "../db/schema/events";
 import { searchMessagesHybrid, type MessageSearchResult } from "../services/messages.service";
@@ -111,7 +110,6 @@ async function searchMessages(): Promise<MessageSearchResult[]> {
 // Step 2: Extract events via Claude
 async function extractEvents(messages: MessageSearchResult[]): Promise<ExtractedEvent[]> {
   console.log("\n=== Step 2: Extracting events via Claude ===");
-  const anthropic = createAnthropic();
   const allEvents: ExtractedEvent[] = [];
 
   const batches: MessageSearchResult[][] = [];
@@ -130,8 +128,8 @@ async function extractEvents(messages: MessageSearchResult[]): Promise<Extracted
       )
       .join("\n\n---\n\n");
 
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-20250514"),
+    const result = await aiService.generateObject({
+      model: aiService.models.smart,
       schema: extractedEventSchema,
       system: `You are analyzing Telegram group chat messages from a Muslim tech professionals community (MSOCIETY) to extract information about past events.
 
@@ -143,8 +141,9 @@ Instructions:
 - Assess your confidence: "high" = clear event with date/time, "medium" = likely event but some details inferred, "low" = uncertain
 - If no events are found in the messages, return an empty events array`,
       prompt: `Extract structured event data from these Telegram messages:\n\n${formattedMessages}`,
-    });
+    }, { caller: "backfill-events" });
 
+    const object = result.object as z.infer<typeof extractedEventSchema>;
     allEvents.push(...object.events);
     console.log(`    Extracted ${object.events.length} events from batch`);
   }

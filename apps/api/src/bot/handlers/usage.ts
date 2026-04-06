@@ -1,6 +1,6 @@
 import { Composer, InlineKeyboard } from "grammy";
 import type { BotContext } from "../types";
-import { aiUsageService } from "../../services/ai-usage.service";
+import { aiService } from "../../services/ai.service";
 
 type Range = "1m" | "6m" | "1y" | "ytd" | "all";
 
@@ -100,13 +100,13 @@ async function buildMessage(
   const months = getMonthsInRange(sinceDate);
 
   if (username) {
-    const resolved = await aiUsageService.resolveUserByUsername(username);
+    const resolved = await aiService.resolveUserByUsername(username);
     if (!resolved?.telegramId) {
       return { text: `User @${username} not found.`, notFound: true };
     }
 
     const telegramUserId = Number(resolved.telegramId);
-    const summary = await aiUsageService.getUsageSummary(sinceDate, telegramUserId);
+    const summary = await aiService.getUsageSummary(sinceDate, telegramUserId);
 
     return {
       text:
@@ -118,7 +118,7 @@ async function buildMessage(
     };
   }
 
-  const summary = await aiUsageService.getUsageSummary(sinceDate);
+  const summary = await aiService.getUsageSummary(sinceDate);
 
   return {
     text:

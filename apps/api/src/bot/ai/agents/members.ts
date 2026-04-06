@@ -1,12 +1,8 @@
 import { stepCountIs, tool } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { env } from "../../../env";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
-import { trackedGenerateText } from "../../lib/tracked-generate-text";
-
-const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+import { aiService } from "../../../services/ai.service";
 
 export function createMembersAgent(ctx: ToolContext) {
   const membersTools = {
@@ -122,9 +118,9 @@ export function createMembersAgent(ctx: ToolContext) {
 
   return async function runMembersAgent(query: string): Promise<string> {
     console.log("[members-agent] query:", query);
-    const result = await trackedGenerateText(
+    const result = await aiService.generateText(
       {
-        model: anthropic("claude-haiku-4-5-20251001"),
+        model: aiService.models.fast,
         system: `You are a members assistant for the MSOCIETY community. Help with finding members, viewing profiles, updating the user's own profile, and checking reputation scores. Be concise, format for Telegram Markdown.
 
 Use the graphql_query tool for searching/browsing members. Use get_my_profile for the user's own profile. Paginate when hasNext is true.

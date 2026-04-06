@@ -1,12 +1,10 @@
 import { stepCountIs, type ModelMessage } from "ai";
-import { trackedGenerateText } from "../lib/tracked-generate-text";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
 import { yoga, schemaSDL } from "../../graphql";
 import { createTools } from "./tools";
 import { resolveUser, getBotToken, type TelegramUser } from "../lib/auth";
-import { env } from "../../env";
+import { aiService } from "../../services/ai.service";
 import {
   recallMemories,
   recallMemoriesForSubject,
@@ -14,8 +12,6 @@ import {
   incrementAccessCount,
   type RecalledMemory,
 } from "../../services/memory.service";
-
-const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 function getSystemPrompt(memories: RecalledMemory[]): string {
   const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
@@ -227,9 +223,9 @@ export async function runAgent({
   ];
 
   try {
-    const result = await trackedGenerateText(
+    const result = await aiService.generateText(
       {
-        model: anthropic("claude-haiku-4-5-20251001"),
+        model: aiService.models.fast,
         system: getSystemPrompt(uniqueMemories),
         messages,
         tools,

@@ -1,9 +1,5 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { env } from "../../env";
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
-import { trackedGenerateText } from "./tracked-generate-text";
-
-const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+import { aiService } from "../../services/ai.service";
 
 const NOISE_REGEX =
   /^(ok|lol|haha|heh|nice|thanks|thank you|yes|no|yep|nope|yeah|nah|sure|wow|bruh|bro|gg|true|same|fr|ikr|damn|aight|bet|salam|ws|wa'alaikumussalam|walaikumsalam)[\s!.?]*$/i;
@@ -54,9 +50,9 @@ export async function extractMemories(
     ? `${senderName} (@${senderUsername})`
     : senderName;
 
-  const result = await trackedGenerateText(
+  const result = await aiService.generateText(
     {
-      model: anthropic("claude-haiku-4-5-20251001"),
+      model: aiService.models.fast,
       system: EXTRACTION_PROMPT,
       messages: [
         {

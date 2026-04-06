@@ -1,12 +1,8 @@
 import { stepCountIs, tool } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { env } from "../../../env";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
-import { trackedGenerateText } from "../../lib/tracked-generate-text";
-
-const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+import { aiService } from "../../../services/ai.service";
 
 export function createProjectsAgent(ctx: ToolContext) {
   const projectsTools = {
@@ -152,9 +148,9 @@ export function createProjectsAgent(ctx: ToolContext) {
 
   return async function runProjectsAgent(query: string): Promise<string> {
     console.log("[projects-agent] query:", query);
-    const result = await trackedGenerateText(
+    const result = await aiService.generateText(
       {
-        model: anthropic("claude-haiku-4-5-20251001"),
+        model: aiService.models.fast,
         system: `You are a projects assistant for the MSOCIETY community. Help with listing, viewing, creating, and managing projects and their team members. Only perform write operations (create/update/delete/add member/remove member) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.

@@ -9,8 +9,6 @@ import {
   desc,
   sql,
 } from "drizzle-orm";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { trackedGenerateText } from "../bot/lib/tracked-generate-text";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { members } from "../db/schema/members";
@@ -19,7 +17,7 @@ import { projects, projectMembers } from "../db/schema/projects";
 import { events } from "../db/schema/events";
 import { eventsService } from "./events.service";
 import { reputationService } from "./reputation.service";
-import { aiUsageService } from "./ai-usage.service";
+import { aiService } from "./ai.service";
 import { env } from "../env";
 
 export interface ThisWeekInHistory {
@@ -155,7 +153,7 @@ export const digestService = {
     );
 
     // Top AI users this week
-    const aiUsage = await aiUsageService.getTopUsersByTokens(weekAgo, 3);
+    const aiUsage = await aiService.getTopUsersByTokens(weekAgo, 3);
 
     return {
       periodStart: weekAgo,
@@ -307,8 +305,6 @@ export const digestService = {
       const best = yearData[bestIndex]!;
 
       try {
-        const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
-
         const messageSample = best.messages
           .slice(0, 30)
           .map((m) => {
@@ -325,9 +321,9 @@ export const digestService = {
             ? `Projects launched: ${best.projectNames.join(", ")}`
             : "No new projects that week.";
 
-        const result = await trackedGenerateText(
+        const result = await aiService.generateText(
           {
-            model: anthropic("claude-haiku-4-5-20251001"),
+            model: aiService.models.fast,
             prompt: `You're writing a "This week in ${best.year}" flashback for a Muslim tech community newsletter (MSOCIETY, Singapore).
 
 Here's what happened during this week in ${best.year}:

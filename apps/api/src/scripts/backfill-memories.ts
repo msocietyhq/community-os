@@ -4,16 +4,12 @@
  *
  * Usage: bun run --cwd apps/api src/scripts/backfill-memories.ts
  */
-import { generateText } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { sql, and, eq, gte, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../services/memory.service";
 import { shouldExtractMemory } from "../bot/lib/memory-extractor";
-import { env } from "../env";
-
-const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+import { aiService } from "../services/ai.service";
 
 const BATCH_SIZE = 10;
 const CHUNK_SIZE = 100; // DB fetch chunk
@@ -67,12 +63,12 @@ async function extractBatch(
 
   console.log(`[backfill:batch-${batchIndex}] sending ${messages.length} messages to Haiku...`);
 
-  const result = await generateText({
-    model: anthropic("claude-haiku-4-5-20251001"),
+  const result = await aiService.generateText({
+    model: aiService.models.fast,
     system: BATCH_EXTRACTION_PROMPT,
     messages: [{ role: "user", content: formatted }],
     maxOutputTokens: 2048,
-  });
+  }, { caller: "backfill-memories" });
 
   const llmMs = Math.round(performance.now() - batchStart);
   const { inputTokens, outputTokens } = result.usage;

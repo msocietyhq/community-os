@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { env } from "../env";
 import { loginLinkService } from "../services/login-link.service";
-import { aiUsageService } from "../services/ai-usage.service";
+import { aiService } from "../services/ai.service";
 import { authModel } from "./models/auth";
 import { botModel } from "./models/bot";
 
@@ -44,7 +44,7 @@ export const botRoutes = new Elysia({ prefix: "/api/v1/bot" })
   .get(
     "/usage",
     async ({ query }) => {
-      return aiUsageService.getUsageStats({
+      return aiService.getUsageStats({
         from: query.from,
         to: query.to,
         caller: query.caller,
