@@ -333,7 +333,7 @@ ${messageSample}
 - ${projectList}
 
 Do two things (output raw content only — no headers, labels, or markdown formatting like "Summary:" or "Quote:"):
-1. Write a short, engaging 2-3 sentence flashback. Be a little witty or nostalgic. Match the tone to the content — if serious topics came up, be respectful. Don't use emojis. Start with "This week in ${best.year}," and keep it under 280 characters.
+1. Write a short, engaging 2-3 sentence flashback. Be a little witty or nostalgic. Match the tone to the content — if serious topics came up, be respectful. Don't use emojis. Start with "This week in ${best.year}," and keep it under 280 characters. Do NOT include or paraphrase the quoted message in the summary — the quote will be displayed separately.
 2. Pick ONE message that would make the best standalone quote — something insightful, funny, or representative of the community vibe. On the very last line, output QUOTE: followed by the message ID number. If no message is quote-worthy, output QUOTE: none`,
           },
           { caller: "digest" },
