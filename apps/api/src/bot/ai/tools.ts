@@ -14,6 +14,7 @@ import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
 import { createProjectsAgent } from "./agents/projects";
+import { createResearchAgent } from "./agents/research";
 import {
   searchMessagesHybrid,
   getMessagesByIds,
@@ -72,6 +73,7 @@ export function createTools(ctx: ToolContext) {
   const runMembersAgent = createMembersAgent(ctx);
   const runVenuesAgent = createVenuesAgent(ctx);
   const runProjectsAgent = createProjectsAgent(ctx);
+  const runResearchAgent = createResearchAgent(ctx);
 
   return {
     graphql_query: tool({
@@ -160,6 +162,25 @@ export function createTools(ctx: ToolContext) {
         );
         console.log(
           "[main-agent] ← projects sub-agent, response:",
+          result.slice(0, 120),
+        );
+        return result;
+      },
+    }),
+
+    research: tool({
+      description:
+        "Search the live web and read pages. Use for anything outside community data that you don't already know: news, documentation, release notes, prices, or a link someone shared. Not for questions about MSOCIETY members, events, projects or venues.",
+      inputSchema: z.object({
+        query: z.string().describe("What to research"),
+      }),
+      execute: async ({ query }) => {
+        console.log("[main-agent] → research sub-agent, query:", query);
+        const result = await withProgress(ctx, "Research", query, (activity) =>
+          runResearchAgent(query, activity),
+        );
+        console.log(
+          "[main-agent] ← research sub-agent, response:",
           result.slice(0, 120),
         );
         return result;

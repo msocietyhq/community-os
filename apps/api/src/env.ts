@@ -15,6 +15,7 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
   VOYAGE_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().optional(),
+  EXA_API_KEY: z.string().optional(),
   WEB_URL: z.string().url(),
   PORT: z.coerce.number().default(3000),
 });

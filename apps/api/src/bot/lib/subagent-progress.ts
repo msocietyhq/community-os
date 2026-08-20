@@ -17,6 +17,7 @@ import type { MembersToolName } from "../ai/agents/members";
 import type { VenuesToolName } from "../ai/agents/venues";
 import type { ProjectsToolName } from "../ai/agents/projects";
 import type { GithubToolName } from "../ai/agents/github";
+import type { ResearchToolName } from "../ai/agents/research";
 
 export type SubagentState = "running" | "done" | "failed";
 
@@ -149,7 +150,8 @@ export type TrackedToolName =
   | MembersToolName
   | VenuesToolName
   | ProjectsToolName
-  | GithubToolName;
+  | GithubToolName
+  | ResearchToolName;
 
 /**
  * Human-readable names for tool calls. Members shouldn't have to read internal
@@ -182,6 +184,9 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
   get_my_reputation: "checking your reputation",
   get_reputation: "checking reputation",
   get_leaderboard: "reading the leaderboard",
+
+  web_search: "searching the web",
+  fetch_url: "reading a page",
 
   get_github_org: "reading the GitHub org",
   get_github_repo: "reading the repo",
@@ -274,6 +279,17 @@ const TOOL_PHRASES: Partial<Record<TrackedToolName, (args: Args) => string | und
   list_github_prs: (a) => wrap("reading PRs in", repoRef(a)),
   list_github_repos: (a) => wrap("listing repos in", short(a.owner)),
   get_github_org: (a) => wrap("reading org", short(a.owner)),
+
+  web_search: (a) => wrap("searching for", short(a.query)),
+  fetch_url: (a) => {
+    const raw = short(a.url);
+    if (!raw) return undefined;
+    try {
+      return `reading ${new URL(raw).hostname}`;
+    } catch {
+      return undefined;
+    }
+  },
 };
 
 function wrap(prefix: string, detail: string | undefined): string | undefined {
