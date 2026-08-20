@@ -145,7 +145,11 @@ function plural(count: number): string {
  * sub-agent toolsets. Type-only imports, so no runtime dependency on the
  * agents (which import back into this module).
  */
+/** Advisors are reachable from every sub-agent toolset, so they're labelled too. */
+type AdvisorToolName = "big_brain_advisor" | "bigger_brain_advisor";
+
 export type TrackedToolName =
+  | AdvisorToolName
   | EventsToolName
   | MembersToolName
   | VenuesToolName
@@ -184,6 +188,9 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
   get_my_reputation: "checking your reputation",
   get_reputation: "checking reputation",
   get_leaderboard: "reading the leaderboard",
+
+  big_brain_advisor: "consulting a stronger model",
+  bigger_brain_advisor: "consulting the deepest model",
 
   web_search: "searching the web",
   fetch_url: "reading a page",

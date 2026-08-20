@@ -1,4 +1,4 @@
-import { sql, eq, and, inArray } from "drizzle-orm";
+import { sql, eq, and, inArray, gte } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { generateQueryEmbedding } from "./embeddings.service";
@@ -17,6 +17,30 @@ export async function hasUserMessages(
       and(
         eq(telegramMessages.chatId, chatId),
         eq(telegramMessages.fromUserId, telegramUserId),
+      ),
+    )
+    .limit(1);
+
+  return !!row;
+}
+
+/**
+ * Has this member posted in the given chat since `since`?
+ *
+ * Used as a proxy for "active community member" when gating expensive tools.
+ * Backed by the from_user_id index, so it is a cheap existence check.
+ */
+export async function hasRecentMessages(
+  telegramUserId: number,
+  since: Date,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: telegramMessages.messageId })
+    .from(telegramMessages)
+    .where(
+      and(
+        eq(telegramMessages.fromUserId, telegramUserId),
+        gte(telegramMessages.date, since),
       ),
     )
     .limit(1);

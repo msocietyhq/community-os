@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { tool, stepCountIs, type ModelMessage } from "ai";
 import { z } from "zod";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
@@ -16,15 +16,24 @@ import { createVenuesAgent } from "./agents/venues";
 import { createProjectsAgent } from "./agents/projects";
 import { createResearchAgent } from "./agents/research";
 import {
+  NEXT_TIER,
+  ADVISOR_NAMES,
+  ADVISOR_TOOL_NAMES,
+  ADVISOR_DESCRIPTIONS,
+  ADVISOR_MAX_OUTPUT_TOKENS,
+  advisorSystemPrompt,
+  buildAdvisorMessages,
+  type AdvisorTier,
+} from "./advisor";
+import { checkAdvisorAccess } from "./advisor-access";
+import { aiService } from "../../services/ai.service";
+import {
   searchMessagesHybrid,
   getMessagesByIds,
   MAX_MESSAGES_BY_ID,
 } from "../../services/messages.service";
 import { getRecentChatMessages } from "../lib/telegram-message-logger";
-import type {
-  SubagentProgress,
-  SubagentActivity,
-} from "../lib/subagent-progress";
+import type { ProgressHost, SubagentActivity } from "../lib/subagent-progress";
 import { formatGroupHistory } from "../lib/chat-context";
 import {
   saveMemory,
@@ -41,8 +50,11 @@ export interface ToolContext {
   graphql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
   chatId: string;
   senderTelegramId: number | null;
-  /** Reports sub-agent activity to the user. Absent outside the chat handler. */
-  progress?: SubagentProgress;
+  /**
+   * Where sub-agent activity is reported. The top-level reporter at depth 0,
+   * a running sub-agent's activity deeper in. Absent outside the chat handler.
+   */
+  progress?: ProgressHost;
 }
 
 /**
@@ -68,7 +80,82 @@ async function withProgress(
   }
 }
 
-export function createTools(ctx: ToolContext) {
+/**
+ * Which rung of the escalation ladder an agent is on. Determines both its
+ * model and which advisor (if any) it may escalate to — so recursion is
+ * prevented structurally rather than by prompt instruction.
+ */
+export type AgentTier = "main" | AdvisorTier;
+
+/**
+ * Runs an advisor: the caller's own conversation, continued on a bigger model
+ * with the same tools plus the next rung up.
+ */
+async function runAdvisor(
+  ctx: ToolContext,
+  tier: AdvisorTier,
+  problem: string,
+  conversation: ModelMessage[],
+  activity?: SubagentActivity,
+): Promise<string> {
+  const tools = createTools({ ...ctx, progress: activity }, tier);
+
+  const result = await aiService.generateText(
+    {
+      model: tier === "bigger" ? aiService.models.deep : aiService.models.smart,
+      system: advisorSystemPrompt(tier),
+      messages: buildAdvisorMessages(conversation, problem),
+      tools,
+      stopWhen: stepCountIs(10),
+      maxOutputTokens: ADVISOR_MAX_OUTPUT_TOKENS,
+      providerOptions: {
+        anthropic: { effort: tier === "bigger" ? "high" : "medium" },
+      },
+    },
+    {
+      caller: ADVISOR_TOOL_NAMES[tier],
+      telegramUserId: ctx.senderTelegramId,
+      chatId: ctx.chatId,
+    },
+  );
+
+  console.log(
+    `[${ADVISOR_TOOL_NAMES[tier]}] steps:${result.steps.length} tokens:${result.usage.inputTokens ?? 0}in/${result.usage.outputTokens ?? 0}out`,
+  );
+
+  return result.text || "I couldn't work that out either.";
+}
+
+function advisorTool(ctx: ToolContext, tier: AdvisorTier) {
+  return tool({
+    description: ADVISOR_DESCRIPTIONS[tier],
+    inputSchema: z.object({
+      problem: z
+        .string()
+        .describe(
+          "What you are stuck on and what you have already tried. The advisor can see this whole conversation, so don't restate it.",
+        ),
+    }),
+    execute: async ({ problem }, { messages }) => {
+      const access = await checkAdvisorAccess(tier, ctx.senderTelegramId);
+      if (!access.allowed) {
+        console.log(`[${ADVISOR_TOOL_NAMES[tier]}] denied: ${access.reason}`);
+        return { consulted: false, tell_user: access.tellUser };
+      }
+
+      const advice = await withProgress(
+        ctx,
+        ADVISOR_NAMES[tier],
+        problem,
+        (activity) => runAdvisor(ctx, tier, problem, messages, activity),
+      );
+
+      return { consulted: true, advice };
+    },
+  });
+}
+
+export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
   const runEventsAgent = createEventsAgent(ctx);
   const runMembersAgent = createMembersAgent(ctx);
   const runVenuesAgent = createVenuesAgent(ctx);
@@ -224,6 +311,15 @@ export function createTools(ctx: ToolContext) {
         );
       },
     }),
+
+    ...(NEXT_TIER[tier]
+      ? {
+          [ADVISOR_TOOL_NAMES[NEXT_TIER[tier]]]: advisorTool(
+            ctx,
+            NEXT_TIER[tier],
+          ),
+        }
+      : {}),
 
     chat_history: tool({
       description:

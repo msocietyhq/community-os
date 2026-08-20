@@ -3,31 +3,41 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { db } from "../db";
 import { aiUsage } from "../db/schema/bot";
 import { user } from "../db/schema/auth";
-import { sql, eq, and, gte, lte, desc } from "drizzle-orm";
+import { sql, eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { env } from "../env";
 
 // ── Model constants ─────────────────────────────────────────
 
 export const AI_MODEL_IDS = {
-  fast: "claude-haiku-4-5-20251001",
-  smart: "claude-sonnet-4-20250514",
+  fast: "claude-haiku-4-5",
+  smart: "claude-sonnet-5",
+  deep: "claude-opus-5",
 } as const;
 
 // ── Provider (single instance) ──────────────────────────────
 
 const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-const AI_MODELS: { fast: LanguageModel; smart: LanguageModel } = {
+const AI_MODELS: { fast: LanguageModel; smart: LanguageModel; deep: LanguageModel } = {
   fast: anthropic(AI_MODEL_IDS.fast),
   smart: anthropic(AI_MODEL_IDS.smart),
+  deep: anthropic(AI_MODEL_IDS.deep),
 };
 
 // ── Pricing ─────────────────────────────────────────────────
 
-/** Price per 1M tokens, in USD. Update when pricing changes. */
+/**
+ * Price per 1M tokens, in USD. Update when pricing changes.
+ *
+ * A model missing from this map is costed at $0, which would silently defeat
+ * the advisor spend cap — add an entry whenever a model is added above.
+ * Sonnet 5 has promotional pricing ($2/$10) through 2026-08-31; standard rates
+ * are used here so budgets don't under-count once it ends.
+ */
 const AI_MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  [AI_MODEL_IDS.fast]: { input: 0.8, output: 4.0 },
+  [AI_MODEL_IDS.fast]: { input: 1.0, output: 5.0 },
   [AI_MODEL_IDS.smart]: { input: 3.0, output: 15.0 },
+  [AI_MODEL_IDS.deep]: { input: 5.0, output: 25.0 },
 };
 
 function estimateCost(
@@ -75,6 +85,29 @@ function resolveModelId(model: Parameters<typeof generateText>[0]["model"]): str
 
 // ── Tracked wrappers ────────────────────────────────────────
 
+/**
+ * Anthropic caches the request prefix (tools → system → messages) and serves
+ * later reads at ~10% of input price. Every caller here has a stable system
+ * prompt and tool list, and an agent loop re-sends that prefix on every step,
+ * so this is the single largest cost lever available. Prefixes below the
+ * model's minimum simply don't cache — there is no penalty for asking.
+ */
+function withPromptCaching(
+  params: Parameters<typeof generateText>[0],
+): Parameters<typeof generateText>[0] {
+  const existing = params.providerOptions?.anthropic;
+  return {
+    ...params,
+    providerOptions: {
+      ...params.providerOptions,
+      anthropic: {
+        cacheControl: { type: "ephemeral" },
+        ...existing,
+      },
+    },
+  };
+}
+
 async function trackedGenerateText(
   params: Parameters<typeof generateText>[0],
   ctx: TrackingContext,
@@ -83,7 +116,7 @@ async function trackedGenerateText(
   const start = performance.now();
 
   try {
-    const result = await generateText(params);
+    const result = await generateText(withPromptCaching(params));
     const durationMs = Math.round(performance.now() - start);
 
     trackUsage({
@@ -289,6 +322,41 @@ async function getUsageSummary(since: Date, telegramUserId?: number) {
   };
 }
 
+/**
+ * USD a member has spent on the given callers since `since`.
+ *
+ * Scoped to callers rather than all usage on purpose: a chatty member should
+ * not lock themselves out of the advisors through ordinary bot conversation.
+ */
+async function getSpendByCaller(
+  telegramUserId: number,
+  callers: string[],
+  since: Date,
+): Promise<number> {
+  if (callers.length === 0) return 0;
+
+  const rows = await db
+    .select({
+      model: aiUsage.model,
+      inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
+      outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+    })
+    .from(aiUsage)
+    .where(
+      and(
+        eq(aiUsage.telegramUserId, telegramUserId),
+        gte(aiUsage.createdAt, since),
+        inArray(aiUsage.caller, callers),
+      ),
+    )
+    .groupBy(aiUsage.model);
+
+  return rows.reduce(
+    (total, row) => total + estimateCost(row.model, row.inputTokens, row.outputTokens),
+    0,
+  );
+}
+
 async function resolveUserByUsername(username: string) {
   const [row] = await db
     .select({
@@ -335,6 +403,7 @@ export const aiService = {
   trackUsage,
   getUsageStats,
   getUsageSummary,
+  getSpendByCaller,
   getTopUsersByTokens,
   resolveUserByUsername,
 };
