@@ -16,7 +16,7 @@ loginHandler.command("login", async (ctx) => {
     return;
   }
 
-  const telegramUser = await telegramUserFromContext(ctx.from, ctx.api);
+  const telegramUser = telegramUserFromContext(ctx.from);
   const link = loginLinkService.createLoginLink(telegramUser);
 
   await ctx.reply(

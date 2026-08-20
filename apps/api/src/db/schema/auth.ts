@@ -3,7 +3,14 @@ import {
   text,
   timestamp,
   boolean,
+  customType,
 } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -59,4 +66,21 @@ export const verification = pgTable("verification", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+/**
+ * Profile photo bytes, kept out of the `user` row.
+ *
+ * These were previously inlined into `user.image` as base64 data URIs —
+ * averaging 144KB each, which blew past the model's context window the moment
+ * an agent listed members. `user.image` now holds a URL to the photo route and
+ * the bytes live here, where nothing selects them by accident.
+ */
+export const userPhoto = pgTable("user_photo", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  data: bytea("data").notNull(),
+  contentType: text("content_type").notNull().default("image/jpeg"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

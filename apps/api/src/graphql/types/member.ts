@@ -1,5 +1,8 @@
 import { membersService } from "../../services/members.service";
 
+/** Ceiling on any page size an agent can request. */
+const MAX_PAGE_SIZE = 100;
+
 export const memberTypeDefs = /* GraphQL */ `
   type UserInfo {
     id: ID!
@@ -58,7 +61,7 @@ export const memberResolvers = {
       },
     ) => {
       const page = args.page ?? 1;
-      const limit = args.limit ?? 20;
+      const limit = Math.min(args.limit ?? 20, MAX_PAGE_SIZE);
 
       const result = await membersService.list({
         q: args.q,

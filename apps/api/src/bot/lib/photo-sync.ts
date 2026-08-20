@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import type { NextFunction } from "grammy";
 import type { BotContext } from "../types";
-import { telegramUserFromContext } from "./telegram-user";
+import { fetchTelegramPhoto } from "./telegram-user";
+import { savePhoto } from "../../services/photos.service";
 import { db } from "../../db";
 import { user } from "../../db/schema";
 
@@ -33,14 +34,18 @@ export async function photoSyncMiddleware(
   lastSyncedAt.set(telegramId, now);
 
   // Fire-and-forget so the handler isn't delayed
-  telegramUserFromContext(ctx.from, ctx.api)
-    .then(async (tgUser) => {
-      if (tgUser.photo_url) {
-        await db
-          .update(user)
-          .set({ image: tgUser.photo_url })
-          .where(eq(user.telegramId, String(telegramId)));
-      }
+  fetchTelegramPhoto(telegramId, ctx.api)
+    .then(async (photo) => {
+      if (!photo) return;
+
+      const [row] = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.telegramId, String(telegramId)))
+        .limit(1);
+      if (!row) return;
+
+      await savePhoto(row.id, photo.data, photo.contentType);
     })
     .catch((err) => {
       console.warn(`Photo sync failed for telegram ID ${telegramId}:`, err);

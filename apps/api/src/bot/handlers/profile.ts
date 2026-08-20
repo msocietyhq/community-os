@@ -70,7 +70,7 @@ async function setProfileConversation(
 
   // Build TelegramUser once (includes profile photo fetch)
   const telegramUser = await conversation.external(() =>
-    telegramUserFromContext(from, bot.api),
+    telegramUserFromContext(from),
   );
 
   // Create auth user + account (or get existing)
@@ -363,7 +363,7 @@ async function editFieldConversation(
   if (!from) return;
 
   const telegramUser = await conversation.external(() =>
-    telegramUserFromContext(from, bot.api),
+    telegramUserFromContext(from),
   );
   const userId = await conversation.external(() =>
     createTelegramUser(telegramUser),
@@ -422,7 +422,7 @@ profileHandler.command("profile", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
 
-  const telegramUser = await telegramUserFromContext(from, ctx.api);
+  const telegramUser = telegramUserFromContext(from);
   const userId = await createTelegramUser(telegramUser);
   const member = await membersService.findByUserId(userId);
 

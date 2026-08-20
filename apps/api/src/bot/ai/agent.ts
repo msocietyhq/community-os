@@ -13,6 +13,7 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
+import { guardToolResult } from "./tool-result-guard";
 import { SubagentProgress, type ProgressSink } from "../lib/subagent-progress";
 
 /** Bridges the memory service into the framework-agnostic context builder. */
@@ -89,7 +90,9 @@ export async function runAgent({
       }),
     );
     const json = (await res.json()) as { data?: unknown; errors?: unknown };
-    return json.data ?? json.errors;
+    // Oversized results are fatal on the next step: they are replayed into the
+    // prompt. Hand back an actionable error instead of a 479k-token payload.
+    return guardToolResult(json.data ?? json.errors);
   };
 
   const progress = progressSink

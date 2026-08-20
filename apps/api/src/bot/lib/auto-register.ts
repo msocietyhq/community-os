@@ -179,7 +179,7 @@ export async function membershipMiddleware(
     }
 
     // Auto-register: create user+account directly in DB
-    const telegramUser = await telegramUserFromContext(from, ctx.api);
+    const telegramUser = telegramUserFromContext(from);
     const userId = await createTelegramUser(telegramUser);
 
     // Create member record (conflict-safe)

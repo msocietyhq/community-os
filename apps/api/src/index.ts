@@ -2,6 +2,7 @@ import { app } from "./app";
 import { initBot, shutdownBot } from "./bot/init";
 import { backfillMissingMembers } from "./db/backfill-members";
 import { backfillMissingEmbeddings } from "./services/embeddings.service";
+import { backfillInlinePhotos } from "./scripts/backfill-photos";
 import { reputationService } from "./services/reputation.service";
 import { env } from "./env";
 
@@ -21,6 +22,12 @@ backfillMissingMembers().catch((err) => {
 
 backfillMissingEmbeddings().catch((err) => {
   console.error("Embedding backfill failed:", err);
+});
+
+// Moves any base64 data URIs still sitting in user.image into user_photo.
+// Idempotent and a no-op once drained.
+backfillInlinePhotos().catch((err) => {
+  console.error("Photo backfill failed:", err);
 });
 
 reputationService.recalculateAllScores().catch((err) => {

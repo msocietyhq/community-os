@@ -6,6 +6,7 @@ import { projects, projectMembers } from "../db/schema/projects";
 import { bot } from "../bot/bot";
 import { env } from "../env";
 import { paginatedResult, listOffset } from "../lib/pagination";
+import { photoUrlSql } from "./photos.service";
 import type {
   CreateMemberInput,
   MemberListQuery,
@@ -82,7 +83,7 @@ export const membersService = {
           user: {
             id: user.id,
             name: user.name,
-            image: user.image,
+            image: photoUrlSql(),
             role: user.role,
             banned: user.banned,
             telegramUsername: user.telegramUsername,
@@ -172,7 +173,7 @@ export const membersService = {
           id: user.id,
           name: user.name,
           email: user.email,
-          image: user.image,
+          image: photoUrlSql(),
           role: user.role,
           banned: user.banned,
           telegramUsername: user.telegramUsername,
@@ -205,7 +206,7 @@ export const membersService = {
         user: {
           id: user.id,
           name: user.name,
-          image: user.image,
+          image: photoUrlSql(),
           role: user.role,
           telegramUsername: user.telegramUsername,
         },

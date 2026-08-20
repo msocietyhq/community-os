@@ -1,6 +1,9 @@
 import { eventsService } from "../../services/events.service";
 import type { GraphQLContext } from "../context";
 
+/** Ceiling on any page size an agent can request. */
+const MAX_PAGE_SIZE = 100;
+
 export const eventTypeDefs = /* GraphQL */ `
   type Event {
     id: ID!
@@ -55,7 +58,7 @@ export const eventResolvers = {
       ctx: GraphQLContext,
     ) => {
       const page = args.page ?? 1;
-      const limit = args.limit ?? 20;
+      const limit = Math.min(args.limit ?? 20, MAX_PAGE_SIZE);
       const userRole = ctx.user?.role ?? "member";
 
       const result = await eventsService.list(

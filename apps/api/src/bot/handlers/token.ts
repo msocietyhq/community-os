@@ -18,7 +18,7 @@ tokenHandler.command("token", async (ctx) => {
   }
 
   try {
-    const telegramUser = await telegramUserFromContext(ctx.from, ctx.api);
+    const telegramUser = telegramUserFromContext(ctx.from);
     const token = await getBotToken(telegramUser);
 
     if (!token) {

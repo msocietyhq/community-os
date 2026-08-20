@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { membersService } from "../services/members.service";
 import { generateMemberOgImage } from "../services/og.service";
+import { getPhoto } from "../services/photos.service";
 
 export const publicMemberRoutes = new Elysia({
 	prefix: "/api/v1/members",
@@ -19,6 +20,33 @@ export const publicMemberRoutes = new Elysia({
 			detail: {
 				tags: ["Members"],
 				summary: "Get public member profile by Telegram username",
+			},
+		},
+	)
+	.get(
+		"/:userId/photo",
+		async ({ params: { userId }, set }) => {
+			const photo = await getPhoto(userId);
+			if (!photo) {
+				set.status = 404;
+				return { message: "Photo not found" };
+			}
+			// Fresh ArrayBuffer-backed view to satisfy strict BodyInit typing.
+			const body = new Uint8Array(photo.data.byteLength);
+			body.set(photo.data);
+			return new Response(body, {
+				headers: {
+					"Content-Type": photo.contentType,
+					"Cache-Control":
+						"public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
+					"Last-Modified": photo.updatedAt.toUTCString(),
+				},
+			});
+		},
+		{
+			detail: {
+				tags: ["Members"],
+				summary: "Get a member's profile photo",
 			},
 		},
 	)
