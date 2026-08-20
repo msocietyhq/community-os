@@ -5,9 +5,10 @@
  * outward sign of life. This posts a single status message, edits it as work
  * settles, and leaves it in place showing what ran.
  *
- * Activity is a tree of arbitrary depth: a sub-agent shows the tool it is
- * working on and any sub-agents it spawns, which in turn show theirs. Every
- * node carries a state marker — ⏳ running, ✅ done, ❌ failed.
+ * Activity is a tree of arbitrary depth: a running sub-agent stacks up the
+ * tools it has called and any sub-agents it spawns, which in turn show theirs.
+ * The stack collapses when the sub-agent settles, leaving one line. Every node
+ * carries a state marker — ⏳ running, ✅ done, ❌ failed.
  */
 
 import type { Tool } from "ai";
@@ -19,6 +20,14 @@ import type { GithubToolName } from "../ai/agents/github";
 
 export type SubagentState = "running" | "done" | "failed";
 
+export interface ToolCall {
+  name: string;
+  /** Rendered phrase, derived from the tool's arguments where possible. */
+  phrase: string;
+  /** Consecutive invocations of the same phrase, collapsed. */
+  count: number;
+}
+
 export interface SubagentEntry {
   name: string;
   query: string;
@@ -28,12 +37,15 @@ export interface SubagentEntry {
   /** Tool calls currently in flight directly inside this sub-agent. */
   activeTools: string[];
   /**
-   * The most recent tool, kept after it finishes so the line stays on screen.
-   * Sub-agents run for seconds but their tool calls last a few hundred ms and
-   * often complete before the message is even posted; without this the line
-   * is almost never visible when an edit lands.
+   * Every tool this sub-agent has called, in order, with consecutive repeats
+   * collapsed into a count.
+   *
+   * Kept rather than showing only what is in flight: sub-agents run for
+   * seconds while their tool calls last a few hundred ms, so an in-flight-only
+   * view is almost never on screen when an edit lands. Cleared on settle, so
+   * the stack collapses away and a finished sub-agent is a single line.
    */
-  lastTool?: string;
+  toolLog: ToolCall[];
   /** Sub-agents spawned by this one, in start order. */
   children: SubagentEntry[];
 }
@@ -64,8 +76,11 @@ export interface ProgressHost {
 
 /** Reports what is running inside one sub-agent. */
 export interface SubagentActivity extends ProgressHost {
-  /** Marks `name` as running; call the returned function when it finishes. */
-  toolStart(name: string): () => void;
+  /**
+   * Marks `name` as running; call the returned function when it finishes.
+   * `args` are used only to describe the call — never stored or sent onward.
+   */
+  toolStart(name: string, args?: unknown): () => void;
 }
 
 export interface SubagentHandle {
@@ -92,6 +107,9 @@ export const MAX_MESSAGE_CHARS = 3500;
  * a plain debounce would not, and would also delay the final state.
  */
 export const MIN_EDIT_INTERVAL_MS = 500;
+
+/** Most tool lines to show per sub-agent before folding the oldest away. */
+const MAX_TOOL_LINES = 5;
 
 const QUERY_MAX = 60;
 const FAILURE_MAX = 80;
@@ -181,6 +199,104 @@ export function toolLabel(name: string): string {
   return TOOL_LABELS[name as TrackedToolName] ?? name.replace(/_/g, " ");
 }
 
+const DETAIL_MAX = 40;
+
+function short(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const flat = value.replace(/\s+/g, " ").trim();
+  if (flat === "") return undefined;
+  return flat.length > DETAIL_MAX ? `${flat.slice(0, DETAIL_MAX)}…` : flat;
+}
+
+/**
+ * The first root field of a GraphQL document, e.g. `events` from
+ * `query Upcoming { events(limit: 5) { items { id } } }`.
+ *
+ * "looking up data" is true of every query; the root field is what the member
+ * actually cares about.
+ */
+export function graphqlRootField(query: unknown): string | undefined {
+  if (typeof query !== "string") return undefined;
+  const brace = query.indexOf("{");
+  if (brace === -1) return undefined;
+  const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(query.slice(brace + 1));
+  return match?.[1];
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A human-meaningful identifier, or nothing.
+ *
+ * These tools accept "UUID or slug". A slug names the thing; a UUID is noise
+ * to a member reading along, so it is dropped and the caller falls back to the
+ * plain label.
+ */
+function identifier(value: unknown): string | undefined {
+  const text = short(value);
+  if (!text || UUID_RE.test(text)) return undefined;
+  return text;
+}
+
+type Args = Record<string, unknown>;
+
+/**
+ * Turns a tool call into a phrase naming what it is acting on. Returning
+ * undefined falls back to the tool's static label.
+ */
+const TOOL_PHRASES: Partial<Record<TrackedToolName, (args: Args) => string | undefined>> = {
+  graphql_query: (a) => {
+    const field = graphqlRootField(a.query);
+    return field ? `looking up ${field.replace(/_/g, " ")}` : undefined;
+  },
+
+  rsvp_event: (a) => {
+    const status = short(a.status);
+    return status ? `RSVPing ${status}` : undefined;
+  },
+  create_event: (a) => wrap("creating event", short(a.title)),
+  update_event: (a) => wrap("updating event", identifier(a.event_id)),
+  delete_event: (a) => wrap("cancelling event", identifier(a.event_id)),
+
+  create_venue: (a) => wrap("adding venue", short(a.name)),
+  update_venue: (a) => wrap("updating venue", identifier(a.venue_id)),
+  delete_venue: (a) => wrap("removing venue", identifier(a.venue_id)),
+
+  create_project: (a) => wrap("creating project", short(a.name)),
+  update_project: (a) => wrap("updating project", identifier(a.project_id)),
+  delete_project: (a) => wrap("removing project", identifier(a.project_id)),
+
+  get_reputation: (a) => wrap("checking reputation for", short(a.username)),
+  update_my_profile: () => undefined,
+
+  get_github_repo: (a) => wrap("reading repo", repoRef(a)),
+  list_github_issues: (a) => wrap("reading issues in", repoRef(a)),
+  list_github_prs: (a) => wrap("reading PRs in", repoRef(a)),
+  list_github_repos: (a) => wrap("listing repos in", short(a.owner)),
+  get_github_org: (a) => wrap("reading org", short(a.owner)),
+};
+
+function wrap(prefix: string, detail: string | undefined): string | undefined {
+  return detail ? `${prefix} ${detail}` : undefined;
+}
+
+function repoRef(args: Args): string | undefined {
+  const repo = short(args.repo);
+  if (!repo) return undefined;
+  const owner = short(args.owner);
+  return owner ? `${owner}/${repo}` : repo;
+}
+
+/** Phrase describing a tool call, using its arguments when they help. */
+export function describeToolCall(name: string, args?: unknown): string {
+  const build = TOOL_PHRASES[name as TrackedToolName];
+  if (build && args && typeof args === "object") {
+    const phrase = build(args as Args);
+    if (phrase) return phrase;
+  }
+  return toolLabel(name);
+}
+
 /**
  * Renders one sub-agent and everything beneath it.
  *
@@ -198,17 +314,16 @@ function renderEntry(entry: SubagentEntry, depth: number): string[] {
   if (entry.state === "running") {
     lines.push(`${pad}⏳ ${name} — ${task}`);
 
-    // Prefer what is running now; otherwise keep showing what ran last.
-    const shown =
-      entry.activeTools.length > 0
-        ? entry.activeTools
-        : entry.lastTool
-          ? [entry.lastTool]
-          : [];
+    // Newest last, oldest folded away — the recent calls are what matter.
+    const shown = entry.toolLog.slice(-MAX_TOOL_LINES);
+    const hidden = entry.toolLog.length - shown.length;
 
-    if (shown.length > 0) {
-      const tools = shown.map((t) => `<i>${escapeHtml(toolLabel(t))}</i>`).join(", ");
-      lines.push(`${pad}${INDENT}↳ ${tools}`);
+    if (hidden > 0) {
+      lines.push(`${pad}${INDENT}↳ …${hidden} earlier`);
+    }
+    for (const call of shown) {
+      const times = call.count > 1 ? ` ×${call.count}` : "";
+      lines.push(`${pad}${INDENT}↳ <i>${escapeHtml(call.phrase)}</i>${times}`);
     }
   } else if (entry.state === "failed") {
     // The reason is kept: it explains a gap the reply can't.
@@ -349,15 +464,25 @@ export class SubagentProgress implements ProgressHost {
       entry.state = state;
       entry.detail = detail;
       entry.activeTools = [];
-      entry.lastTool = undefined;
+      entry.toolLog = [];
       void this.render();
     };
 
     const activity: SubagentActivity = {
-      toolStart: (toolName) => {
+      toolStart: (toolName, args) => {
         if (entry.state !== "running") return () => {};
         entry.activeTools = [...entry.activeTools, toolName];
-        entry.lastTool = toolName;
+
+        const phrase = describeToolCall(toolName, args);
+        const last = entry.toolLog.at(-1);
+        // Collapse only identical phrases — two different lookups are two
+        // different lines even though they share a tool name.
+        if (last && last.name === toolName && last.phrase === phrase) {
+          last.count++;
+        } else {
+          entry.toolLog.push({ name: toolName, phrase, count: 1 });
+        }
+
         void this.render();
 
         let ended = false;
@@ -457,7 +582,7 @@ export class SubagentProgress implements ProgressHost {
 }
 
 function newEntry(name: string, query: string): SubagentEntry {
-  return { name, query, state: "running", activeTools: [], children: [] };
+  return { name, query, state: "running", activeTools: [], toolLog: [], children: [] };
 }
 
 /**
@@ -484,7 +609,7 @@ export function trackToolCalls<T extends Record<string, Tool>>(
     tracked[name] = {
       ...definition,
       execute: async (args: never, options: never) => {
-        const finished = activity.toolStart(name);
+        const finished = activity.toolStart(name, args);
         try {
           return await run(args, options);
         } finally {

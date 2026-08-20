@@ -5,6 +5,8 @@ import {
   type Scheduler,
   trackToolCalls,
   toolLabel,
+  describeToolCall,
+  graphqlRootField,
   MIN_EDIT_INTERVAL_MS,
   MAX_MESSAGE_CHARS,
   type ProgressSink,
@@ -66,8 +68,8 @@ describe("renderProgress", () => {
   test("running batch lists each sub-agent with its query", () => {
     const batches: SubagentBatch[] = [
       [
-        { name: "Events", query: "upcoming meetups", state: "running", activeTools: [], children: [] },
-        { name: "Projects", query: "active projects", state: "running", activeTools: [], children: [] },
+        { name: "Events", query: "upcoming meetups", state: "running", activeTools: [], toolLog: [], children: [] },
+        { name: "Projects", query: "active projects", state: "running", activeTools: [], toolLog: [], children: [] },
       ],
     ];
     expect(renderProgress(batches)).toBe(
@@ -79,7 +81,7 @@ describe("renderProgress", () => {
 
   test("a settled sub-agent keeps its task line and gains a checkmark", () => {
     const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups", activeTools: [], children: [] }],
+      [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] }],
     ];
     expect(renderProgress(batches)).toBe(
       "<b>Done — 1 subagent</b>\n✅ <b>Events</b> — upcoming meetups",
@@ -88,7 +90,7 @@ describe("renderProgress", () => {
 
   test("the sub-agent's own answer is not shown", () => {
     const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups on 24 Aug", activeTools: [], children: [] }],
+      [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups on 24 Aug", activeTools: [], toolLog: [], children: [] }],
     ];
     expect(renderProgress(batches)).not.toContain("24 Aug");
   });
@@ -96,8 +98,8 @@ describe("renderProgress", () => {
   test("a batch is still running while any member is", () => {
     const batches: SubagentBatch[] = [
       [
-        { name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], children: [] },
-        { name: "Projects", query: "projects", state: "running", activeTools: [], children: [] },
+        { name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] },
+        { name: "Projects", query: "projects", state: "running", activeTools: [], toolLog: [], children: [] },
       ],
     ];
     expect(renderProgress(batches)).toContain("<b>Running 2 subagents</b>");
@@ -105,7 +107,7 @@ describe("renderProgress", () => {
 
   test("failures keep their reason, since the reply cannot explain the gap", () => {
     const batches: SubagentBatch[] = [
-      [{ name: "GitHub", query: "list repos", state: "failed", detail: "rate limited", activeTools: [], children: [] }],
+      [{ name: "GitHub", query: "list repos", state: "failed", detail: "rate limited", activeTools: [], toolLog: [], children: [] }],
     ];
     expect(renderProgress(batches)).toBe(
       "<b>Done — 1 subagent</b>\n❌ <b>GitHub</b> — list repos (failed: rate limited)",
@@ -114,8 +116,8 @@ describe("renderProgress", () => {
 
   test("later rounds are appended below finished ones", () => {
     const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], children: [] }],
-      [{ name: "Members", query: "who is going", state: "running", activeTools: [], children: [] }],
+      [{ name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] }],
+      [{ name: "Members", query: "who is going", state: "running", activeTools: [], toolLog: [], children: [] }],
     ];
     expect(renderProgress(batches)).toBe(
       "<b>Done — 1 subagent</b>\n" +
@@ -128,14 +130,14 @@ describe("renderProgress", () => {
 
   test("multi-line tasks are flattened to one line", () => {
     const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "line one\n\nline two", state: "running", activeTools: [], children: [] }],
+      [{ name: "Events", query: "line one\n\nline two", state: "running", activeTools: [], toolLog: [], children: [] }],
     ];
     expect(renderProgress(batches)).toContain("⏳ <b>Events</b> — line one line two");
   });
 
   test("long tasks are truncated", () => {
     const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "A".repeat(400), state: "running", activeTools: [], children: [] }],
+      [{ name: "Events", query: "A".repeat(400), state: "running", activeTools: [], toolLog: [], children: [] }],
     ];
     const line = renderProgress(batches).split("\n")[1] ?? "";
     expect(line).toContain("…");
@@ -144,7 +146,7 @@ describe("renderProgress", () => {
 
   test("HTML in a running query is escaped", () => {
     const out = renderProgress([
-      [{ name: "Events", query: "<b>hi</b> & bye", state: "running", activeTools: [], children: [] }],
+      [{ name: "Events", query: "<b>hi</b> & bye", state: "running", activeTools: [], toolLog: [], children: [] }],
     ]);
     expect(out).toContain("&lt;b&gt;hi&lt;/b&gt; &amp; bye");
     // Only the structural bold tags survive unescaped.
@@ -153,7 +155,7 @@ describe("renderProgress", () => {
 
   test("HTML in a failure reason is escaped", () => {
     const out = renderProgress([
-      [{ name: "Events", query: "q", state: "failed", detail: "a & b <script>", activeTools: [], children: [] }],
+      [{ name: "Events", query: "q", state: "failed", detail: "a & b <script>", activeTools: [], toolLog: [], children: [] }],
     ]);
     expect(out).toContain("a &amp; b &lt;script&gt;");
     expect(out).not.toContain("<script>");
@@ -423,7 +425,7 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("rsvp_event");
     await settle();
 
-    expect(current()).toContain("↳ <i>looking up data</i>, <i>RSVPing</i>");
+    expect(current()).toContain("↳ <i>looking up data</i>\n    ↳ <i>RSVPing</i>");
   });
 
   test("ending one of two parallel tools leaves the other", async () => {
@@ -439,11 +441,12 @@ describe("SubagentProgress", () => {
     endFirst();
     await settle();
 
+    // Both stay: the stack is a history, not a live view.
+    expect(current()).toContain("↳ <i>looking up data</i>");
     expect(current()).toContain("↳ <i>RSVPing</i>");
-    expect(current()).not.toContain("looking up data");
   });
 
-  test("the same tool running twice clears one at a time", async () => {
+  test("consecutive calls to the same tool collapse into a count", async () => {
     const { progress, current, fire } = setup();
 
     const handle = progress.start("Events", "meetups");
@@ -456,8 +459,65 @@ describe("SubagentProgress", () => {
     endA();
     await settle();
 
-    expect(current()).toContain("↳ <i>looking up data</i>");
-    expect(current()).not.toContain("<i>looking up data</i>, <i>looking up data</i>");
+    expect(current()).toContain("↳ <i>looking up data</i> ×2");
+  });
+
+  test("the stack grows in call order", async () => {
+    const { progress, current, fire } = setup();
+
+    const handle = progress.start("Events", "plan it");
+    fire();
+    await settle();
+    handle.activity.toolStart("graphql_query")();
+    handle.activity.toolStart("create_event")();
+    handle.activity.toolStart("rsvp_event");
+    await settle();
+
+    const lines = (current() ?? "").split("\n").filter((l) => l.includes("↳"));
+    expect(lines).toEqual([
+      "    ↳ <i>looking up data</i>",
+      "    ↳ <i>creating the event</i>",
+      "    ↳ <i>RSVPing</i>",
+    ]);
+  });
+
+  test("a long stack folds the oldest entries away", async () => {
+    const { progress, current, fire } = setup();
+
+    const handle = progress.start("Events", "plan it");
+    fire();
+    await settle();
+    for (const t of [
+      "graphql_query", "create_event", "update_event",
+      "delete_event", "rsvp_event", "get_reputation", "get_leaderboard",
+    ]) {
+      handle.activity.toolStart(t)();
+    }
+    await settle();
+
+    const text = current() ?? "";
+    expect(text).toContain("↳ …2 earlier");
+    expect(text).toContain("↳ <i>reading the leaderboard</i>");
+    expect(text).not.toContain("looking up data");
+  });
+
+  test("the stack collapses away when the sub-agent settles", async () => {
+    const { progress, current, fire } = setup();
+
+    const handle = progress.start("Events", "plan it");
+    fire();
+    await settle();
+    handle.activity.toolStart("graphql_query")();
+    handle.activity.toolStart("create_event")();
+    await settle();
+    expect((current() ?? "").split("\n").filter((l) => l.includes("↳"))).toHaveLength(2);
+
+    handle.done("event created");
+    await progress.finish();
+
+    expect(current()).toBe(
+      "<b>Done — 1 subagent</b>\n✅ <b>Events</b> — plan it",
+    );
   });
 
   test("a settled sub-agent shows no tool line", async () => {
@@ -714,9 +774,10 @@ describe("edit throttling", () => {
     fire();
     await settle();
 
+    // One edit for two updates, carrying the state as of the flush.
     expect(edits).toHaveLength(1);
+    expect(current()).toContain("<i>looking up data</i>");
     expect(current()).toContain("<i>RSVPing</i>");
-    expect(current()).not.toContain("looking up data");
   });
 
   test("an edit past the interval goes straight out", async () => {
@@ -820,7 +881,7 @@ describe("tool line visibility", () => {
     expect(sink.current()).not.toContain("↳");
   });
 
-  test("a newer tool replaces the previous one", async () => {
+  test("a newer tool stacks under the previous one", async () => {
     const sink = makeSink();
     const clock = makeScheduler();
     const progress = new SubagentProgress({
@@ -837,8 +898,8 @@ describe("tool line visibility", () => {
     handle.activity.toolStart("rsvp_event");
     await settle();
 
+    expect(sink.current()).toContain("<i>looking up data</i>");
     expect(sink.current()).toContain("<i>RSVPing</i>");
-    expect(sink.current()).not.toContain("looking up data");
   });
 });
 
@@ -909,5 +970,139 @@ describe("trackToolCalls", () => {
     const { activity } = makeActivity();
     const tools = trackToolCalls({ client_side: { description: "x" } } as never, activity);
     expect(tools).toHaveProperty("client_side");
+  });
+});
+
+// ─── describing tool calls ───────────────────────────────────────────────────
+
+describe("graphqlRootField", () => {
+  test.each([
+    ["{ events { id } }", "events"],
+    ["query { members { items { id } } }", "members"],
+    ["query Upcoming { events(limit: 5) { id } }", "events"],
+    ["\n  query  {\n    venues {\n      id\n    }\n  }", "venues"],
+    ["mutation { createEvent(title: \"x\") { id } }", "createEvent"],
+  ])("%s → %s", (query, expected) => {
+    expect(graphqlRootField(query)).toBe(expected);
+  });
+
+  test("returns undefined for anything unparseable", () => {
+    expect(graphqlRootField("not a query")).toBeUndefined();
+    expect(graphqlRootField("")).toBeUndefined();
+    expect(graphqlRootField(undefined)).toBeUndefined();
+    expect(graphqlRootField(42)).toBeUndefined();
+  });
+});
+
+describe("describeToolCall", () => {
+  test("a GraphQL query names what it is fetching", () => {
+    expect(describeToolCall("graphql_query", { query: "{ events { id } }" })).toBe(
+      "looking up events",
+    );
+  });
+
+  test("falls back to the static label when args do not help", () => {
+    expect(describeToolCall("graphql_query", { query: "???" })).toBe("looking up data");
+    expect(describeToolCall("graphql_query")).toBe("looking up data");
+  });
+
+  test("writes name the record they act on", () => {
+    expect(describeToolCall("create_event", { title: "Tech Halaqah" })).toBe(
+      "creating event Tech Halaqah",
+    );
+    expect(describeToolCall("rsvp_event", { status: "going" })).toBe("RSVPing going");
+  });
+
+  test("github calls name the repo", () => {
+    expect(
+      describeToolCall("list_github_prs", { owner: "msocietyhq", repo: "community-os" }),
+    ).toBe("reading PRs in msocietyhq/community-os");
+    expect(describeToolCall("list_github_prs", { repo: "community-os" })).toBe(
+      "reading PRs in community-os",
+    );
+  });
+
+  test("long details are truncated", () => {
+    const phrase = describeToolCall("create_event", { title: "A".repeat(200) });
+    expect(phrase).toContain("…");
+    expect(phrase.length).toBeLessThan(70);
+  });
+
+  test("multi-line details are flattened", () => {
+    expect(describeToolCall("create_event", { title: "Tech\n\nHalaqah" })).toBe(
+      "creating event Tech Halaqah",
+    );
+  });
+
+  test("a slug names the record being changed", () => {
+    expect(describeToolCall("update_event", { event_id: "tech-halaqah-aug" })).toBe(
+      "updating event tech-halaqah-aug",
+    );
+    expect(describeToolCall("delete_project", { project_id: "ppm" })).toBe(
+      "removing project ppm",
+    );
+  });
+
+  /** A UUID tells a member reading along nothing, so it is dropped. */
+  test("a raw UUID falls back to the plain label", () => {
+    expect(
+      describeToolCall("update_event", {
+        event_id: "b73ebac4-ded0-436b-9bec-b7da73df38a9",
+      }),
+    ).toBe("updating the event");
+    expect(
+      describeToolCall("delete_venue", {
+        venue_id: "B73EBAC4-DED0-436B-9BEC-B7DA73DF38A9",
+      }),
+    ).toBe("removing the venue");
+  });
+
+  test("unknown tools fall back to a readable name", () => {
+    expect(describeToolCall("some_new_tool", { a: 1 })).toBe("some new tool");
+  });
+});
+
+describe("stacking by phrase", () => {
+  const settleTick = () => new Promise<void>((r) => setTimeout(r, 0));
+
+  test("different lookups stack as separate lines", async () => {
+    const sink = makeSink();
+    const clock = makeScheduler();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      scheduler: clock.scheduler,
+      minEditIntervalMs: 0,
+    });
+
+    const handle = progress.start("Members", "find people");
+    clock.fire();
+    await settleTick();
+    handle.activity.toolStart("graphql_query", { query: "{ members { id } }" })();
+    handle.activity.toolStart("graphql_query", { query: "{ events { id } }" })();
+    await settleTick();
+
+    const text = sink.current() ?? "";
+    expect(text).toContain("↳ <i>looking up members</i>");
+    expect(text).toContain("↳ <i>looking up events</i>");
+  });
+
+  test("repeating the same lookup collapses into a count", async () => {
+    const sink = makeSink();
+    const clock = makeScheduler();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      scheduler: clock.scheduler,
+      minEditIntervalMs: 0,
+    });
+
+    const handle = progress.start("Members", "find people");
+    clock.fire();
+    await settleTick();
+    const q = { query: "query Page { members { id } }" };
+    handle.activity.toolStart("graphql_query", q)();
+    handle.activity.toolStart("graphql_query", q)();
+    await settleTick();
+
+    expect(sink.current()).toContain("↳ <i>looking up members</i> ×2");
   });
 });

@@ -31,7 +31,7 @@ export function createEventsTools(ctx: ToolContext) {
       inputSchema: z.object({
         event_id: z
           .string()
-          .describe("The event ID (UUID) or slug"),
+          .describe("The event slug (preferred — readable) or ID (UUID)"),
         status: z
           .enum(["going", "maybe", "not_going"])
           .describe("RSVP status"),
@@ -85,7 +85,7 @@ export function createEventsTools(ctx: ToolContext) {
     update_event: tool({
       description: "Update an existing event. Only available to admins.",
       inputSchema: z.object({
-        event_id: z.string().describe("The event ID (UUID) or slug"),
+        event_id: z.string().describe("The event slug (preferred — readable) or ID (UUID)"),
         title: z.string().optional().describe("Event title"),
         description: z.string().optional().describe("Event description"),
         event_type: z
@@ -126,7 +126,7 @@ export function createEventsTools(ctx: ToolContext) {
     delete_event: tool({
       description: "Cancel/delete an event. Only available to admins.",
       inputSchema: z.object({
-        event_id: z.string().describe("The event ID (UUID) or slug"),
+        event_id: z.string().describe("The event slug (preferred — readable) or ID (UUID)"),
       }),
       execute: async ({ event_id }) => {
         console.log("[events-agent:delete_event]", { event_id });
@@ -160,7 +160,7 @@ export function createEventsAgent(ctx: ToolContext) {
         model: aiService.models.fast,
         system: `You are an events assistant for the MSOCIETY community. Help with listing, viewing, RSVPing to, and managing events. Today's date is ${today}. Use ISO 8601 for dates. Only perform write operations (create/update/delete) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
-Always search by name/title before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.
+Always search by name/title before attempting updates. Pass the slug, not the UUID, when calling update/delete tools. Use the graphql_query tool for reads. Paginate when hasNext is true.
 
 ## GraphQL Schema
 

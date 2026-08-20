@@ -57,7 +57,7 @@ export function createProjectsTools(ctx: ToolContext) {
     update_project: tool({
       description: "Update an existing project. Only available to project owner or admin.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project ID (UUID) or slug"),
+        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
         name: z.string().optional().describe("Project name"),
         description: z.string().optional().describe("Project description"),
         nature: z
@@ -93,7 +93,7 @@ export function createProjectsTools(ctx: ToolContext) {
     add_project_member: tool({
       description: "Add a member to a project team. Requires project owner or admin.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project ID (UUID) or slug"),
+        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
         user_id: z.string().describe("The user ID to add"),
         role: z.enum(["owner", "contributor"]).describe("Role in the project"),
       }),
@@ -114,7 +114,7 @@ export function createProjectsTools(ctx: ToolContext) {
       description:
         "Remove a member from a project team. Requires project owner or admin. Cannot remove the last owner.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project ID (UUID) or slug"),
+        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
         user_id: z.string().describe("The user ID to remove"),
       }),
       execute: async ({ project_id, user_id }) => {
@@ -134,7 +134,7 @@ export function createProjectsTools(ctx: ToolContext) {
     delete_project: tool({
       description: "Delete a project. Only available to admin.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project ID (UUID) or slug"),
+        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
       }),
       execute: async ({ project_id }) => {
         console.log("[projects-agent:delete_project]", { project_id });
@@ -167,7 +167,7 @@ export function createProjectsAgent(ctx: ToolContext) {
         model: aiService.models.fast,
         system: `You are a projects assistant for the MSOCIETY community. Help with listing, viewing, creating, and managing projects and their team members. Only perform write operations (create/update/delete/add member/remove member) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
-Always search by name before attempting updates. Use the graphql_query tool for reads. Paginate when hasNext is true.
+Always search by name before attempting updates. Pass the slug, not the UUID, when calling update/delete tools. Use the graphql_query tool for reads. Paginate when hasNext is true.
 
 ## GraphQL Schema
 
