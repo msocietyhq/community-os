@@ -36,6 +36,8 @@ interface AgentParams {
   senderTelegramId: number | null;
   /** Posts and edits the sub-agent status message. Omit to run silently. */
   progressSink?: ProgressSink;
+  /** Puts a clarifying question to the member. Omit to disable ask_user. */
+  askUser?: (question: string) => Promise<void>;
 }
 
 interface AgentResult {
@@ -52,6 +54,7 @@ export async function runAgent({
   chatId,
   senderTelegramId,
   progressSink,
+  askUser,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
@@ -99,7 +102,7 @@ export async function runAgent({
     ? new SubagentProgress({ sink: progressSink })
     : undefined;
 
-  const tools = createTools({ api, graphql, chatId, senderTelegramId, progress });
+  const tools = createTools({ api, graphql, chatId, senderTelegramId, progress, askUser });
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 

@@ -51,6 +51,11 @@ export interface ToolContext {
   chatId: string;
   senderTelegramId: number | null;
   /**
+   * Sends a question to the member and prompts their client to reply, so the
+   * answer routes back to the bot. Absent outside the chat handler.
+   */
+  askUser?: (question: string) => Promise<void>;
+  /**
    * Where sub-agent activity is reported. The top-level reporter at depth 0,
    * a running sub-agent's activity deeper in. Absent outside the chat handler.
    */
@@ -309,6 +314,34 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             activity,
           ),
         );
+      },
+    }),
+
+    ask_user: tool({
+      description:
+        "Ask the member a clarifying question when their request is ambiguous and guessing would waste their time — which event they mean, which of several matches, a missing detail you cannot infer. Their reply comes back as a new message. Ask one specific question, not a list. Do not use this to confirm something you can already work out, or to announce what you are about to do.",
+      inputSchema: z.object({
+        question: z
+          .string()
+          .describe("The single question to put to the member, in plain language"),
+      }),
+      execute: async ({ question }) => {
+        if (!ctx.askUser) {
+          return {
+            asked: false,
+            note: "Can't ask questions here — answer with what you have, or say what you'd need.",
+          };
+        }
+
+        console.log("[main-agent:ask_user]", question.slice(0, 120));
+        await ctx.askUser(question);
+
+        // The turn must end here: the answer arrives as a separate message
+        // and starts a fresh run with this exchange already in history.
+        return {
+          asked: true,
+          note: "Question sent to the member. End your turn now without any further text — you will be called again when they reply.",
+        };
       },
     }),
 

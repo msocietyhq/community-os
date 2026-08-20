@@ -4,6 +4,7 @@ import type {
   Conversation,
 } from "@grammyjs/conversations";
 import type { ModelMessage } from "ai";
+import type { PendingQuestion } from "./lib/pending-question";
 
 export interface TelegramMeta {
   messageId: number;
@@ -26,6 +27,12 @@ export interface TelegramMeta {
 export interface SessionData {
   // Maps bot message_id → AI SDK response messages (tool calls, results, assistant text)
   aiResponses?: Record<number, ModelMessage[]>;
+  /**
+   * An outstanding ask_user question. Sessions are keyed per chat, so there is
+   * one slot per chat — the asked member is recorded so someone else replying
+   * doesn't consume it.
+   */
+  pendingQuestion?: PendingQuestion;
 }
 
 type BaseContext = Context & SessionFlavor<SessionData>;

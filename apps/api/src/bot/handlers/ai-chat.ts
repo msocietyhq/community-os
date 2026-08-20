@@ -10,10 +10,11 @@ import {
 } from "../lib/chat-context";
 import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
 import type { ProgressSink } from "../lib/subagent-progress";
+import { shouldResume, isExpired } from "../lib/pending-question";
 
 // Convert Markdown output from AI into Telegram HTML.
 // Escapes HTML entities first, then maps ** / * / _ / ` to tags.
-function markdownToHtml(text: string): string {
+export function markdownToHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -47,11 +48,24 @@ aiChatHandler.on("message:text", async (ctx) => {
 
   let query: string;
 
+  // Answering an outstanding question counts as addressing the bot, even
+  // without a mention or reply. See lib/pending-question.
+  const now = Date.now();
+  const resuming = shouldResume(ctx.session.pendingQuestion, {
+    fromTelegramId: ctx.from?.id ?? null,
+    messageThreadId: ctx.message.message_thread_id ?? null,
+    at: now,
+  });
+
+  if (isExpired(ctx.session.pendingQuestion, now)) {
+    ctx.session.pendingQuestion = undefined;
+  }
+
   if (isGroup) {
     const isMentioned = text.includes(`@${botUsername}`);
     const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
 
-    if (!isMentioned && !isReplyToBot) return;
+    if (!isMentioned && !isReplyToBot && !resuming) return;
 
     query = isMentioned
       ? text.replace(`@${botUsername}`, "").trim()
@@ -68,6 +82,12 @@ aiChatHandler.on("message:text", async (ctx) => {
     if (!query) return;
   } else {
     return;
+  }
+
+  // Whatever happens next, the question has had its answer (or been ignored
+  // in favour of something else) — don't let it linger and catch a later message.
+  if (ctx.session.pendingQuestion?.askedTelegramId === ctx.from?.id) {
+    ctx.session.pendingQuestion = undefined;
   }
 
   const telegramId = String(ctx.from!.id);
@@ -125,6 +145,43 @@ aiChatHandler.on("message:text", async (ctx) => {
     },
   };
 
+  // force_reply pops the reply composer on the asked member's client, so their
+  // answer is mechanically a reply to the bot. Without it, a plain follow-up in
+  // a group never reaches the handler — it isn't a mention or a reply.
+  let questionMessageId: number | null = null;
+  const askUser = async (question: string) => {
+    const sent = await ctx.reply(markdownToHtml(question), {
+      parse_mode: "HTML",
+      reply_markup: { force_reply: true, selective: true },
+    });
+    questionMessageId = sent.message_id;
+    if (ctx.from) {
+      ctx.session.pendingQuestion = {
+        questionMessageId: sent.message_id,
+        askedTelegramId: ctx.from.id,
+        askedAt: Date.now(),
+        messageThreadId: ctx.message.message_thread_id ?? null,
+      };
+    }
+    logBotMessage(sent, ctx.me, chatType, question);
+  };
+
+  /** Keys this turn's AI context to the bot message it produced, then prunes. */
+  const rememberTurn = (botMessageId: number, turn: typeof aiResponses[number]) => {
+    aiResponses[botMessageId] = turn;
+
+    const recentBotMessageIds = new Set(
+      recentMessages.filter((r) => r.fromUserId === ctx.me.id).map((r) => r.messageId),
+    );
+    recentBotMessageIds.add(botMessageId);
+    for (const key of Object.keys(aiResponses)) {
+      if (!recentBotMessageIds.has(Number(key))) {
+        delete aiResponses[Number(key)];
+      }
+    }
+    ctx.session.aiResponses = aiResponses;
+  };
+
   try {
     await ctx.replyWithChatAction("typing");
     const { text: responseText, responseMessages } = await runAgent({
@@ -136,28 +193,22 @@ aiChatHandler.on("message:text", async (ctx) => {
       chatId: String(ctx.chat.id),
       senderTelegramId: ctx.from?.id ?? null,
       progressSink,
+      askUser,
     });
+
+    // The question is already on screen; a second message would just repeat
+    // it. Key this turn to the question so the answer replays with context.
+    if (questionMessageId !== null) {
+      rememberTurn(questionMessageId, responseMessages);
+      return;
+    }
 
     const sentMsg = await ctx.reply(markdownToHtml(responseText), {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
       parse_mode: "HTML",
     });
 
-    // Store AI context in session, keyed by bot message ID
-    aiResponses[sentMsg.message_id] = responseMessages;
-
-    // Prune old entries (keep only message IDs present in recent DB rows)
-    const recentBotMessageIds = new Set(
-      recentMessages.filter((r) => r.fromUserId === ctx.me.id).map((r) => r.messageId),
-    );
-    recentBotMessageIds.add(sentMsg.message_id);
-    for (const key of Object.keys(aiResponses)) {
-      if (!recentBotMessageIds.has(Number(key))) {
-        delete aiResponses[Number(key)];
-      }
-    }
-    ctx.session.aiResponses = aiResponses;
-
+    rememberTurn(sentMsg.message_id, responseMessages);
     logBotMessage(sentMsg, ctx.me, chatType, responseText);
   } catch (error) {
     console.error("AI chat error:", error);
