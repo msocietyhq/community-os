@@ -2,10 +2,14 @@ import { stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import {
+  trackToolCalls,
+  type SubagentActivity,
+} from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 
-export function createProjectsAgent(ctx: ToolContext) {
-  const projectsTools = {
+export function createProjectsTools(ctx: ToolContext) {
+  return {
     graphql_query: tool({
       description:
         "Query community projects via GraphQL. Write a GraphQL query selecting only the fields you need.",
@@ -145,8 +149,18 @@ export function createProjectsAgent(ctx: ToolContext) {
       },
     }),
   };
+}
 
-  return async function runProjectsAgent(query: string): Promise<string> {
+/** Every tool this sub-agent can call. Drives the label map's exhaustiveness. */
+export type ProjectsToolName = keyof ReturnType<typeof createProjectsTools>;
+
+export function createProjectsAgent(ctx: ToolContext) {
+  const projectsTools = createProjectsTools(ctx);
+
+  return async function runProjectsAgent(
+    query: string,
+    activity?: SubagentActivity,
+  ): Promise<string> {
     console.log("[projects-agent] query:", query);
     const result = await aiService.generateText(
       {
@@ -159,7 +173,7 @@ Always search by name before attempting updates. Use the graphql_query tool for 
 
 ${schemaSDL}`,
         messages: [{ role: "user", content: query }],
-        tools: projectsTools,
+        tools: trackToolCalls(projectsTools, activity),
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },

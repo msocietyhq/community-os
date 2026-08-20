@@ -13,6 +13,7 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
+import { SubagentProgress, type ProgressSink } from "../lib/subagent-progress";
 
 /** Bridges the memory service into the framework-agnostic context builder. */
 const memoryRecaller: MemoryRecaller = {
@@ -32,6 +33,8 @@ interface AgentParams {
   chatHistory: ModelMessage[];
   chatId: string;
   senderTelegramId: number | null;
+  /** Posts and edits the sub-agent status message. Omit to run silently. */
+  progressSink?: ProgressSink;
 }
 
 interface AgentResult {
@@ -47,6 +50,7 @@ export async function runAgent({
   chatHistory,
   chatId,
   senderTelegramId,
+  progressSink,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
@@ -88,7 +92,11 @@ export async function runAgent({
     return json.data ?? json.errors;
   };
 
-  const tools = createTools({ api, graphql, chatId, senderTelegramId });
+  const progress = progressSink
+    ? new SubagentProgress({ sink: progressSink })
+    : undefined;
+
+  const tools = createTools({ api, graphql, chatId, senderTelegramId, progress });
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 
@@ -123,19 +131,27 @@ export async function runAgent({
       `[main-agent] done — steps:${result.steps.length} tokens:${result.usage.inputTokens ?? 0}in/${result.usage.outputTokens ?? 0}out text:"${result.text?.slice(0, 120)}"`,
     );
 
+    // The model sometimes ends its turn on a tool call, or hits the step cap,
+    // leaving no text. Surfacing the sub-agents' own output beats discarding
+    // their work behind a generic error.
     const text =
-      result.text || "I couldn't generate a response. Please try again.";
+      result.text ||
+      progress?.completedResults().join("\n\n") ||
+      "I couldn't generate a response. Please try again.";
 
     // Fire-and-forget: track which memories were used
     if (memories.length > 0) {
       incrementAccessCount(memories.map((m) => m.id));
     }
 
+    await progress?.finish().catch(() => {});
+
     return {
       text,
       responseMessages: result.response.messages as ModelMessage[],
     };
   } catch (error) {
+    await progress?.finish().catch(() => {});
     if (error instanceof Error && error.message.includes("rate limit")) {
       return {
         text: "I'm being rate-limited right now. Please try again in a minute or two 🙏",

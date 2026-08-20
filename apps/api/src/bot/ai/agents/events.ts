@@ -2,10 +2,14 @@ import { stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import {
+  trackToolCalls,
+  type SubagentActivity,
+} from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 
-export function createEventsAgent(ctx: ToolContext) {
-  const eventsTools = {
+export function createEventsTools(ctx: ToolContext) {
+  return {
     graphql_query: tool({
       description:
         "Query community events via GraphQL. Write a GraphQL query selecting only the fields you need.",
@@ -137,8 +141,18 @@ export function createEventsAgent(ctx: ToolContext) {
       },
     }),
   };
+}
 
-  return async function runEventsAgent(query: string): Promise<string> {
+/** Every tool this sub-agent can call. Drives the label map's exhaustiveness. */
+export type EventsToolName = keyof ReturnType<typeof createEventsTools>;
+
+export function createEventsAgent(ctx: ToolContext) {
+  const eventsTools = createEventsTools(ctx);
+
+  return async function runEventsAgent(
+    query: string,
+    activity?: SubagentActivity,
+  ): Promise<string> {
     console.log("[events-agent] query:", query);
     const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
     const result = await aiService.generateText(
@@ -152,7 +166,7 @@ Always search by name/title before attempting updates. Use the graphql_query too
 
 ${schemaSDL}`,
         messages: [{ role: "user", content: query }],
-        tools: eventsTools,
+        tools: trackToolCalls(eventsTools, activity),
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },

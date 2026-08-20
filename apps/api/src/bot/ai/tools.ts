@@ -20,6 +20,10 @@ import {
   MAX_MESSAGES_BY_ID,
 } from "../../services/messages.service";
 import { getRecentChatMessages } from "../lib/telegram-message-logger";
+import type {
+  SubagentProgress,
+  SubagentActivity,
+} from "../lib/subagent-progress";
 import { formatGroupHistory } from "../lib/chat-context";
 import {
   saveMemory,
@@ -36,6 +40,31 @@ export interface ToolContext {
   graphql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
   chatId: string;
   senderTelegramId: number | null;
+  /** Reports sub-agent activity to the user. Absent outside the chat handler. */
+  progress?: SubagentProgress;
+}
+
+/**
+ * Runs a sub-agent while reporting its state to the user.
+ *
+ * Only these top-level sub-agents report — tool calls made *inside* a
+ * sub-agent stay invisible, keeping the status message one layer deep.
+ */
+async function withProgress(
+  ctx: ToolContext,
+  name: string,
+  query: string,
+  run: (activity?: SubagentActivity) => Promise<string>,
+): Promise<string> {
+  const handle = ctx.progress?.start(name, query);
+  try {
+    const result = await run(handle?.activity);
+    handle?.done(result);
+    return result;
+  } catch (error) {
+    handle?.failed(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 export function createTools(ctx: ToolContext) {
@@ -69,7 +98,9 @@ export function createTools(ctx: ToolContext) {
       }),
       execute: async ({ query }) => {
         console.log("[main-agent] → events sub-agent, query:", query);
-        const result = await runEventsAgent(query);
+        const result = await withProgress(ctx, "Events", query, (activity) =>
+          runEventsAgent(query, activity),
+        );
         console.log(
           "[main-agent] ← events sub-agent, response:",
           result.slice(0, 120),
@@ -86,7 +117,9 @@ export function createTools(ctx: ToolContext) {
       }),
       execute: async ({ query }) => {
         console.log("[main-agent] → members sub-agent, query:", query);
-        const result = await runMembersAgent(query);
+        const result = await withProgress(ctx, "Members", query, (activity) =>
+          runMembersAgent(query, activity),
+        );
         console.log(
           "[main-agent] ← members sub-agent, response:",
           result.slice(0, 120),
@@ -103,7 +136,9 @@ export function createTools(ctx: ToolContext) {
       }),
       execute: async ({ query }) => {
         console.log("[main-agent] → venues sub-agent, query:", query);
-        const result = await runVenuesAgent(query);
+        const result = await withProgress(ctx, "Venues", query, (activity) =>
+          runVenuesAgent(query, activity),
+        );
         console.log(
           "[main-agent] ← venues sub-agent, response:",
           result.slice(0, 120),
@@ -120,7 +155,9 @@ export function createTools(ctx: ToolContext) {
       }),
       execute: async ({ query }) => {
         console.log("[main-agent] → projects sub-agent, query:", query);
-        const result = await runProjectsAgent(query);
+        const result = await withProgress(ctx, "Projects", query, (activity) =>
+          runProjectsAgent(query, activity),
+        );
         console.log(
           "[main-agent] ← projects sub-agent, response:",
           result.slice(0, 120),
@@ -157,10 +194,13 @@ export function createTools(ctx: ToolContext) {
         query: z.string().describe("What to look up on GitHub"),
       }),
       execute: async ({ query }) => {
-        return runGithubAgent(query, {
-          telegramUserId: ctx.senderTelegramId,
-          chatId: ctx.chatId,
-        });
+        return withProgress(ctx, "GitHub", query, (activity) =>
+          runGithubAgent(
+            query,
+            { telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+            activity,
+          ),
+        );
       },
     }),
 

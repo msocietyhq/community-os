@@ -2,10 +2,14 @@ import { stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import {
+  trackToolCalls,
+  type SubagentActivity,
+} from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 
-export function createVenuesAgent(ctx: ToolContext) {
-  const venuesTools = {
+export function createVenuesTools(ctx: ToolContext) {
+  return {
     graphql_query: tool({
       description:
         "Query community venues via GraphQL. Write a GraphQL query selecting only the fields you need.",
@@ -107,8 +111,18 @@ export function createVenuesAgent(ctx: ToolContext) {
       },
     }),
   };
+}
 
-  return async function runVenuesAgent(query: string): Promise<string> {
+/** Every tool this sub-agent can call. Drives the label map's exhaustiveness. */
+export type VenuesToolName = keyof ReturnType<typeof createVenuesTools>;
+
+export function createVenuesAgent(ctx: ToolContext) {
+  const venuesTools = createVenuesTools(ctx);
+
+  return async function runVenuesAgent(
+    query: string,
+    activity?: SubagentActivity,
+  ): Promise<string> {
     console.log("[venues-agent] query:", query);
     const result = await aiService.generateText(
       {
@@ -121,7 +135,7 @@ Use the graphql_query tool for reads. Paginate when hasNext is true.
 
 ${schemaSDL}`,
         messages: [{ role: "user", content: query }],
-        tools: venuesTools,
+        tools: trackToolCalls(venuesTools, activity),
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },

@@ -9,6 +9,7 @@ import {
   ONE_HOUR_MS,
 } from "../lib/chat-context";
 import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
+import type { ProgressSink } from "../lib/subagent-progress";
 
 // Convert Markdown output from AI into Telegram HTML.
 // Escapes HTML entities first, then maps ** / * / _ / ` to tags.
@@ -100,6 +101,30 @@ aiChatHandler.on("message:text", async (ctx) => {
   const aiResponses = ctx.session.aiResponses ?? {};
   const chatHistory = buildMessagesFromHistory(recentMessages, ctx.me.id, aiResponses);
 
+  // Posts a status message the first time a sub-agent runs long enough to be
+  // worth reporting, then edits it in place as each one settles. Failures here
+  // must never take down the reply, so every call is swallowed.
+  const progressSink: ProgressSink = {
+    async send(text) {
+      try {
+        const msg = await ctx.reply(text, { parse_mode: "HTML" });
+        return msg.message_id;
+      } catch (err) {
+        console.error("[subagent-progress] send failed:", err);
+        return null;
+      }
+    },
+    async edit(messageId, text) {
+      try {
+        await ctx.api.editMessageText(ctx.chat.id, messageId, text, {
+          parse_mode: "HTML",
+        });
+      } catch (err) {
+        console.error("[subagent-progress] edit failed:", err);
+      }
+    },
+  };
+
   try {
     await ctx.replyWithChatAction("typing");
     const { text: responseText, responseMessages } = await runAgent({
@@ -110,6 +135,7 @@ aiChatHandler.on("message:text", async (ctx) => {
       chatHistory,
       chatId: String(ctx.chat.id),
       senderTelegramId: ctx.from?.id ?? null,
+      progressSink,
     });
 
     const sentMsg = await ctx.reply(markdownToHtml(responseText), {

@@ -2,10 +2,14 @@ import { stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { schemaSDL } from "../../../graphql";
 import type { ToolContext } from "../tools";
+import {
+  trackToolCalls,
+  type SubagentActivity,
+} from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 
-export function createMembersAgent(ctx: ToolContext) {
-  const membersTools = {
+export function createMembersTools(ctx: ToolContext) {
+  return {
     graphql_query: tool({
       description:
         "Query community members via GraphQL. Write a GraphQL query selecting only the fields you need.",
@@ -115,8 +119,18 @@ export function createMembersAgent(ctx: ToolContext) {
       },
     }),
   };
+}
 
-  return async function runMembersAgent(query: string): Promise<string> {
+/** Every tool this sub-agent can call. Drives the label map's exhaustiveness. */
+export type MembersToolName = keyof ReturnType<typeof createMembersTools>;
+
+export function createMembersAgent(ctx: ToolContext) {
+  const membersTools = createMembersTools(ctx);
+
+  return async function runMembersAgent(
+    query: string,
+    activity?: SubagentActivity,
+  ): Promise<string> {
     console.log("[members-agent] query:", query);
     const result = await aiService.generateText(
       {
@@ -129,7 +143,7 @@ Use the graphql_query tool for searching/browsing members. Use get_my_profile fo
 
 ${schemaSDL}`,
         messages: [{ role: "user", content: query }],
-        tools: membersTools,
+        tools: trackToolCalls(membersTools, activity),
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },

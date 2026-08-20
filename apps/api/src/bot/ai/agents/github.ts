@@ -2,6 +2,10 @@ import { stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { env } from "../../../env";
 import { aiService } from "../../../services/ai.service";
+import {
+  trackToolCalls,
+  type SubagentActivity,
+} from "../../lib/subagent-progress";
 
 const GITHUB_API = "https://api.github.com";
 const DEFAULT_ORG = "msocietyhq";
@@ -128,9 +132,13 @@ const githubTools = {
   }),
 };
 
+/** Every tool this sub-agent can call. Drives the label map's exhaustiveness. */
+export type GithubToolName = keyof typeof githubTools;
+
 export async function runGithubAgent(
   query: string,
   trackingCtx?: { telegramUserId?: number | null; chatId?: string | null },
+  activity?: SubagentActivity,
 ): Promise<string> {
   const result = await aiService.generateText(
     {
@@ -139,7 +147,7 @@ export async function runGithubAgent(
 The MSOCIETY community's default org is ${DEFAULT_ORG} — use it when no owner is specified.
 Be concise. Format for Telegram Markdown. Present lists as compact one-liners.`,
       messages: [{ role: "user", content: query }],
-      tools: githubTools,
+      tools: trackToolCalls(githubTools, activity),
       stopWhen: stepCountIs(5),
       maxOutputTokens: 512,
     },
