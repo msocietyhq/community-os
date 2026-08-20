@@ -3,6 +3,7 @@ import type { BotContext } from "../types";
 import { runAgent } from "../ai/agent";
 import { env } from "../../env";
 import {
+  formatGroupHistory,
   buildTelegramMeta,
   buildEnrichedQuery,
   buildMessagesFromHistory,
@@ -11,6 +12,14 @@ import {
 import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
 import type { ProgressSink } from "../lib/subagent-progress";
 import { shouldResume, isExpired } from "../lib/pending-question";
+import {
+  preFilter,
+  offCooldown,
+  judgeChimeIn,
+  recordChime,
+  lastChimeAt,
+  CHIME_IN_CONTEXT_MESSAGES,
+} from "../lib/chime-in";
 
 // Convert Markdown output from AI into Telegram HTML.
 // Escapes HTML entities first, then maps ** / * / _ / ` to tags.
@@ -61,11 +70,16 @@ aiChatHandler.on("message:text", async (ctx) => {
     ctx.session.pendingQuestion = undefined;
   }
 
+  let chimingIn = false;
+
   if (isGroup) {
     const isMentioned = text.includes(`@${botUsername}`);
     const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
 
-    if (!isMentioned && !isReplyToBot && !resuming) return;
+    if (!isMentioned && !isReplyToBot && !resuming) {
+      chimingIn = await shouldChimeIn(ctx, text, now);
+      if (!chimingIn) return;
+    }
 
     query = isMentioned
       ? text.replace(`@${botUsername}`, "").trim()
@@ -209,6 +223,7 @@ aiChatHandler.on("message:text", async (ctx) => {
     });
 
     rememberTurn(sentMsg.message_id, responseMessages);
+    if (chimingIn) recordChime(String(ctx.chat.id));
     logBotMessage(sentMsg, ctx.me, chatType, responseText);
   } catch (error) {
     console.error("AI chat error:", error);
@@ -217,3 +232,43 @@ aiChatHandler.on("message:text", async (ctx) => {
     });
   }
 });
+
+/**
+ * Three gates in series, cheapest first: a free pre-filter, a hard cooldown
+ * that no model can override, then a Haiku judgement with conversation
+ * context. Any failure resolves to silence.
+ */
+async function shouldChimeIn(
+  ctx: BotContext,
+  text: string,
+  now: number,
+): Promise<boolean> {
+  const chatId = String(ctx.chat!.id);
+
+  const skip = preFilter({ text, isBot: ctx.from?.is_bot ?? false });
+  if (skip) return false;
+
+  if (!offCooldown(lastChimeAt(chatId), now)) return false;
+
+  // Judged with surrounding conversation — "yeah probably" is unjudgeable alone.
+  const context = await getRecentChatMessages(
+    chatId,
+    ctx.message!.message_thread_id ?? null,
+    ONE_HOUR_MS,
+    CHIME_IN_CONTEXT_MESSAGES,
+    ctx.message!.message_id,
+  );
+
+  const decision = await judgeChimeIn({
+    message: text,
+    transcript: formatGroupHistory(context),
+    chatId,
+    telegramUserId: ctx.from?.id ?? null,
+  });
+
+  console.log(
+    `[chime-in] ${decision.respond ? "SPEAK" : "stay quiet"} (${decision.confidence.toFixed(2)}) — ${decision.reason}`,
+  );
+
+  return decision.respond;
+}
