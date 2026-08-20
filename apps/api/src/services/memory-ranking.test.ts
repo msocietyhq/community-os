@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   applyRelativeCutoff,
+  memoryWeight,
+  rankByConfidenceAndRecency,
   DEFAULT_RELATIVE_CUTOFF,
   MIN_SIMILARITY_FLOOR,
+  RECENCY_HALF_LIFE_DAYS,
 } from "./memory-ranking";
 
 const m = (id: string, similarity: number) => ({ id, similarity });
@@ -73,5 +76,89 @@ describe("applyRelativeCutoff", () => {
     for (const score of observed) {
       expect(score).toBeGreaterThan(MIN_SIMILARITY_FLOOR);
     }
+  });
+});
+
+// ─── rankByConfidenceAndRecency ──────────────────────────────────────────────
+
+describe("rankByConfidenceAndRecency", () => {
+  const NOW = new Date("2026-08-20T00:00:00Z");
+  const daysAgo = (n: number) =>
+    new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+
+  const mem = (id: string, confidence: number, ageDays: number) => ({
+    id,
+    confidence,
+    createdAt: daysAgo(ageDays),
+  });
+
+  test("empty input → empty output", () => {
+    expect(rankByConfidenceAndRecency([], NOW, 5)).toEqual([]);
+  });
+
+  test("at equal age, higher confidence wins", () => {
+    const result = rankByConfidenceAndRecency(
+      [mem("low", 0.5, 10), mem("high", 0.9, 10)],
+      NOW,
+      5,
+    );
+    expect(result.map((m) => m.id)).toEqual(["high", "low"]);
+  });
+
+  test("at equal confidence, more recent wins", () => {
+    const result = rankByConfidenceAndRecency(
+      [mem("old", 0.8, 300), mem("new", 0.8, 2)],
+      NOW,
+      5,
+    );
+    expect(result.map((m) => m.id)).toEqual(["new", "old"]);
+  });
+
+  /**
+   * The point of the decay: a durable fact shouldn't be evicted by fresh
+   * trivia, which is what pure newest-first ordering did.
+   */
+  test("a durable high-confidence fact outranks recent low-confidence trivia", () => {
+    const result = rankByConfidenceAndRecency(
+      [mem("trivia", 0.5, 0), mem("durable", 0.95, 60)],
+      NOW,
+      5,
+    );
+    expect(result[0]?.id).toBe("durable");
+  });
+
+  test("but a recent correction beats a very old claim", () => {
+    const result = rankByConfidenceAndRecency(
+      [mem("stale", 0.9, 900), mem("correction", 0.8, 1)],
+      NOW,
+      5,
+    );
+    expect(result[0]?.id).toBe("correction");
+  });
+
+  test("honours the limit", () => {
+    const many = Array.from({ length: 20 }, (_, i) => mem(`m${i}`, 0.8, i));
+    expect(rankByConfidenceAndRecency(many, NOW, 5)).toHaveLength(5);
+  });
+
+  test("does not mutate the input array", () => {
+    const input = [mem("a", 0.5, 100), mem("b", 0.9, 1)];
+    rankByConfidenceAndRecency(input, NOW, 5);
+    expect(input.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  test("weight halves after one half-life", () => {
+    const fresh = memoryWeight({ confidence: 1, createdAt: NOW }, NOW);
+    const aged = memoryWeight(
+      { confidence: 1, createdAt: daysAgo(RECENCY_HALF_LIFE_DAYS) },
+      NOW,
+    );
+    expect(fresh).toBeCloseTo(1, 5);
+    expect(aged).toBeCloseTo(0.5, 5);
+  });
+
+  test("future timestamps do not inflate weight above confidence", () => {
+    const future = new Date(NOW.getTime() + 90 * 24 * 60 * 60 * 1000);
+    expect(memoryWeight({ confidence: 0.8, createdAt: future }, NOW)).toBeCloseTo(0.8, 5);
   });
 });

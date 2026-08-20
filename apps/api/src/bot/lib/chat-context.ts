@@ -118,19 +118,29 @@ interface ReplyParent {
   name: string;
   date?: number;
   snippet: string;
+  /** True when the parent lives in another chat and cannot be fetched. */
+  external?: boolean;
 }
 
 /**
  * Telegram embeds the replied-to message in the update, so the parent is
  * available even when it falls outside the history window — which is the
  * common case: over half of replies target a message more than an hour old.
+ *
+ * `quote` (the portion the user actually highlighted) wins over the full
+ * parent text when present. `external_reply` covers replies to messages in
+ * other chats; no such row exists in the corpus yet, so that branch is
+ * defensive rather than proven.
  */
 function parentFromRaw(raw: unknown): ReplyParent | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const reply = readObject(raw, "reply_to_message");
-  if (!reply) return null;
 
-  const from = readObject(reply, "from");
+  const reply = readObject(raw, "reply_to_message");
+  const external = readObject(raw, "external_reply");
+  const source = reply ?? external;
+  if (!source) return null;
+
+  const from = readObject(source, "from");
   const name = from
     ? displayName({
         firstName: readString(from, "first_name") ?? "someone",
@@ -138,57 +148,105 @@ function parentFromRaw(raw: unknown): ReplyParent | null {
       })
     : "someone";
 
-  const text = readString(reply, "text") ?? readString(reply, "caption") ?? "";
+  // A user-selected quote is a better snippet than the whole parent message.
+  const quote = readObject(raw, "quote");
+  const text =
+    (quote ? readString(quote, "text") : undefined) ??
+    readString(source, "text") ??
+    readString(source, "caption") ??
+    "";
 
   return {
     name,
-    date: readNumber(reply, "date"),
+    date: readNumber(source, "date"),
     snippet: text.trim() === "" ? "(non-text message)" : text,
+    external: reply === undefined,
   };
 }
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+/**
+ * Flattens a snippet to one line and strips characters that would let user
+ * text impersonate the envelope around it.
+ */
+function sanitizeSnippet(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const escaped = escapeAttribute(flat);
+  return escaped.length > max ? `${escaped.slice(0, max)}…` : escaped;
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /**
- * Renders the reply link for a history message.
+ * Neutralises closing tags so message content can't terminate its own envelope.
+ * Only the exact closing sequences are touched, so pasted code stays readable.
+ */
+function escapeContent(text: string): string {
+  return text.replace(/<\/(msg|quoted)>/gi, "&lt;/$1&gt;");
+}
+
+interface ReplyAttrs {
+  attrs: string;
+  quoted: string | null;
+}
+
+/**
+ * Builds the reply attributes for a history message.
  *
  * Nearly half of all messages are replies, and inside a forum topic almost
  * every message is. Without this the transcript flattens into a linear list and
  * the model can't tell who is answering whom.
  *
- * When the parent is in the window it is quoted by time only — the full message
- * is already in the transcript at that timestamp. When it isn't, the parent's
- * text is inlined, since the model has no other way to see it.
+ * When the parent is in the window it is referenced by time only — the full
+ * message is already in the transcript. When it isn't, the parent's text is
+ * quoted, since the model has no other way to see it.
  */
-function formatReplyMarker(
+function buildReplyAttrs(
   row: TelegramMessageRow,
   byMessageId: Map<number, TelegramMessageRow>,
-): string {
+): ReplyAttrs {
+  const none: ReplyAttrs = { attrs: "", quoted: null };
+
   const parentId = row.replyToMessageId;
-  if (parentId === null || parentId === undefined) return "";
+  if (parentId === null || parentId === undefined) return none;
 
   // Telegram sets reply_to_message_id to the topic root for messages that are
   // merely posted in a forum topic rather than replying to anything.
-  if (row.messageThreadId !== null && parentId === row.messageThreadId) return "";
+  if (row.messageThreadId !== null && parentId === row.messageThreadId) return none;
 
   const inWindow = byMessageId.get(parentId);
   if (inWindow) {
     const at = formatTelegramDate(Math.floor(inWindow.date.getTime() / 1000));
-    return ` ↳ replying to ${rowDisplayName(inWindow)} at ${at}`;
+    return {
+      attrs: ` replying-to="${escapeAttribute(rowDisplayName(inWindow))}" replying-to-at="${at}"`,
+      quoted: null,
+    };
   }
 
   const parent = parentFromRaw(row.raw);
-  if (!parent) return " ↳ replying to an earlier message";
+  if (!parent) {
+    return { attrs: ` replying-to="an earlier message"`, quoted: null };
+  }
 
   const when = parent.date
-    ? ` on ${formatTelegramDateFull(parent.date)}, ${formatTelegramDate(parent.date)}`
+    ? ` replying-to-at="${formatTelegramDateFull(parent.date)}, ${formatTelegramDate(parent.date)}"`
     : "";
 
-  // The id lets the agent fetch the full text via get_messages when the
-  // snippet below is truncated.
-  return ` ↳ replying to ${parent.name}${when} (msg ${parentId}): "${truncate(parent.snippet, HISTORY_REPLY_TEXT_MAX)}"`;
+  // The id lets the agent fetch the full text via chat_history when the
+  // quote below is truncated. External parents live elsewhere and can't be.
+  const ref = parent.external
+    ? ` from-another-chat="true"`
+    : ` reply-id="${parentId}"`;
+
+  return {
+    attrs: ` replying-to="${escapeAttribute(parent.name)}"${when}${ref}`,
+    quoted: sanitizeSnippet(parent.snippet, HISTORY_REPLY_TEXT_MAX),
+  };
 }
 
 /**
@@ -271,17 +329,20 @@ export function buildMessagesFromHistory(
         messages.push({ role: "assistant", content: row.text });
       }
     } else {
-      // Human message — include sender info and who they're replying to
-      const name = rowDisplayName(row);
+      // Human message — sender, timestamp and reply link as envelope
+      // attributes, so multi-line or adversarial content can't impersonate
+      // the structure around it.
+      const name = escapeAttribute(rowDisplayName(row));
       const time = formatTelegramDate(Math.floor(row.date.getTime() / 1000));
       const dateStr = getDateString(row.date);
       const datePart = dateStr !== lastDateStr ? `${dateStr} ` : "";
-      const replyPart = formatReplyMarker(row, byMessageId);
+      const { attrs, quoted } = buildReplyAttrs(row, byMessageId);
       const content = row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : "");
       if (content) {
+        const quotedLine = quoted ? `<quoted>${quoted}</quoted>\n` : "";
         messages.push({
           role: "user",
-          content: `[${datePart}${time} ${name}${replyPart}]\n${content}`,
+          content: `<msg from="${name}" at="${datePart}${time}"${attrs}>\n${quotedLine}${escapeContent(content)}\n</msg>`,
         });
       }
     }

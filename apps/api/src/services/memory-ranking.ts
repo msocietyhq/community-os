@@ -44,3 +44,47 @@ export function applyRelativeCutoff<T extends Scored>(
 
   return sorted.filter((m) => m.similarity >= top - cutoff);
 }
+
+/**
+ * Days after which a memory's weight halves. Long enough that a durable fact
+ * ("works at Stripe") still outranks a fresh throwaway one, short enough that
+ * a year-old claim yields to a recent correction.
+ */
+export const RECENCY_HALF_LIFE_DAYS = 180;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+interface Dated {
+  confidence: number;
+  createdAt: Date;
+}
+
+/**
+ * Score combining how sure we were with how long ago we learned it.
+ *
+ * Sorting subject memories by recency alone hides durable high-confidence
+ * facts behind recent trivia; sorting by confidence alone never lets a
+ * correction win. This decays confidence rather than replacing it.
+ */
+export function memoryWeight(memory: Dated, now: Date): number {
+  const ageDays = Math.max(0, (now.getTime() - memory.createdAt.getTime()) / DAY_MS);
+  return memory.confidence * Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
+}
+
+/**
+ * Ranks memories by `memoryWeight`, highest first, and keeps the top `limit`.
+ * Ties fall back to newest-first so ordering is deterministic.
+ */
+export function rankByConfidenceAndRecency<T extends Dated>(
+  memories: T[],
+  now: Date,
+  limit: number,
+): T[] {
+  return [...memories]
+    .sort((a, b) => {
+      const diff = memoryWeight(b, now) - memoryWeight(a, now);
+      if (diff !== 0) return diff;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    })
+    .slice(0, limit);
+}

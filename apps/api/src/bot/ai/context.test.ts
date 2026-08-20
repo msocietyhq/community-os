@@ -111,36 +111,49 @@ describe("extractMentionedSubjects", () => {
 
   test("finds @mentions in the body of history messages", () => {
     const history: ModelMessage[] = [
-      { role: "user", content: "[18 Mar 2026 14:30 @aziz_sg]\nhas @hafiz_dev seen this?" },
+      {
+        role: "user",
+        content: '<msg from="@aziz_sg" at="18 Mar 2026 14:30">\nhas @hafiz_dev seen this?\n</msg>',
+      },
     ];
     expect(extractMentionedSubjects(history, "hello")).toEqual(["hafiz_dev"]);
   });
 
   /**
-   * Speaking in the last hour is not the same as being mentioned — the
-   * `[time @name]` header must not be scanned, or every participant gets
-   * treated as a subject and crowds out real mentions.
+   * Speaking in the last hour is not the same as being mentioned — envelope
+   * attributes must not be scanned, or every participant gets treated as a
+   * subject and crowds out real mentions.
    */
-  test("ignores the sender name in a history message header", () => {
+  test("ignores the sender name in the envelope attributes", () => {
     const history: ModelMessage[] = [
-      { role: "user", content: "[18 Mar 2026 14:30 @aziz_sg]\nhello everyone" },
-      { role: "user", content: "[14:31 @hafiz_dev]\nsalam" },
+      { role: "user", content: '<msg from="@aziz_sg" at="18 Mar 2026 14:30">\nhello everyone\n</msg>' },
+      { role: "user", content: '<msg from="@hafiz_dev" at="14:31">\nsalam\n</msg>' },
     ];
     expect(extractMentionedSubjects(history, "who is around?")).toEqual([]);
   });
 
-  /**
-   * History headers now carry `↳ replying to @someone`. Being replied to is
-   * not being mentioned — the header must still be stripped before scanning.
-   */
-  test("ignores the reply target in a history message header", () => {
+  /** Being replied to is not being mentioned. */
+  test("ignores the reply target in the envelope attributes", () => {
     const history: ModelMessage[] = [
       {
         role: "user",
-        content: "[18 Mar 2026 14:30 @aziz_sg ↳ replying to @hafiz_dev]\non it",
+        content:
+          '<msg from="@aziz_sg" at="14:30" replying-to="@hafiz_dev" replying-to-at="14:28">\non it\n</msg>',
       },
     ];
     expect(extractMentionedSubjects(history, "thanks")).toEqual([]);
+  });
+
+  /** A quoted parent is context, not something the sender said or mentioned. */
+  test("ignores @mentions inside a quoted parent", () => {
+    const history: ModelMessage[] = [
+      {
+        role: "user",
+        content:
+          '<msg from="@aziz_sg" at="14:30" replying-to="@hafiz_dev" reply-id="99">\n<quoted>ask @someone_else about it</quoted>\nwill do\n</msg>',
+      },
+    ];
+    expect(extractMentionedSubjects(history, "ok")).toEqual([]);
   });
 
   test("ignores assistant messages", () => {
@@ -152,7 +165,7 @@ describe("extractMentionedSubjects", () => {
 
   test("lowercases and de-duplicates repeated mentions", () => {
     const history: ModelMessage[] = [
-      { role: "user", content: "[14:30 @a]\nping @Hafiz_Dev" },
+      { role: "user", content: '<msg from="@a" at="14:30">\nping @Hafiz_Dev\n</msg>' },
     ];
     expect(extractMentionedSubjects(history, "@hafiz_dev again")).toEqual([
       "hafiz_dev",
@@ -221,23 +234,59 @@ describe("buildAgentContext", () => {
     expect(ctx.messages[2]?.content).toContain("what time is the next meetup?");
   });
 
-  test("memories render with age and confidence", async () => {
+  test("semantic memories render with age, confidence and match score", async () => {
     const { recaller } = makeRecaller({
       semantic: [
         makeMemory({
           content: "Ashiqurrah is responsible for planning the next meetup",
           subject: "Ashiqurrah",
           confidence: 0.75,
+          similarity: 0.54,
           createdAt: new Date("2026-04-09T00:00:00Z"),
         }),
       ],
     });
-    const ctx = await buildAgentContext(baseInput(), recaller);
+    const ctx = await buildAgentContext(baseInput({ senderTelegramId: null }), recaller);
 
     expect(ctx.system).toContain("## Relevant Memories");
     expect(ctx.system).toContain(
-      "- [person_fact · learned 4 months ago · confidence 0.75] Ashiqurrah is responsible for planning the next meetup (about: Ashiqurrah)",
+      "- [person_fact · learned 4 months ago · confidence 0.75 · match 0.54] Ashiqurrah is responsible for planning the next meetup (about: Ashiqurrah)",
     );
+  });
+
+  /**
+   * Retrieval deliberately runs a low similarity floor, so irrelevant hits are
+   * expected. The model is told to judge them rather than trust the list.
+   */
+  test("semantic hits are labelled as possibly irrelevant", async () => {
+    const { recaller } = makeRecaller({ semantic: [makeMemory()] });
+    const ctx = await buildAgentContext(baseInput({ senderTelegramId: null }), recaller);
+
+    expect(ctx.system).toContain("### Possibly relevant");
+    expect(ctx.system).toContain("silently ignore the ones");
+    expect(ctx.system).toContain("Never bend an answer to use a memory");
+  });
+
+  test("subject memories are listed separately and carry no match score", async () => {
+    const { recaller } = makeRecaller({
+      bySubject: [makeMemory({ id: "s1", content: "Aziz organises the meetups" })],
+    });
+    const ctx = await buildAgentContext(baseInput({ senderTelegramId: 42 }), recaller);
+
+    expect(ctx.system).toContain("### About people in this conversation");
+    expect(ctx.system).toContain("Aziz organises the meetups");
+    expect(ctx.system).not.toContain("· match");
+    expect(ctx.system).not.toContain("### Possibly relevant");
+  });
+
+  test("a memory found by both paths is filed under the subject section", async () => {
+    const shared = makeMemory({ id: "shared" });
+    const { recaller } = makeRecaller({ semantic: [shared], bySubject: [shared] });
+    const ctx = await buildAgentContext(baseInput({ senderTelegramId: 42 }), recaller);
+
+    expect(ctx.memories).toHaveLength(1);
+    expect(ctx.memories[0]?.source).toBe("subject");
+    expect(ctx.system).not.toContain("### Possibly relevant");
   });
 
   test("memory section warns the model about stale and low-confidence facts", async () => {

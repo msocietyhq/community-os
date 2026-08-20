@@ -164,55 +164,16 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    get_messages: tool({
+    chat_history: tool({
       description:
-        "Fetch specific chat messages by their message ID. Use when a message header shows `↳ replying to … (msg 12345)` and the quoted snippet is truncated or unclear, and you need the full text of what was replied to. Also useful for walking a reply chain further back.",
+        "Read past messages from the current chat. Three modes: pass `message_ids` to fetch specific messages (use when a <msg> envelope shows reply-id=\"12345\" and the <quoted> snippet is truncated, or to walk a reply chain back); pass `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'); pass neither for recent messages in chronological order. When gathering context about an ongoing conversation, limit the date range to the last 6 hours.",
       inputSchema: z.object({
-        chat_id: z
-          .string()
-          .default(env.TELEGRAM_GROUP_ID ?? "")
-          .describe(
-            "The Telegram chat ID — defaults to the main MSOCIETY group chat",
-          ),
         message_ids: z
           .array(z.number())
-          .min(1)
           .max(MAX_MESSAGES_BY_ID)
+          .optional()
           .describe(
-            `Message IDs to fetch (max ${MAX_MESSAGES_BY_ID}), e.g. the ID shown in a reply marker`,
-          ),
-      }),
-      execute: async ({ chat_id, message_ids }) => {
-        console.log("[main-agent:get_messages]", { chat_id, message_ids });
-
-        const messages = await getMessagesByIds(chat_id, message_ids);
-        const missing = message_ids.filter(
-          (id) => !messages.some((m) => m.messageId === id),
-        );
-
-        return {
-          count: messages.length,
-          messages: messages.map((m) => ({
-            messageId: m.messageId,
-            from: m.from,
-            text: m.text,
-            date: m.date.toISOString(),
-            replyToMessageId: m.replyToMessageId,
-          })),
-          ...(missing.length > 0 ? { notFound: missing } : {}),
-        };
-      },
-    }),
-
-    search_chat_history: tool({
-      description:
-        "Fetch or search past messages in the MSOCIETY Telegram group chat. Use with a `query` for semantic/keyword search (e.g. 'did anyone mention jobs?'). Omit `query` to fetch recent messages chronologically (e.g. 'what were we discussing?'). If using this to get context about a question or conversation, limit the date range to the last 6 hours.",
-      inputSchema: z.object({
-        chat_id: z
-          .string()
-          .default(env.TELEGRAM_GROUP_ID ?? "")
-          .describe(
-            "The Telegram chat ID — defaults to the main MSOCIETY group chat",
+            `Specific message IDs to fetch (max ${MAX_MESSAGES_BY_ID}). Takes precedence over query.`,
           ),
         query: z
           .string()
@@ -234,9 +195,15 @@ export function createTools(ctx: ToolContext) {
           .default(20)
           .describe("Number of messages to return (default: 20)"),
       }),
-      execute: async ({ chat_id, query, after, before, limit }) => {
-        console.log("[main-agent:search_chat_history]", {
+      execute: async ({ message_ids, query, after, before, limit }) => {
+        // Always the chat this conversation is happening in. Never accept a
+        // caller-supplied chat id: a DM's chat id is just the member's telegram
+        // id, so an arbitrary id would read someone else's private messages.
+        const chat_id = ctx.chatId;
+
+        console.log("[main-agent:chat_history]", {
           chat_id,
+          message_ids,
           query,
           after,
           before,
@@ -244,6 +211,23 @@ export function createTools(ctx: ToolContext) {
         });
 
         const effectiveLimit = limit ?? 20;
+
+        if (message_ids && message_ids.length > 0) {
+          const messages = await getMessagesByIds(chat_id, message_ids);
+          const missing = message_ids.filter(
+            (id) => !messages.some((m) => m.messageId === id),
+          );
+          return {
+            messages: messages.map((m) => ({
+              messageId: m.messageId,
+              from: m.from,
+              text: m.text,
+              date: m.date.toISOString(),
+              replyToMessageId: m.replyToMessageId,
+            })),
+            ...(missing.length > 0 ? { notFound: missing } : {}),
+          };
+        }
 
         if (query) {
           const results = await searchMessagesHybrid(

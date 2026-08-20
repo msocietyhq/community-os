@@ -6,7 +6,11 @@ import {
   generateEmbedding,
   generateQueryEmbedding,
 } from "./embeddings.service";
-import { applyRelativeCutoff, MIN_SIMILARITY_FLOOR } from "./memory-ranking";
+import {
+  applyRelativeCutoff,
+  rankByConfidenceAndRecency,
+  MIN_SIMILARITY_FLOOR,
+} from "./memory-ranking";
 
 export interface MemoryInput {
   content: string;
@@ -183,12 +187,20 @@ export async function recallMemories(
     : rows;
 }
 
+/** How many candidates to weigh before trimming to `limit`. */
+const SUBJECT_CANDIDATE_MULTIPLIER = 4;
+
 /**
- * Fetch active memories about a specific telegram user, newest first.
+ * Fetch active memories about a specific telegram user.
+ *
+ * Pulls a wider candidate set than needed and ranks it by confidence decayed
+ * over time, so a durable high-confidence fact isn't pushed out by recent
+ * low-confidence trivia (one subject here has 53 memories).
  */
 export async function recallMemoriesForSubject(
   telegramId: number,
   limit = 10,
+  now: Date = new Date(),
 ): Promise<RecalledMemory[]> {
   const rows = await db
     .select({
@@ -208,9 +220,9 @@ export async function recallMemoriesForSubject(
       ),
     )
     .orderBy(desc(botMemories.createdAt))
-    .limit(limit);
+    .limit(limit * SUBJECT_CANDIDATE_MULTIPLIER);
 
-  return rows;
+  return rankByConfidenceAndRecency(rows, now, limit);
 }
 
 /**
