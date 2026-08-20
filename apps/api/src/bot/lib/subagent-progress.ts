@@ -146,7 +146,7 @@ function plural(count: number): string {
  * agents (which import back into this module).
  */
 /** Advisors are reachable from every sub-agent toolset, so they're labelled too. */
-type AdvisorToolName = "big_brain_advisor" | "bigger_brain_advisor" | "ask_user";
+type AdvisorToolName = "big_brain_advisor" | "bigger_brain_advisor" | "ask_user" | "ai_usage";
 
 export type TrackedToolName =
   | AdvisorToolName
@@ -190,6 +190,7 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
   get_leaderboard: "reading the leaderboard",
 
   ask_user: "asking you a question",
+  ai_usage: "checking AI usage",
   big_brain_advisor: "consulting a stronger model",
   bigger_brain_advisor: "consulting the deepest model",
 

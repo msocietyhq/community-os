@@ -26,6 +26,7 @@ import {
   type AdvisorTier,
 } from "./advisor";
 import { checkAdvisorAccess } from "./advisor-access";
+import { resolveWindow } from "../../lib/usage-window";
 import { aiService } from "../../services/ai.service";
 import {
   searchMessagesHybrid,
@@ -314,6 +315,94 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             activity,
           ),
         );
+      },
+    }),
+
+    ai_usage: tool({
+      description:
+        "Report what the bot has spent on AI. Use for any question about token usage, cost, who is using the bot most, or which feature is expensive. " +
+        "group_by picks the breakdown: 'total' for headline numbers, 'caller' for which feature (main-agent, memory-extractor, chime-in-judge, the *-agent sub-agents, big_brain_advisor, bigger_brain_advisor), " +
+        "'model' for which model, 'user' for per-member spend, 'day' for a daily trend. " +
+        "Costs are estimates from published per-token rates, not billed amounts — say so when reporting them.",
+      inputSchema: z.object({
+        period: z
+          .string()
+          .optional()
+          .default("30d")
+          .describe(
+            'Time window: "7d", "2w", "3m", "1y", "today", "yesterday", "ytd", or "all". Defaults to 30 days.',
+          ),
+        group_by: z
+          .enum(["total", "caller", "model", "user", "day"])
+          .optional()
+          .default("total")
+          .describe("How to break the numbers down"),
+        caller: z
+          .string()
+          .optional()
+          .describe("Restrict to one feature, e.g. 'main-agent' or 'bigger_brain_advisor'"),
+        model: z.string().optional().describe("Restrict to one model id"),
+        username: z
+          .string()
+          .optional()
+          .describe("Restrict to one member's usage, by telegram username without the @"),
+        limit: z.number().min(1).max(30).optional().default(10),
+      }),
+      execute: async ({ period, group_by, caller, model, username, limit }) => {
+        const window = resolveWindow(period);
+        const take = limit ?? 10;
+        console.log("[main-agent:ai_usage]", { period, group_by, caller, model, username });
+
+        // One member's usage is a different question from a breakdown.
+        if (username) {
+          const resolved = await aiService.resolveUserByUsername(username);
+          if (!resolved?.telegramId) {
+            return { period: window.label, error: `No member found with username @${username}.` };
+          }
+          const summary = await aiService.getUsageSummary(
+            window.since,
+            Number(resolved.telegramId),
+          );
+          return {
+            period: window.label,
+            member: `@${resolved.telegramUsername ?? username}`,
+            ...summary,
+            note: "Cost is an estimate from published rates.",
+          };
+        }
+
+        if (group_by === "user") {
+          const users = await aiService.getUsageByUser(window.since, take);
+          return {
+            period: window.label,
+            byUser: users.map((u) => ({
+              member: u.username ? `@${u.username}` : (u.name ?? `id:${u.telegramUserId}`),
+              inputTokens: u.inputTokens,
+              outputTokens: u.outputTokens,
+              estimatedCost: u.estimatedCost,
+            })),
+            note: "Cost is an estimate from published rates.",
+          };
+        }
+
+        const stats = await aiService.getUsageStats({
+          from: window.since.toISOString(),
+          caller,
+          model,
+        });
+
+        const base = { period: window.label, totals: stats.totals };
+
+        if (group_by === "caller") {
+          return { ...base, byCaller: stats.byCaller.slice(0, take) };
+        }
+        if (group_by === "model") {
+          return { ...base, byModel: stats.byModel };
+        }
+        if (group_by === "day") {
+          return { ...base, byDay: stats.byDay.slice(-take) };
+        }
+        return base;
       },
     }),
 

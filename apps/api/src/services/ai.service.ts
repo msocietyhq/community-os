@@ -38,6 +38,12 @@ const AI_MODEL_PRICING: Record<string, { input: number; output: number }> = {
   [AI_MODEL_IDS.fast]: { input: 1.0, output: 5.0 },
   [AI_MODEL_IDS.smart]: { input: 3.0, output: 15.0 },
   [AI_MODEL_IDS.deep]: { input: 5.0, output: 25.0 },
+
+  // Retired ids that ai_usage rows still reference. Without these, historical
+  // spend silently reports as $0 — renaming a model must not rewrite the past.
+  "claude-haiku-4-5-20251001": { input: 1.0, output: 5.0 },
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
+  "claude-sonnet-4-5-20250929": { input: 3.0, output: 15.0 },
 };
 
 function estimateCost(
@@ -357,6 +363,54 @@ async function getSpendByCaller(
   );
 }
 
+/**
+ * Per-member spend since `since`, highest first.
+ *
+ * Grouped by model as well as member so each member's cost can be summed at
+ * that model's own rate — a member on Opus costs far more per token than one
+ * on Haiku, which a token-only total hides.
+ */
+async function getUsageByUser(since: Date, limit: number) {
+  const rows = await db
+    .select({
+      telegramUserId: aiUsage.telegramUserId,
+      telegramUsername: user.telegramUsername,
+      name: user.name,
+      model: aiUsage.model,
+      inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
+      outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+    })
+    .from(aiUsage)
+    .leftJoin(user, eq(sql`${aiUsage.telegramUserId}::text`, user.telegramId))
+    .where(and(gte(aiUsage.createdAt, since), sql`${aiUsage.telegramUserId} is not null`))
+    .groupBy(aiUsage.telegramUserId, user.telegramUsername, user.name, aiUsage.model);
+
+  const byUser = new Map<
+    number,
+    { username: string | null; name: string | null; inputTokens: number; outputTokens: number; estimatedCost: number }
+  >();
+
+  for (const row of rows) {
+    const id = Number(row.telegramUserId);
+    const entry = byUser.get(id) ?? {
+      username: row.telegramUsername,
+      name: row.name,
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCost: 0,
+    };
+    entry.inputTokens += row.inputTokens;
+    entry.outputTokens += row.outputTokens;
+    entry.estimatedCost += estimateCost(row.model, row.inputTokens, row.outputTokens);
+    byUser.set(id, entry);
+  }
+
+  return [...byUser.entries()]
+    .map(([telegramUserId, v]) => ({ telegramUserId, ...v }))
+    .sort((a, b) => b.estimatedCost - a.estimatedCost)
+    .slice(0, limit);
+}
+
 async function resolveUserByUsername(username: string) {
   const [row] = await db
     .select({
@@ -404,6 +458,7 @@ export const aiService = {
   getUsageStats,
   getUsageSummary,
   getSpendByCaller,
+  getUsageByUser,
   getTopUsersByTokens,
   resolveUserByUsername,
 };
