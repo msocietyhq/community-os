@@ -14,7 +14,11 @@ import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
 import { createProjectsAgent } from "./agents/projects";
-import { searchMessagesHybrid } from "../../services/messages.service";
+import {
+  searchMessagesHybrid,
+  getMessagesByIds,
+  MAX_MESSAGES_BY_ID,
+} from "../../services/messages.service";
 import { getRecentChatMessages } from "../lib/telegram-message-logger";
 import { formatGroupHistory } from "../lib/chat-context";
 import {
@@ -157,6 +161,46 @@ export function createTools(ctx: ToolContext) {
           telegramUserId: ctx.senderTelegramId,
           chatId: ctx.chatId,
         });
+      },
+    }),
+
+    get_messages: tool({
+      description:
+        "Fetch specific chat messages by their message ID. Use when a message header shows `↳ replying to … (msg 12345)` and the quoted snippet is truncated or unclear, and you need the full text of what was replied to. Also useful for walking a reply chain further back.",
+      inputSchema: z.object({
+        chat_id: z
+          .string()
+          .default(env.TELEGRAM_GROUP_ID ?? "")
+          .describe(
+            "The Telegram chat ID — defaults to the main MSOCIETY group chat",
+          ),
+        message_ids: z
+          .array(z.number())
+          .min(1)
+          .max(MAX_MESSAGES_BY_ID)
+          .describe(
+            `Message IDs to fetch (max ${MAX_MESSAGES_BY_ID}), e.g. the ID shown in a reply marker`,
+          ),
+      }),
+      execute: async ({ chat_id, message_ids }) => {
+        console.log("[main-agent:get_messages]", { chat_id, message_ids });
+
+        const messages = await getMessagesByIds(chat_id, message_ids);
+        const missing = message_ids.filter(
+          (id) => !messages.some((m) => m.messageId === id),
+        );
+
+        return {
+          count: messages.length,
+          messages: messages.map((m) => ({
+            messageId: m.messageId,
+            from: m.from,
+            text: m.text,
+            date: m.date.toISOString(),
+            replyToMessageId: m.replyToMessageId,
+          })),
+          ...(missing.length > 0 ? { notFound: missing } : {}),
+        };
       },
     }),
 

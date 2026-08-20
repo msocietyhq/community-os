@@ -1,4 +1,4 @@
-import { sql, eq, and } from "drizzle-orm";
+import { sql, eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { generateQueryEmbedding } from "./embeddings.service";
@@ -22,6 +22,61 @@ export async function hasUserMessages(
     .limit(1);
 
   return !!row;
+}
+
+export type MessageByIdResult = {
+  messageId: number;
+  from: string;
+  text: string | null;
+  date: Date;
+  replyToMessageId: number | null;
+};
+
+/** Upper bound on ids per lookup, so a confused agent can't fan out. */
+export const MAX_MESSAGES_BY_ID = 10;
+
+/**
+ * Fetches specific messages by id — a primary-key lookup on (chatId, messageId).
+ *
+ * History headers quote a replied-to message in truncated form; this is how the
+ * agent reads the full text when the snippet isn't enough.
+ */
+export async function getMessagesByIds(
+  chatId: string,
+  messageIds: number[],
+): Promise<MessageByIdResult[]> {
+  const ids = [...new Set(messageIds)].slice(0, MAX_MESSAGES_BY_ID);
+  if (ids.length === 0) return [];
+
+  const rows = await db
+    .select({
+      messageId: telegramMessages.messageId,
+      text: telegramMessages.text,
+      caption: telegramMessages.caption,
+      mediaType: telegramMessages.mediaType,
+      fromFirstName: telegramMessages.fromFirstName,
+      fromUsername: telegramMessages.fromUsername,
+      date: telegramMessages.date,
+      replyToMessageId: telegramMessages.replyToMessageId,
+    })
+    .from(telegramMessages)
+    .where(
+      and(
+        eq(telegramMessages.chatId, chatId),
+        inArray(telegramMessages.messageId, ids),
+      ),
+    )
+    .orderBy(telegramMessages.date);
+
+  return rows.map((row) => ({
+    messageId: row.messageId,
+    from: row.fromUsername
+      ? `@${row.fromUsername}`
+      : (row.fromFirstName ?? "unknown"),
+    text: row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : null),
+    date: row.date,
+    replyToMessageId: row.replyToMessageId,
+  }));
 }
 
 export type MessageSearchResult = {

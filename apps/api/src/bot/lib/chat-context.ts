@@ -91,6 +91,106 @@ function displayName(from: {
 
 type TelegramMessageRow = typeof telegramMessages.$inferSelect;
 
+function rowDisplayName(row: TelegramMessageRow): string {
+  return row.fromUsername ? `@${row.fromUsername}` : (row.fromFirstName ?? "someone");
+}
+
+/** Snippet length for a quoted parent in history. Shorter than REPLY_TEXT_MAX
+ *  because a window holds up to 50 messages, roughly half of them replies. */
+const HISTORY_REPLY_TEXT_MAX = 80;
+
+function readString(source: object, key: string): string | undefined {
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNumber(source: object, key: string): number | undefined {
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function readObject(source: object, key: string): object | undefined {
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "object" && value !== null ? value : undefined;
+}
+
+interface ReplyParent {
+  name: string;
+  date?: number;
+  snippet: string;
+}
+
+/**
+ * Telegram embeds the replied-to message in the update, so the parent is
+ * available even when it falls outside the history window — which is the
+ * common case: over half of replies target a message more than an hour old.
+ */
+function parentFromRaw(raw: unknown): ReplyParent | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const reply = readObject(raw, "reply_to_message");
+  if (!reply) return null;
+
+  const from = readObject(reply, "from");
+  const name = from
+    ? displayName({
+        firstName: readString(from, "first_name") ?? "someone",
+        username: readString(from, "username"),
+      })
+    : "someone";
+
+  const text = readString(reply, "text") ?? readString(reply, "caption") ?? "";
+
+  return {
+    name,
+    date: readNumber(reply, "date"),
+    snippet: text.trim() === "" ? "(non-text message)" : text,
+  };
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/**
+ * Renders the reply link for a history message.
+ *
+ * Nearly half of all messages are replies, and inside a forum topic almost
+ * every message is. Without this the transcript flattens into a linear list and
+ * the model can't tell who is answering whom.
+ *
+ * When the parent is in the window it is quoted by time only — the full message
+ * is already in the transcript at that timestamp. When it isn't, the parent's
+ * text is inlined, since the model has no other way to see it.
+ */
+function formatReplyMarker(
+  row: TelegramMessageRow,
+  byMessageId: Map<number, TelegramMessageRow>,
+): string {
+  const parentId = row.replyToMessageId;
+  if (parentId === null || parentId === undefined) return "";
+
+  // Telegram sets reply_to_message_id to the topic root for messages that are
+  // merely posted in a forum topic rather than replying to anything.
+  if (row.messageThreadId !== null && parentId === row.messageThreadId) return "";
+
+  const inWindow = byMessageId.get(parentId);
+  if (inWindow) {
+    const at = formatTelegramDate(Math.floor(inWindow.date.getTime() / 1000));
+    return ` ↳ replying to ${rowDisplayName(inWindow)} at ${at}`;
+  }
+
+  const parent = parentFromRaw(row.raw);
+  if (!parent) return " ↳ replying to an earlier message";
+
+  const when = parent.date
+    ? ` on ${formatTelegramDateFull(parent.date)}, ${formatTelegramDate(parent.date)}`
+    : "";
+
+  // The id lets the agent fetch the full text via get_messages when the
+  // snippet below is truncated.
+  return ` ↳ replying to ${parent.name}${when} (msg ${parentId}): "${truncate(parent.snippet, HISTORY_REPLY_TEXT_MAX)}"`;
+}
+
 /**
  * Formats a list of DB message rows into a readable transcript for group context.
  */
@@ -158,6 +258,7 @@ export function buildMessagesFromHistory(
   aiResponses: Record<number, ModelMessage[]>,
 ): ModelMessage[] {
   const messages: ModelMessage[] = [];
+  const byMessageId = new Map(rows.map((r) => [r.messageId, r]));
   let lastDateStr = "";
 
   for (const row of rows) {
@@ -170,14 +271,18 @@ export function buildMessagesFromHistory(
         messages.push({ role: "assistant", content: row.text });
       }
     } else {
-      // Human message — include sender info
-      const name = row.fromUsername ? `@${row.fromUsername}` : (row.fromFirstName ?? "someone");
+      // Human message — include sender info and who they're replying to
+      const name = rowDisplayName(row);
       const time = formatTelegramDate(Math.floor(row.date.getTime() / 1000));
       const dateStr = getDateString(row.date);
       const datePart = dateStr !== lastDateStr ? `${dateStr} ` : "";
+      const replyPart = formatReplyMarker(row, byMessageId);
       const content = row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : "");
       if (content) {
-        messages.push({ role: "user", content: `[${datePart}${time} ${name}]\n${content}` });
+        messages.push({
+          role: "user",
+          content: `[${datePart}${time} ${name}${replyPart}]\n${content}`,
+        });
       }
     }
     lastDateStr = getDateString(row.date);

@@ -1,4 +1,4 @@
-import { sql, eq, and, or, isNull } from "drizzle-orm";
+import { sql, eq, and, or, isNull, desc } from "drizzle-orm";
 import { db } from "../db";
 import { botMemories } from "../db/schema/bot";
 import { user } from "../db/schema/auth";
@@ -6,6 +6,7 @@ import {
   generateEmbedding,
   generateQueryEmbedding,
 } from "./embeddings.service";
+import { applyRelativeCutoff, MIN_SIMILARITY_FLOOR } from "./memory-ranking";
 
 export interface MemoryInput {
   content: string;
@@ -137,14 +138,18 @@ export async function saveMemories(
 }
 
 /**
- * Semantic search over active memories. Returns top matches above similarity threshold.
+ * Semantic search over active memories.
+ *
+ * `minSimilarity` is a noise floor only — pass `relativeCutoff` to narrow the
+ * result set to the cluster around the best match. See `memory-ranking.ts` for
+ * why an absolute threshold alone doesn't work here.
  */
 export async function recallMemories(
   query: string,
-  opts?: { limit?: number; minSimilarity?: number },
+  opts?: { limit?: number; minSimilarity?: number; relativeCutoff?: number },
 ): Promise<RecalledMemory[]> {
   const limit = opts?.limit ?? 5;
-  const minSimilarity = opts?.minSimilarity ?? 0.6;
+  const minSimilarity = opts?.minSimilarity ?? MIN_SIMILARITY_FLOOR;
 
   const embedding = await generateQueryEmbedding(query);
   const vectorLiteral = `[${embedding.join(",")}]`;
@@ -173,11 +178,13 @@ export async function recallMemories(
     .orderBy(sql`${botMemories.embedding} <=> ${vectorLiteral}::vector`)
     .limit(limit);
 
-  return rows;
+  return opts?.relativeCutoff !== undefined
+    ? applyRelativeCutoff(rows, opts.relativeCutoff)
+    : rows;
 }
 
 /**
- * Fetch active memories about a specific telegram user.
+ * Fetch active memories about a specific telegram user, newest first.
  */
 export async function recallMemoriesForSubject(
   telegramId: number,
@@ -200,7 +207,7 @@ export async function recallMemoriesForSubject(
         eq(botMemories.subjectTelegramId, telegramId),
       ),
     )
-    .orderBy(botMemories.createdAt)
+    .orderBy(desc(botMemories.createdAt))
     .limit(limit);
 
   return rows;

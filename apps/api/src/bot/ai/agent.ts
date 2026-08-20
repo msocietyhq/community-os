@@ -10,120 +10,23 @@ import {
   recallMemoriesForSubject,
   resolveSubjectTelegramId,
   incrementAccessCount,
-  type RecalledMemory,
 } from "../../services/memory.service";
+import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
+import { buildAgentContext, type MemoryRecaller } from "./context";
 
-function getSystemPrompt(memories: RecalledMemory[]): string {
-  const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
-  return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
-
-Today's date is ${today}. Use this when creating events or interpreting relative dates.
-
-You help members with:
-- Finding information about upcoming events
-- Checking event details and attendee lists
-- RSVPing to events
-- Viewing project information
-- Checking reputation scores
-- Viewing community fund summaries (admin only)
-- Managing events, venues, and members (admin only)
-- Exploring the MSOCIETY GitHub org (msocietyhq): repos, issues, PRs
-
-Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group.
-Format responses for Telegram (use Markdown).
-Keep responses short — this is a chat bot, not an essay writer.
-When presenting any kind of list, display pertinent information in one line per item, keep it tidy, keep emoji usage sparse.
-
-Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
-If a user message is short, vague or cryptic, NEVER assume, always ask to clarify what they meant or intend to do.
-
-IMPORTANT: For write operations (create, update, delete), only perform them when the user explicitly asks.
-Never repeat a write operation.
-
-You have a graphql_query tool for fast reads. Use it directly for simple lookups instead of delegating to sub-agents. Delegate to sub-agents only when the user wants write operations (create/update/delete/RSVP).
-
-## GraphQL Schema
-
-${schemaSDL}
-
-For group messages, the chat_id is included in the message header (e.g. \`chat_id: -1001234567890\`).
-If the user's question seems to relate to a recent group discussion or past messages, use the search_chat_history tool with that chat_id.
-Use it with a \`query\` for semantic/keyword search, or without a \`query\` for chronological recent messages.
-
-## Long-term Memory
-
-You have long-term memory of facts learned from community conversations.
-Relevant memories are included below — use them naturally in responses.
-Don't say "I remember" unless directly asked about your memory.
-When you learn something noteworthy, use save_memory to store it.
-If someone asks you to forget something, use forget_memory.
-If you need to recall specific facts not already loaded below, use recall_memory to search your memory.
-${
-  memories.length > 0
-    ? `\n## Relevant Memories\n\n${memories.map((m) => `- [${m.category}] ${m.content} (subject: ${m.subject ?? "general"})`).join("\n")}`
-    : ""
-}
-`;
-}
-
-/**
- * Extract subject names mentioned in recent chat history messages.
- * Looks for @username mentions and "From: Name" headers in group messages.
- */
-function extractMentionedSubjects(
-  chatHistory: ModelMessage[],
-  currentQuery: string,
-): string[] {
-  const subjects = new Set<string>();
-  const allText = [
-    currentQuery,
-    ...chatHistory
-      .filter((m) => m.role === "user")
-      .map((m) => (typeof m.content === "string" ? m.content : ""))
-  ].join(" ");
-
-  // Match @username mentions
-  const atMentions = allText.match(/@(\w+)/g);
-  if (atMentions) {
-    for (const mention of atMentions) {
-      subjects.add(mention.slice(1).toLowerCase());
-    }
-  }
-
-  // Match "From: Name" headers (group message format)
-  const fromMatches = allText.match(/From:\s*([^\n(]+)/g);
-  if (fromMatches) {
-    for (const match of fromMatches) {
-      const name = match.replace(/From:\s*/, "").trim();
-      if (name) subjects.add(name.toLowerCase());
-    }
-  }
-
-  return [...subjects];
-}
-
-/**
- * Recall memories for mentioned subjects by resolving their telegram IDs.
- */
-async function recallMemoriesForMentionedSubjects(
-  subjects: string[],
-  limit: number,
-): Promise<RecalledMemory[]> {
-  const results: RecalledMemory[] = [];
-  for (const subject of subjects.slice(0, 5)) {
-    const telegramId = await resolveSubjectTelegramId(subject);
-    if (telegramId) {
-      const memories = await recallMemoriesForSubject(telegramId, limit).catch(
-        () => [],
-      );
-      results.push(...memories);
-    }
-  }
-  return results;
-}
+/** Bridges the memory service into the framework-agnostic context builder. */
+const memoryRecaller: MemoryRecaller = {
+  semantic: (query, limit) =>
+    recallMemories(query, { limit, relativeCutoff: DEFAULT_RELATIVE_CUTOFF }),
+  bySubject: (telegramId, limit) => recallMemoriesForSubject(telegramId, limit),
+  resolveSubject: (name) => resolveSubjectTelegramId(name),
+};
 
 interface AgentParams {
+  /** Raw user question — drives memory retrieval. */
   query: string;
+  /** Question prefixed with the sender/timestamp header — sent to the model. */
+  enrichedQuery: string;
   telegramId: string;
   telegramUser: TelegramUser;
   chatHistory: ModelMessage[];
@@ -138,6 +41,7 @@ interface AgentResult {
 
 export async function runAgent({
   query,
+  enrichedQuery,
   telegramId,
   telegramUser,
   chatHistory,
@@ -188,45 +92,25 @@ export async function runAgent({
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 
-  // Recall relevant memories: semantic search + sender + mentioned subjects
-  const memoryPromises: Promise<RecalledMemory[]>[] = [
-    recallMemories(query, { limit: 10 }).catch((err) => {
-      console.error("[main-agent] memory recall failed:", err);
-      return [];
-    }),
-  ];
-  if (senderTelegramId) {
-    memoryPromises.push(
-      recallMemoriesForSubject(senderTelegramId, 5).catch(() => []),
-    );
-  }
+  const { system, messages, memories } = await buildAgentContext(
+    {
+      query,
+      enrichedQuery,
+      chatHistory,
+      senderTelegramId,
+      schemaSDL,
+      now: new Date(),
+    },
+    memoryRecaller,
+  );
 
-  // Also recall memories about subjects mentioned in the conversation
-  const mentionedSubjects = extractMentionedSubjects(chatHistory, query);
-  if (mentionedSubjects.length > 0) {
-    memoryPromises.push(
-      recallMemoriesForMentionedSubjects(mentionedSubjects, 3).catch(() => []),
-    );
-  }
-
-  const memoryResults = await Promise.all(memoryPromises);
-  const allMemories = memoryResults.flat();
-
-  // Deduplicate by ID
-  const uniqueMemories = [
-    ...new Map(allMemories.map((m) => [m.id, m])).values(),
-  ];
-
-  const messages: ModelMessage[] = [
-    ...chatHistory,
-    { role: "user", content: query },
-  ];
+  console.log(`[main-agent] recalled ${memories.length} memories`);
 
   try {
     const result = await aiService.generateText(
       {
         model: aiService.models.fast,
-        system: getSystemPrompt(uniqueMemories),
+        system,
         messages,
         tools,
         stopWhen: stepCountIs(10),
@@ -243,8 +127,8 @@ export async function runAgent({
       result.text || "I couldn't generate a response. Please try again.";
 
     // Fire-and-forget: track which memories were used
-    if (uniqueMemories.length > 0) {
-      incrementAccessCount(uniqueMemories.map((m) => m.id));
+    if (memories.length > 0) {
+      incrementAccessCount(memories.map((m) => m.id));
     }
 
     return {

@@ -84,10 +84,13 @@ aiChatHandler.on("message:text", async (ctx) => {
     isGroup ? String(ctx.chat.id) : undefined,
   );
 
-  // Fetch recent messages from DB
+  // Fetch recent messages from DB.
+  // `message_thread_id` is undefined outside forum topics; coerce to null so
+  // General-topic messages are scoped to General rather than skipping the
+  // thread filter entirely and pulling in every topic's chatter.
   const recentMessages = await getRecentChatMessages(
     String(ctx.chat.id),
-    ctx.message.message_thread_id,
+    ctx.message.message_thread_id ?? null,
     ONE_HOUR_MS,
     50,
     ctx.message.message_id, // exclude current (it's in enrichedQuery)
@@ -100,7 +103,8 @@ aiChatHandler.on("message:text", async (ctx) => {
   try {
     await ctx.replyWithChatAction("typing");
     const { text: responseText, responseMessages } = await runAgent({
-      query: enrichedQuery,
+      query,
+      enrichedQuery,
       telegramId,
       telegramUser: ctx.from,
       chatHistory,

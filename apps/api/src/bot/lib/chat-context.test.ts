@@ -3,6 +3,7 @@ import {
   buildTelegramMeta,
   buildEnrichedQuery,
   buildMessagesFromHistory,
+  formatGroupHistory,
 } from "./chat-context";
 import type { ModelMessage } from "ai";
 import type { telegramMessages } from "../../db/schema/bot";
@@ -176,6 +177,7 @@ describe("buildMessagesFromHistory", () => {
       caption: null,
       mediaType: null,
       entities: null,
+      replyToMessageId: null,
       date: new Date("2026-03-18T14:30:00Z"),
       createdAt: new Date("2026-03-18T14:30:00Z"),
       ...overrides,
@@ -269,5 +271,302 @@ describe("buildMessagesFromHistory", () => {
     const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
     expect(result).toHaveLength(1);
     expect(result[0]?.content).toContain("[photo]");
+  });
+
+  // ── reply links ───────────────────────────────────────────────────────────
+
+  test("non-reply message has no reply marker", () => {
+    const rows = [makeRow({ messageId: 1, text: "just talking" })];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).not.toContain("↳");
+  });
+
+  test("reply to a message in the window names the parent and its timestamp", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 77, fromUsername: "hafiz_dev", text: "Can someone help?" }),
+      makeRow({ messageId: 2, fromUserId: 42, fromUsername: "aziz_sg", text: "on it", replyToMessageId: 1 }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    // Time, not message id: it matches the header of the parent's own line.
+    expect(result[1]?.content).toMatch(
+      /@aziz_sg ↳ replying to @hafiz_dev at \d{2}:\d{2}\]/,
+    );
+    expect(result[1]?.content).toContain("on it");
+  });
+
+  test("in-window parent is not quoted — it is already in the transcript", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 77, fromUsername: "hafiz_dev", text: "Can someone help?" }),
+      makeRow({
+        messageId: 2,
+        fromUserId: 42,
+        text: "on it",
+        replyToMessageId: 1,
+        raw: { reply_to_message: { from: { first_name: "Hafiz", username: "hafiz_dev" }, text: "Can someone help?" } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[1]?.content).not.toContain('"Can someone help?"');
+  });
+
+  test("parent without a username falls back to first name", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUserId: 77, fromUsername: null, fromFirstName: "Hafiz", text: "salam" }),
+      makeRow({ messageId: 2, fromUserId: 42, text: "wasalam", replyToMessageId: 1 }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[1]?.content).toContain("↳ replying to Hafiz");
+  });
+
+  test("reply to the bot names the bot", () => {
+    const rows = [
+      makeRow({
+        messageId: 1,
+        fromUserId: BOT_USER_ID,
+        fromUsername: "msocietybot",
+        fromIsBot: true,
+        text: "No events found.",
+      }),
+      makeRow({ messageId: 2, fromUserId: 42, text: "why not?", replyToMessageId: 1 }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[1]?.content).toContain("↳ replying to @msocietybot");
+  });
+
+  test("reply to a message outside the window with no raw payload degrades gracefully", () => {
+    const rows = [
+      makeRow({ messageId: 2, fromUserId: 42, text: "still thinking about this", replyToMessageId: 99999 }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain("↳ replying to an earlier message");
+  });
+
+  /**
+   * Over half of all replies target a message older than the 1-hour window.
+   * Telegram embeds the parent in the update, so it can still be quoted.
+   */
+  test("reply to a long-ago message quotes the parent from the raw payload", () => {
+    const parentDate = Math.floor(Date.parse("2026-04-04T12:00:00Z") / 1000);
+    const rows = [
+      makeRow({
+        messageId: 2,
+        fromUserId: 42,
+        fromUsername: "aziz_sg",
+        text: "I like that idea too",
+        replyToMessageId: 99999,
+        raw: {
+          reply_to_message: {
+            date: parentDate,
+            from: { first_name: "Aelindgard" },
+            text: "Like free clinic?",
+          },
+        },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain("↳ replying to Aelindgard on 4 Apr 2026");
+    expect(result[0]?.content).toContain('"Like free clinic?"');
+    expect(result[0]?.content).not.toContain("an earlier message");
+  });
+
+  test("an out-of-window parent exposes its id so the agent can fetch it", () => {
+    const rows = [
+      makeRow({
+        messageId: 2,
+        replyToMessageId: 137074,
+        raw: { reply_to_message: { from: { first_name: "Faruq" }, text: "A".repeat(300) } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain("(msg 137074)");
+  });
+
+  test("an in-window parent needs no id — it is already in the transcript", () => {
+    const rows = [
+      makeRow({ messageId: 1, fromUsername: "hafiz_dev", text: "Can someone help?" }),
+      makeRow({ messageId: 2, fromUsername: "aziz_sg", text: "on it", replyToMessageId: 1 }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[1]?.content).not.toContain("msg 1)");
+  });
+
+  test("raw parent with a username is rendered as @handle", () => {
+    const rows = [
+      makeRow({
+        messageId: 2,
+        replyToMessageId: 99999,
+        raw: { reply_to_message: { from: { first_name: "Faruq", username: "ruqqq" }, text: "shipped" } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain("↳ replying to @ruqqq");
+  });
+
+  test("raw parent with no text renders a non-text placeholder", () => {
+    const rows = [
+      makeRow({
+        messageId: 2,
+        replyToMessageId: 99999,
+        raw: { reply_to_message: { from: { first_name: "Faruq", username: "ruqqq" }, text: "" } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain('"(non-text message)"');
+  });
+
+  test("raw parent falls back to caption when there is no text", () => {
+    const rows = [
+      makeRow({
+        messageId: 2,
+        replyToMessageId: 99999,
+        raw: { reply_to_message: { from: { first_name: "Faruq" }, caption: "our new venue" } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain('"our new venue"');
+  });
+
+  test("long raw parent text is truncated", () => {
+    const rows = [
+      makeRow({
+        messageId: 2,
+        replyToMessageId: 99999,
+        raw: { reply_to_message: { from: { first_name: "Faruq" }, text: "A".repeat(300) } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    const content = result[0]?.content as string;
+    expect(content).toContain("…");
+    const quoted = content.match(/: "([^"]+)"/)?.[1] ?? "";
+    expect(quoted.length).toBeLessThanOrEqual(81); // 80 chars + ellipsis
+  });
+
+  test("raw payload without a reply_to_message is ignored", () => {
+    const rows = [
+      makeRow({ messageId: 2, replyToMessageId: 99999, raw: { message_id: 2, text: "hi" } }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).toContain("↳ replying to an earlier message");
+  });
+
+  test("topic-root suppression wins even when raw carries a parent", () => {
+    const rows = [
+      makeRow({
+        messageId: 141959,
+        replyToMessageId: 112892,
+        messageThreadId: 112892,
+        text: "Fixed the pagination",
+        raw: { reply_to_message: { from: { first_name: "Topic" }, text: "Dev Talk" } },
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).not.toContain("↳");
+  });
+
+  /**
+   * Inside a forum topic Telegram sets reply_to_message_id to the topic root
+   * on messages that aren't replying to anything. Rendering those as replies
+   * would label most of a topic as a reply to its own title.
+   */
+  test("topic-root pseudo-reply produces no marker", () => {
+    const rows = [
+      makeRow({
+        messageId: 141959,
+        fromUserId: 42,
+        text: "Fixed the pagination",
+        replyToMessageId: 112892,
+        messageThreadId: 112892,
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).not.toContain("↳");
+  });
+
+  test("a genuine reply inside a topic still gets a marker", () => {
+    const rows = [
+      makeRow({
+        messageId: 141959,
+        fromUserId: 77,
+        fromUsername: "hafiz_dev",
+        text: "shall we ship it?",
+        replyToMessageId: 112892,
+        messageThreadId: 112892,
+      }),
+      makeRow({
+        messageId: 141960,
+        fromUserId: 42,
+        fromUsername: "aziz_sg",
+        text: "yes",
+        replyToMessageId: 141959,
+        messageThreadId: 112892,
+      }),
+    ];
+    const result = buildMessagesFromHistory(rows, BOT_USER_ID, {});
+    expect(result[0]?.content).not.toContain("↳");
+    expect(result[1]?.content).toContain("↳ replying to @hafiz_dev");
+  });
+});
+
+// ─── formatGroupHistory ──────────────────────────────────────────────────────
+
+describe("formatGroupHistory", () => {
+  function row(overrides: Partial<TelegramMessageRow>): TelegramMessageRow {
+    return {
+      chatId: "-100123",
+      chatType: "supergroup",
+      messageId: 1,
+      messageThreadId: null,
+      fromUserId: 42,
+      fromFirstName: "Aziz",
+      fromUsername: "aziz_sg",
+      fromIsBot: false,
+      text: "hello",
+      caption: null,
+      mediaType: null,
+      date: new Date("2026-03-18T14:30:00Z"),
+      createdAt: new Date("2026-03-18T14:30:00Z"),
+      ...overrides,
+    } as TelegramMessageRow;
+  }
+
+  test("renders one line per message with time and sender", () => {
+    const result = formatGroupHistory([
+      row({ messageId: 1, text: "salam" }),
+      row({ messageId: 2, fromUsername: null, fromFirstName: "Hafiz", text: "wa'alaikumussalam" }),
+    ]);
+
+    expect(result).toContain("[Recent group conversation:]");
+    expect(result).toContain("@aziz_sg: salam");
+    expect(result).toContain("Hafiz: wa'alaikumussalam");
+    expect(result.endsWith("---")).toBe(true);
+  });
+
+  test("falls back to caption when there is no text", () => {
+    const result = formatGroupHistory([
+      row({ text: null, caption: "our new venue", mediaType: "photo" }),
+    ]);
+    expect(result).toContain("our new venue");
+  });
+
+  test("media without caption renders the media type", () => {
+    const result = formatGroupHistory([row({ text: null, caption: null, mediaType: "sticker" })]);
+    expect(result).toContain("[sticker]");
+  });
+
+  test("contentless message falls back to a placeholder", () => {
+    const result = formatGroupHistory([row({ text: null, caption: null, mediaType: null })]);
+    expect(result).toContain("[message]");
+  });
+
+  test("unknown sender renders as 'unknown'", () => {
+    const result = formatGroupHistory([
+      row({ fromUsername: null, fromFirstName: null, text: "who am i" }),
+    ]);
+    expect(result).toContain("unknown: who am i");
+  });
+
+  test("empty history still renders the wrapper", () => {
+    const result = formatGroupHistory([]);
+    expect(result).toBe("[Recent group conversation:]\n\n---");
   });
 });

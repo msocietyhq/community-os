@@ -25,7 +25,7 @@ export const searchRoutes = new Elysia({ prefix: "/api/v1/search" })
           ? searchMessagesHybrid(chatId, q, limit)
           : Promise.resolve([]),
         shouldSearchMemories
-          ? recallMemories(q, { limit, minSimilarity: 0.5 })
+          ? recallMemories(q, { limit })
           : Promise.resolve([]),
       ]);
 
