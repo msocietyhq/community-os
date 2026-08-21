@@ -24,7 +24,7 @@ describe("formatTechNews", () => {
       islamic: [story(3)],
     });
 
-    expect(out).toContain("📡 <b>This Week in Tech</b>");
+    expect(out).toContain("🔍 <b>The Stack Trace</b>");
     expect(out).toContain("<b>Rising on GitHub</b>");
     expect(out).toContain("<b>Singapore &amp; SEA</b>");
     expect(out).toContain("<b>Muslim Tech &amp; Fintech</b>");
@@ -105,9 +105,9 @@ describe("formatTechNews", () => {
 
     test("only the first message carries the title header", () => {
       const parts = formatTechNews(crowded);
-      expect(parts[0]).toContain("This Week in Tech");
+      expect(parts[0]).toContain("The Stack Trace");
       for (const part of parts.slice(1)) {
-        expect(part).not.toContain("This Week in Tech");
+        expect(part).not.toContain("The Stack Trace");
       }
     });
 
@@ -137,7 +137,7 @@ describe("formatTechNews", () => {
         if (firstBullet === -1) continue;
         const before = part.slice(0, firstBullet);
         const opensSection = /<b>/.test(before);
-        const isStorySection = part.includes("This Week in Tech");
+        const isStorySection = part.includes("The Stack Trace");
         expect(opensSection || isStorySection).toBe(true);
       }
     });

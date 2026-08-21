@@ -10,6 +10,9 @@ const MAX_MESSAGE_CHARS = 4000;
 /** Beyond this the roundup stops being a roundup. Extra items are dropped. */
 const MAX_MESSAGES = 2;
 
+/** Only the first message carries it, so a spill doesn't read as a new post. */
+const TITLE = "🔍 <b>The Stack Trace</b>";
+
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -74,7 +77,7 @@ export function formatTechNews(news: TechNews): string[] {
   ];
 
   const messages: string[] = [];
-  let lines: string[] = ["📡 <b>This Week in Tech</b>"];
+  let lines: string[] = [TITLE];
   let length = lines[0]!.length;
   /** Heading whose section is still open, so a spill can repeat it. */
   let openHeading: string | null = null;
