@@ -1,6 +1,6 @@
 import { eq, and, or, ilike, isNull, count, asc, desc, sql } from "drizzle-orm";
 import { db } from "../db";
-import { members } from "../db/schema/members";
+import { members, MEMBER_SELF_COLUMNS } from "../db/schema/members";
 import { user } from "../db/schema/auth";
 import { projects, projectMembers } from "../db/schema/projects";
 import { bot } from "../bot/bot";
@@ -14,10 +14,12 @@ import type {
 
 export const membersService = {
   async findByUserId(userId: string) {
-    const member = await db.query.members.findFirst({
-      where: eq(members.userId, userId),
-    });
-    return member ?? null;
+    const result = await db
+      .select(MEMBER_SELF_COLUMNS)
+      .from(members)
+      .where(eq(members.userId, userId))
+      .limit(1);
+    return result[0] ?? null;
   },
 
   async list(query: MemberListQuery) {
@@ -169,6 +171,10 @@ export const membersService = {
         linkedinUrl: members.linkedinUrl,
         websiteUrl: members.websiteUrl,
         joinedAt: members.joinedAt,
+        // Exposed on the GraphQL Member type, which is AI-only (the /graphql
+        // HTTP mount is removed). Deliberately absent from findByUsername and
+        // list, which back public REST routes.
+        aiSummary: members.aiSummary,
         user: {
           id: user.id,
           name: user.name,

@@ -12,6 +12,11 @@ import type {
 import { env } from "../../env";
 import { bot } from "../bot";
 import { hasUserMessages } from "../../services/messages.service";
+import { aiProfileService } from "../../services/ai-profile.service";
+import {
+  additiveKey,
+  scalarKey,
+} from "../../services/ai-profile-suggestions";
 
 function parseCsvList(text: string): string[] {
   return text
@@ -25,22 +30,53 @@ function withCurrent(prompt: string, value: string | null | undefined): string {
   return `${prompt}\n\n\`${value}\``;
 }
 
+/**
+ * Append an AI suggestion to a prompt.
+ *
+ * Only ever reached when the field is empty — a member who already answered is
+ * never suggested at, since their own value is the source of truth.
+ */
+function withSuggestion(prompt: string, suggestion: string | undefined): string {
+  if (!suggestion) return prompt;
+  return `${prompt}\n\n_Suggested:_ \`${suggestion}\``;
+}
+
+interface AskResult {
+  /** What the member typed, or the suggestion they accepted. */
+  answer: string | null;
+  /** True when they skipped a prompt that was showing a suggestion. */
+  dismissedSuggestion: boolean;
+}
+
 async function askQuestion(
   conversation: BotConversation,
   ctx: BotContext,
   prompt: string,
-): Promise<string | null> {
-  const keyboard = new InlineKeyboard().text("Skip ⏭", "skip_step");
-  await ctx.reply(prompt, { reply_markup: keyboard, parse_mode: "Markdown" });
+  suggestion?: string,
+): Promise<AskResult> {
+  const keyboard = new InlineKeyboard();
+  if (suggestion) keyboard.text("Use this ✨", "use_suggestion");
+  keyboard.text("Skip ⏭", "skip_step");
+
+  await ctx.reply(withSuggestion(prompt, suggestion), {
+    reply_markup: keyboard,
+    parse_mode: "Markdown",
+  });
+
   const response = await conversation.wait();
-  if (response.callbackQuery?.data === "skip_step") {
+  const data = response.callbackQuery?.data;
+
+  if (data === "use_suggestion" || data === "skip_step") {
     await response.answerCallbackQuery();
     await response.editMessageReplyMarkup({
       reply_markup: { inline_keyboard: [] },
     });
-    return null;
+    return data === "use_suggestion"
+      ? { answer: suggestion ?? null, dismissedSuggestion: false }
+      : { answer: null, dismissedSuggestion: Boolean(suggestion) };
   }
-  return response.message?.text ?? null;
+
+  return { answer: response.message?.text ?? null, dismissedSuggestion: false };
 }
 
 async function setProfileConversation(
@@ -83,6 +119,15 @@ async function setProfileConversation(
     membersService.findByUserId(userId),
   );
 
+  // AI-derived suggestions, already filtered to fields they haven't answered
+  // and suggestions they haven't waved off.
+  const suggestions = await conversation.external(() =>
+    aiProfileService.visibleSuggestionsFor(userId),
+  );
+
+  /** Dismissal keys accumulated as the member skips suggested prompts. */
+  const dismissed: string[] = [];
+
   // Start questionnaire
   await ctx.reply(
     "Let's set up your MSOCIETY profile! I'll ask you a few questions.\n" +
@@ -92,85 +137,118 @@ async function setProfileConversation(
   const data: UpdateMemberInput = {};
 
   // 1. Bio
-  const bioAnswer = await askQuestion(
+  const bioResult = await askQuestion(
     conversation,
     ctx,
     withCurrent("1/7 — Tell us about yourself (max 500 chars):", existing?.bio),
+    suggestions.bio,
   );
-  if (bioAnswer) {
-    data.bio = bioAnswer.slice(0, 500);
+  if (bioResult.answer) {
+    data.bio = bioResult.answer.slice(0, 500);
+  }
+  if (bioResult.dismissedSuggestion && suggestions.bio) {
+    dismissed.push(scalarKey("bio", suggestions.bio));
   }
 
   // 2. Title
-  const titleAnswer = await askQuestion(
+  const titleResult = await askQuestion(
     conversation,
     ctx,
     withCurrent(
       '2/7 — What\'s your role? (e.g. "Software Engineer"):',
       existing?.currentTitle,
     ),
+    suggestions.currentTitle,
   );
-  if (titleAnswer) {
-    data.currentTitle = titleAnswer.trim();
+  if (titleResult.answer) {
+    data.currentTitle = titleResult.answer.trim();
+  }
+  if (titleResult.dismissedSuggestion && suggestions.currentTitle) {
+    dismissed.push(scalarKey("currentTitle", suggestions.currentTitle));
   }
 
   // 3. Company
-  const companyAnswer = await askQuestion(
+  const companyResult = await askQuestion(
     conversation,
     ctx,
     withCurrent(
       '3/7 — Where do you work? (e.g. "Grab"):',
       existing?.currentCompany,
     ),
+    suggestions.currentCompany,
   );
-  if (companyAnswer) {
-    data.currentCompany = companyAnswer.trim();
+  if (companyResult.answer) {
+    data.currentCompany = companyResult.answer.trim();
+  }
+  if (companyResult.dismissedSuggestion && suggestions.currentCompany) {
+    dismissed.push(scalarKey("currentCompany", suggestions.currentCompany));
   }
 
   // 4. Skills
-  const skillsAnswer = await askQuestion(
+  //
+  // Additive: the suggestion is seeded with what they already have, so pressing
+  // "Use this" adds to their skills rather than replacing them. Skipping
+  // dismisses each suggested value individually — they rejected those skills,
+  // not the idea of listing skills.
+  const skillsResult = await askQuestion(
     conversation,
     ctx,
     withCurrent(
       "4/7 — Your skills? (comma-separated, e.g. TypeScript, React, Python):",
       existing?.skills?.join(", "),
     ),
+    suggestions.skills?.length
+      ? [...(existing?.skills ?? []), ...suggestions.skills].join(", ")
+      : undefined,
   );
-  if (skillsAnswer) {
-    data.skills = parseCsvList(skillsAnswer);
+  if (skillsResult.answer) {
+    data.skills = parseCsvList(skillsResult.answer);
+  }
+  if (skillsResult.dismissedSuggestion) {
+    for (const skill of suggestions.skills ?? []) {
+      dismissed.push(additiveKey("skills", skill));
+    }
   }
 
   // 5. Interests
-  const interestsAnswer = await askQuestion(
+  const interestsResult = await askQuestion(
     conversation,
     ctx,
     withCurrent(
       "5/7 — Your interests? (comma-separated, e.g. AI, Web Dev, Open Source):",
       existing?.interests?.join(", "),
     ),
+    suggestions.interests?.length
+      ? [...(existing?.interests ?? []), ...suggestions.interests].join(", ")
+      : undefined,
   );
-  if (interestsAnswer) {
-    data.interests = parseCsvList(interestsAnswer);
+  if (interestsResult.answer) {
+    data.interests = parseCsvList(interestsResult.answer);
+  }
+  if (interestsResult.dismissedSuggestion) {
+    for (const interest of suggestions.interests ?? []) {
+      dismissed.push(additiveKey("interests", interest));
+    }
   }
 
-  // 6. GitHub
-  const githubAnswer = await askQuestion(
+  // 6. GitHub — no suggestion; the AI doesn't derive handles.
+  const githubResult = await askQuestion(
     conversation,
     ctx,
     withCurrent("6/7 — Your GitHub username:", existing?.githubHandle),
   );
-  if (githubAnswer) {
-    data.githubHandle = githubAnswer.replace(/^@/, "").trim();
+  if (githubResult.answer) {
+    data.githubHandle = githubResult.answer.replace(/^@/, "").trim();
   }
 
   // 7. LinkedIn
-  const linkedinAnswer = await askQuestion(
+  const linkedinResult = await askQuestion(
     conversation,
     ctx,
     withCurrent("7/7 — Your LinkedIn username or URL:", existing?.linkedinUrl),
   );
-  if (linkedinAnswer) {
-    const raw = linkedinAnswer.trim().replace(/^@/, "");
+  if (linkedinResult.answer) {
+    const raw = linkedinResult.answer.trim().replace(/^@/, "");
     data.linkedinUrl = raw.startsWith("http") ? raw : `https://linkedin.com/in/${raw}`;
   }
 
@@ -179,6 +257,12 @@ async function setProfileConversation(
     await conversation.external(() => membersService.update(userId, data));
   } else {
     await conversation.external(() => membersService.create(userId, data));
+  }
+
+  if (dismissed.length) {
+    await conversation.external(() =>
+      aiProfileService.recordDismissals(userId, dismissed),
+    );
   }
 
   // Build summary

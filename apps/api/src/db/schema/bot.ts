@@ -9,29 +9,10 @@ import {
   boolean,
   primaryKey,
   index,
-  customType,
   uuid,
   real,
 } from "drizzle-orm/pg-core";
-
-const vector = customType<{
-  data: number[];
-  driverData: string;
-  config: { dimensions: number };
-}>({
-  dataType(config) {
-    return `vector(${config?.dimensions ?? 512})`;
-  },
-  toDriver(value: number[]): string {
-    return `[${value.join(",")}]`;
-  },
-  fromDriver(value: string): number[] {
-    return value
-      .slice(1, -1)
-      .split(",")
-      .map(Number);
-  },
-});
+import { vector } from "../types";
 
 export const botSession = pgTable("bot_session", {
   key: text("key").primaryKey(),

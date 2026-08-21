@@ -1,9 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, apiBase } from "../../lib/api-client";
 import { resetMetaToDefaults, setMetaTag } from "../../lib/meta";
 import { PublicHeader } from "../../components/public-header";
+import { useAuth } from "../../lib/auth";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
+import { Label } from "../../components/ui/label";
+
+/**
+ * The primitives are styled for the themed dashboard (`bg-card`, `border-input`).
+ * This page is a fixed dark surface, so inputs get an explicit override —
+ * `cn` merges via tailwind-merge, so these win over the defaults.
+ */
+const DARK_FIELD =
+  "bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus:border-white/25 focus:ring-white/10";
 
 export const Route = createFileRoute("/member/$username")({
   component: MemberProfilePage,
@@ -23,6 +36,7 @@ const NATURE_COLORS: Record<string, string> = {
 
 function MemberProfilePage() {
   const { username } = Route.useParams();
+  const { user } = useAuth();
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
@@ -153,7 +167,11 @@ function MemberProfilePage() {
             </p>
           </div>
         ) : (
-          <MemberContent member={data} />
+          <MemberContent
+            member={data}
+            username={username}
+            isOwner={!!user && user.id === data.userId}
+          />
         )}
       </main>
 
@@ -174,8 +192,19 @@ type MemberData = NonNullable<
   Awaited<ReturnType<ReturnType<typeof api.api.v1.members.username>["get"]>>["data"]
 >;
 
-function MemberContent({ member }: { member: Exclude<MemberData, { message: string }> }) {
+type PublicMember = Exclude<MemberData, { message: string }>;
+
+function MemberContent({
+  member,
+  username,
+  isOwner,
+}: {
+  member: PublicMember;
+  username: string;
+  isOwner: boolean;
+}) {
   const { user, projects } = member;
+  const [isEditing, setIsEditing] = useState(false);
 
   const initials = user.name
     .split(" ")
@@ -186,8 +215,8 @@ function MemberContent({ member }: { member: Exclude<MemberData, { message: stri
 
   return (
     <div className="space-y-8">
-      {/* Profile header */}
-      <div className="flex items-center gap-5">
+      {/* Profile header — identity stays put; only the body switches to a form */}
+      <div className="flex items-start gap-5">
         {user.image ? (
           <img
             src={user.image}
@@ -199,9 +228,9 @@ function MemberContent({ member }: { member: Exclude<MemberData, { message: stri
             <span className="text-xl font-medium text-white/70">{initials}</span>
           </div>
         )}
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">{user.name}</h1>
-          {(member.currentTitle || member.currentCompany) && (
+          {!isEditing && (member.currentTitle || member.currentCompany) && (
             <p className="text-gray-400 mt-1">
               {member.currentTitle}
               {member.currentTitle && member.currentCompany && " at "}
@@ -219,7 +248,53 @@ function MemberContent({ member }: { member: Exclude<MemberData, { message: stri
             </a>
           )}
         </div>
+        {isOwner && !isEditing && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditing(true)}
+            className="border-white/10 bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white shrink-0"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"
+              />
+            </svg>
+            Edit profile
+          </Button>
+        )}
       </div>
+
+      {isEditing ? (
+        <MemberEditForm
+          member={member}
+          username={username}
+          onDone={() => setIsEditing(false)}
+        />
+      ) : (
+        <MemberDisplay member={member} projects={projects} />
+      )}
+    </div>
+  );
+}
+
+function MemberDisplay({
+  member,
+  projects,
+}: {
+  member: PublicMember;
+  projects: PublicMember["projects"];
+}) {
+  return (
+    <div className="space-y-8">
 
       {/* Bio */}
       {member.bio && (
@@ -367,5 +442,339 @@ function MemberContent({ member }: { member: Exclude<MemberData, { message: stri
         </div>
       )}
     </div>
+  );
+}
+
+/** A suggestion the API has already filtered and keyed. Keys are opaque. */
+interface SuggestionEntry {
+  field: string;
+  display: string;
+  values: string[];
+  keys: string[];
+}
+
+function parseCsvList(text: string): string[] {
+  return text
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function EditField({
+  id,
+  label,
+  hint,
+  footer,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <Label htmlFor={id} className="text-gray-400">
+        {label}
+      </Label>
+      <div className="mt-1.5">{children}</div>
+      {hint && <p className="mt-1 text-xs text-gray-600">{hint}</p>}
+      {footer}
+    </div>
+  );
+}
+
+function SuggestionCard({
+  entry,
+  onUse,
+  onDismiss,
+  isDismissing,
+}: {
+  entry: SuggestionEntry;
+  onUse: () => void;
+  onDismiss: () => void;
+  isDismissing: boolean;
+}) {
+  return (
+    <div className="mt-2 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.07] px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-300">
+        <svg
+          className="w-3.5 h-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"
+          />
+        </svg>
+        Suggested
+      </div>
+      <p className="mt-1 text-sm text-gray-200">{entry.display}</p>
+      <div className="mt-2 flex justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onDismiss}
+          disabled={isDismissing}
+          className="border-white/10 bg-transparent text-gray-400 hover:bg-white/5 hover:text-white"
+        >
+          Dismiss
+        </Button>
+        <Button size="sm" onClick={onUse}>
+          Use
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The profile page in edit mode.
+ *
+ * Suggestions come from `GET /me` already filtered and keyed — the browser
+ * never decides what to show or derives a dismissal key. `Use` only fills the
+ * input; the member still presses Save, so an accepted suggestion is always an
+ * edit they made.
+ */
+function MemberEditForm({
+  member,
+  username,
+  onDone,
+}: {
+  member: PublicMember;
+  username: string;
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const [bio, setBio] = useState(member.bio ?? "");
+  const [title, setTitle] = useState(member.currentTitle ?? "");
+  const [company, setCompany] = useState(member.currentCompany ?? "");
+  const [education, setEducation] = useState(member.education ?? "");
+  const [skills, setSkills] = useState(member.skills?.join(", ") ?? "");
+  const [interests, setInterests] = useState(member.interests?.join(", ") ?? "");
+  const [github, setGithub] = useState(member.githubHandle ?? "");
+  const [linkedin, setLinkedin] = useState(member.linkedinUrl ?? "");
+  const [website, setWebsite] = useState(member.websiteUrl ?? "");
+
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: async () => {
+      const res = await api.api.v1.members.me.get();
+      if (res.error) throw new Error("Failed to fetch profile");
+      return res.data;
+    },
+  });
+
+  const suggestions: SuggestionEntry[] = me?.suggestions ?? [];
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.api.v1.members.me.patch({
+        bio: bio || undefined,
+        currentTitle: title || undefined,
+        currentCompany: company || undefined,
+        education: education || undefined,
+        skills: skills ? parseCsvList(skills) : undefined,
+        interests: interests ? parseCsvList(interests) : undefined,
+        githubHandle: github || undefined,
+        linkedinUrl: linkedin || undefined,
+        websiteUrl: website || undefined,
+      });
+      if (res.error) throw new Error("Failed to save profile");
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member", username] });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      onDone();
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async (keys: string[]) => {
+      const res = await api.api.v1.members.me["dismiss-suggestions"].post({
+        keys,
+      });
+      if (res.error) throw new Error("Failed to dismiss suggestion");
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+
+  const suggestionFor = (field: string, apply: (values: string[]) => void) => {
+    const entry = suggestions.find((s) => s.field === field);
+    if (!entry) return null;
+    return (
+      <SuggestionCard
+        entry={entry}
+        onUse={() => apply(entry.values)}
+        onDismiss={() => dismissMutation.mutate(entry.keys)}
+        isDismissing={dismissMutation.isPending}
+      />
+    );
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        saveMutation.mutate();
+      }}
+      className="space-y-6"
+    >
+      <EditField
+        id="bio"
+        label="About"
+        hint={`${bio.length}/500`}
+        footer={suggestionFor("bio", (v) => setBio(v[0] ?? ""))}
+      >
+        <Textarea
+          id="bio"
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          rows={4}
+          maxLength={500}
+          placeholder="What do you work on?"
+          className={DARK_FIELD}
+        />
+      </EditField>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <EditField
+          id="title"
+          label="Role"
+          footer={suggestionFor("currentTitle", (v) => setTitle(v[0] ?? ""))}
+        >
+          <Input
+            id="title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Software Engineer"
+            className={DARK_FIELD}
+          />
+        </EditField>
+        <EditField
+          id="company"
+          label="Company"
+          footer={suggestionFor("currentCompany", (v) => setCompany(v[0] ?? ""))}
+        >
+          <Input
+            id="company"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            placeholder="Grab"
+            className={DARK_FIELD}
+          />
+        </EditField>
+      </div>
+
+      <EditField
+        id="education"
+        label="Education"
+        footer={suggestionFor("education", (v) => setEducation(v[0] ?? ""))}
+      >
+        <Input
+          id="education"
+          value={education}
+          onChange={(e) => setEducation(e.target.value)}
+          placeholder="NUS, Computer Science"
+          className={DARK_FIELD}
+        />
+      </EditField>
+
+      <EditField
+        id="skills"
+        label="Skills"
+        hint="Comma-separated."
+        footer={suggestionFor("skills", (v) =>
+          setSkills([...parseCsvList(skills), ...v].join(", ")),
+        )}
+      >
+        <Input
+          id="skills"
+          value={skills}
+          onChange={(e) => setSkills(e.target.value)}
+          placeholder="TypeScript, React, Postgres"
+          className={DARK_FIELD}
+        />
+      </EditField>
+
+      <EditField
+        id="interests"
+        label="Interests"
+        hint="Comma-separated."
+        footer={suggestionFor("interests", (v) =>
+          setInterests([...parseCsvList(interests), ...v].join(", ")),
+        )}
+      >
+        <Input
+          id="interests"
+          value={interests}
+          onChange={(e) => setInterests(e.target.value)}
+          placeholder="AI, Open Source, Web Dev"
+          className={DARK_FIELD}
+        />
+      </EditField>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <EditField id="github" label="GitHub">
+          <Input
+            id="github"
+            value={github}
+            onChange={(e) => setGithub(e.target.value)}
+            placeholder="username"
+            className={DARK_FIELD}
+          />
+        </EditField>
+        <EditField id="linkedin" label="LinkedIn">
+          <Input
+            id="linkedin"
+            type="url"
+            value={linkedin}
+            onChange={(e) => setLinkedin(e.target.value)}
+            placeholder="https://linkedin.com/in/..."
+            className={DARK_FIELD}
+          />
+        </EditField>
+      </div>
+
+      <EditField id="website" label="Website">
+        <Input
+          id="website"
+          type="url"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+          placeholder="https://..."
+          className={DARK_FIELD}
+        />
+      </EditField>
+
+      <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/5">
+        {saveMutation.isError && (
+          <span className="text-sm text-red-400">
+            Could not save. Try again.
+          </span>
+        )}
+        <Button
+          variant="outline"
+          onClick={onDone}
+          disabled={saveMutation.isPending}
+          className="border-white/10 bg-transparent text-gray-400 hover:bg-white/5 hover:text-white"
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={saveMutation.isPending}>
+          {saveMutation.isPending ? "Saving..." : "Save changes"}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -15,7 +15,6 @@ import { botRoutes } from "./routes/bot";
 import { statsRoutes } from "./routes/stats";
 import { searchRoutes } from "./routes/search";
 import { AppError } from "./lib/errors";
-import { yoga } from "./graphql";
 import { authRateLimit, generalRateLimit } from "./middleware/rate-limit";
 import { env } from "./env";
 
@@ -111,7 +110,11 @@ export const app = new Elysia()
   .use(reputationRoutes)
   .use(statsRoutes)
   .use(searchRoutes)
-  .all("/graphql", ({ request }) => yoga.handle(request))
+  // GraphQL is deliberately NOT mounted over HTTP. It is the AI's private query
+  // layer, consumed in-process by bot/ai/agent.ts via yoga.handle() — nothing
+  // reaches it over the network, and apps/web is REST-only. Exposing it would
+  // publish the AI-derived `aiSummary` field on the Member type, and the member
+  // resolvers do not check the auth context.
   // botRoutes must be last — it breaks CORS for routes registered after it
   .use(botRoutes);
 

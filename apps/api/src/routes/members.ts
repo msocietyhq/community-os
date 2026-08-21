@@ -3,6 +3,7 @@ import { authMiddleware } from "../middleware/auth";
 import { checkPermission } from "../middleware/permissions";
 import { createAuditEntry } from "../middleware/audit";
 import { membersService } from "../services/members.service";
+import { aiProfileService } from "../services/ai-profile.service";
 import { memberModel } from "./models/member";
 import { ROLE_HIERARCHY, type Role } from "@community-os/shared";
 
@@ -17,7 +18,8 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
         await membersService.createIfNotExists(user.id);
         member = await membersService.findByUserId(user.id);
       }
-      return { user, member };
+      const suggestions = await aiProfileService.keyedSuggestionsFor(user.id);
+      return { user, member, suggestions };
     },
     {
       auth: true,
@@ -45,6 +47,22 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       beforeHandle: checkPermission("update", "Member"),
       body: "member.update",
       detail: { tags: ["Members"], summary: "Update current member profile" },
+    }
+  )
+  .post(
+    "/me/dismiss-suggestions",
+    async ({ user, body }) => {
+      await aiProfileService.recordDismissals(user.id, body.keys);
+      return { dismissed: body.keys.length };
+    },
+    {
+      auth: true,
+      beforeHandle: checkPermission("update", "Member"),
+      body: "member.dismissSuggestions",
+      detail: {
+        tags: ["Members"],
+        summary: "Dismiss AI profile suggestions",
+      },
     }
   )
   .get(

@@ -1,6 +1,6 @@
 {
-  "id": "b8e00321-b677-47f3-9fdb-2659625c025a",
-  "prevId": "8e128fbf-4408-48f9-82bd-adf31117d536",
+  "id": "06aa5136-28f2-45d1-ab66-ab7fac146061",
+  "prevId": "b8e00321-b677-47f3-9fdb-2659625c025a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -106,15 +106,15 @@
         "account_user_id_user_id_fk": {
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -183,25 +183,25 @@
         "session_user_id_user_id_fk": {
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "session_token_unique": {
           "name": "session_token_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "token"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -290,19 +290,72 @@
       "uniqueConstraints": {
         "user_email_unique": {
           "name": "user_email_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ],
-          "nullsNotDistinct": false
+          ]
         },
         "user_telegram_id_unique": {
           "name": "user_telegram_id_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "telegram_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_photo": {
+      "name": "user_photo",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "data": {
+          "name": "data",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type": {
+          "name": "content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'image/jpeg'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_photo_user_id_user_id_fk": {
+          "name": "user_photo_user_id_user_id_fk",
+          "tableFrom": "user_photo",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -435,6 +488,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "reputation_score": {
+          "name": "reputation_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "joined_at": {
           "name": "joined_at",
           "type": "timestamp",
@@ -456,12 +516,36 @@
           "notNull": false,
           "default": "now()"
         },
-        "reputation_score": {
-          "name": "reputation_score",
-          "type": "integer",
+        "ai_summary": {
+          "name": "ai_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_suggested": {
+          "name": "ai_suggested",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_embedding": {
+          "name": "ai_embedding",
+          "type": "vector(512)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_generated_at": {
+          "name": "ai_generated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ai_dismissed": {
+          "name": "ai_dismissed",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": "'[]'::jsonb"
         }
       },
       "indexes": {},
@@ -469,25 +553,25 @@
         "members_user_id_user_id_fk": {
           "name": "members_user_id_user_id_fk",
           "tableFrom": "members",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "members_user_id_unique": {
           "name": "members_user_id_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "user_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -593,15 +677,15 @@
         "venues_created_by_user_id_fk": {
           "name": "venues_created_by_user_id_fk",
           "tableFrom": "venues",
+          "tableTo": "user",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -673,39 +757,39 @@
         "event_attendees_event_id_events_id_fk": {
           "name": "event_attendees_event_id_events_id_fk",
           "tableFrom": "event_attendees",
+          "tableTo": "events",
           "columnsFrom": [
             "event_id"
           ],
-          "tableTo": "events",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "event_attendees_user_id_user_id_fk": {
           "name": "event_attendees_user_id_user_id_fk",
           "tableFrom": "event_attendees",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "event_attendees_event_id_user_id_unique": {
           "name": "event_attendees_event_id_user_id_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "event_id",
             "user_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -781,28 +865,28 @@
         "event_pledges_event_id_events_id_fk": {
           "name": "event_pledges_event_id_events_id_fk",
           "tableFrom": "event_pledges",
+          "tableTo": "events",
           "columnsFrom": [
             "event_id"
           ],
-          "tableTo": "events",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "event_pledges_user_id_user_id_fk": {
           "name": "event_pledges_user_id_user_id_fk",
           "tableFrom": "event_pledges",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -930,38 +1014,38 @@
         "events_venue_id_venues_id_fk": {
           "name": "events_venue_id_venues_id_fk",
           "tableFrom": "events",
+          "tableTo": "venues",
           "columnsFrom": [
             "venue_id"
           ],
-          "tableTo": "venues",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "events_created_by_user_id_fk": {
           "name": "events_created_by_user_id_fk",
           "tableFrom": "events",
+          "tableTo": "user",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "events_slug_unique": {
           "name": "events_slug_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1018,39 +1102,39 @@
         "project_members_project_id_projects_id_fk": {
           "name": "project_members_project_id_projects_id_fk",
           "tableFrom": "project_members",
+          "tableTo": "projects",
           "columnsFrom": [
             "project_id"
           ],
-          "tableTo": "projects",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "project_members_user_id_user_id_fk": {
           "name": "project_members_user_id_user_id_fk",
           "tableFrom": "project_members",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "project_members_project_id_user_id_unique": {
           "name": "project_members_project_id_user_id_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "project_id",
             "user_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1170,25 +1254,25 @@
         "projects_endorsed_by_user_id_fk": {
           "name": "projects_endorsed_by_user_id_fk",
           "tableFrom": "projects",
+          "tableTo": "user",
           "columnsFrom": [
             "endorsed_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "projects_slug_unique": {
           "name": "projects_slug_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1264,10 +1348,10 @@
       "uniqueConstraints": {
         "infra_services_name_unique": {
           "name": "infra_services_name_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "name"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1362,41 +1446,41 @@
         "provisioned_resources_project_id_projects_id_fk": {
           "name": "provisioned_resources_project_id_projects_id_fk",
           "tableFrom": "provisioned_resources",
+          "tableTo": "projects",
           "columnsFrom": [
             "project_id"
           ],
-          "tableTo": "projects",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "provisioned_resources_resource_type_id_resource_types_id_fk": {
           "name": "provisioned_resources_resource_type_id_resource_types_id_fk",
           "tableFrom": "provisioned_resources",
+          "tableTo": "resource_types",
           "columnsFrom": [
             "resource_type_id"
           ],
-          "tableTo": "resource_types",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "provisioned_resources_provisioned_by_user_id_fk": {
           "name": "provisioned_resources_provisioned_by_user_id_fk",
           "tableFrom": "provisioned_resources",
+          "tableTo": "user",
           "columnsFrom": [
             "provisioned_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1466,26 +1550,26 @@
         "resource_types_infra_service_id_infra_services_id_fk": {
           "name": "resource_types_infra_service_id_infra_services_id_fk",
           "tableFrom": "resource_types",
+          "tableTo": "infra_services",
           "columnsFrom": [
             "infra_service_id"
           ],
-          "tableTo": "infra_services",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "resource_types_infra_service_id_name_unique": {
           "name": "resource_types_infra_service_id_name_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "infra_service_id",
             "name"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1573,51 +1657,51 @@
         "subdomains_project_id_projects_id_fk": {
           "name": "subdomains_project_id_projects_id_fk",
           "tableFrom": "subdomains",
+          "tableTo": "projects",
           "columnsFrom": [
             "project_id"
           ],
-          "tableTo": "projects",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "subdomains_provisioned_resource_id_provisioned_resources_id_fk": {
           "name": "subdomains_provisioned_resource_id_provisioned_resources_id_fk",
           "tableFrom": "subdomains",
+          "tableTo": "provisioned_resources",
           "columnsFrom": [
             "provisioned_resource_id"
           ],
-          "tableTo": "provisioned_resources",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "subdomains_created_by_user_id_fk": {
           "name": "subdomains_created_by_user_id_fk",
           "tableFrom": "subdomains",
+          "tableTo": "user",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "subdomains_subdomain_unique": {
           "name": "subdomains_subdomain_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "subdomain"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1735,67 +1819,67 @@
         "fund_transactions_category_id_spend_categories_id_fk": {
           "name": "fund_transactions_category_id_spend_categories_id_fk",
           "tableFrom": "fund_transactions",
+          "tableTo": "spend_categories",
           "columnsFrom": [
             "category_id"
           ],
-          "tableTo": "spend_categories",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fund_transactions_pledge_id_event_pledges_id_fk": {
           "name": "fund_transactions_pledge_id_event_pledges_id_fk",
           "tableFrom": "fund_transactions",
+          "tableTo": "event_pledges",
           "columnsFrom": [
             "pledge_id"
           ],
-          "tableTo": "event_pledges",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fund_transactions_paid_by_user_id_fk": {
           "name": "fund_transactions_paid_by_user_id_fk",
           "tableFrom": "fund_transactions",
+          "tableTo": "user",
           "columnsFrom": [
             "paid_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fund_transactions_received_by_user_id_fk": {
           "name": "fund_transactions_received_by_user_id_fk",
           "tableFrom": "fund_transactions",
+          "tableTo": "user",
           "columnsFrom": [
             "received_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fund_transactions_recorded_by_user_id_fk": {
           "name": "fund_transactions_recorded_by_user_id_fk",
           "tableFrom": "fund_transactions",
+          "tableTo": "user",
           "columnsFrom": [
             "recorded_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1854,10 +1938,10 @@
       "uniqueConstraints": {
         "spend_categories_name_unique": {
           "name": "spend_categories_name_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "name"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1922,11 +2006,11 @@
       "uniqueConstraints": {
         "uq_trigger_type_value": {
           "name": "uq_trigger_type_value",
+          "nullsNotDistinct": false,
           "columns": [
             "trigger_type",
             "trigger_value"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1999,416 +2083,18 @@
         "audit_log_performed_by_user_id_fk": {
           "name": "audit_log_performed_by_user_id_fk",
           "tableFrom": "audit_log",
+          "tableTo": "user",
           "columnsFrom": [
             "performed_by"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bot_session": {
-      "name": "bot_session",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "value": {
-          "name": "value",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.telegram_messages": {
-      "name": "telegram_messages",
-      "schema": "",
-      "columns": {
-        "chat_id": {
-          "name": "chat_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "chat_type": {
-          "name": "chat_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message_thread_id": {
-          "name": "message_thread_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_topic_message": {
-          "name": "is_topic_message",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_automatic_forward": {
-          "name": "is_automatic_forward",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_user_id": {
-          "name": "from_user_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_first_name": {
-          "name": "from_first_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_last_name": {
-          "name": "from_last_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_username": {
-          "name": "from_username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_is_bot": {
-          "name": "from_is_bot",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "from_is_premium": {
-          "name": "from_is_premium",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_language_code": {
-          "name": "from_language_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sender_chat_id": {
-          "name": "sender_chat_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sender_chat_username": {
-          "name": "sender_chat_username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sender_chat_title": {
-          "name": "sender_chat_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "author_signature": {
-          "name": "author_signature",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "text": {
-          "name": "text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "media_type": {
-          "name": "media_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "entities": {
-          "name": "entities",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "caption_entities": {
-          "name": "caption_entities",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reply_to_message_id": {
-          "name": "reply_to_message_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "external_reply_chat_id": {
-          "name": "external_reply_chat_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_origin_type": {
-          "name": "forward_origin_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_from_user_id": {
-          "name": "forward_from_user_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_from_first_name": {
-          "name": "forward_from_first_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_from_username": {
-          "name": "forward_from_username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_from_chat_id": {
-          "name": "forward_from_chat_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_from_chat_title": {
-          "name": "forward_from_chat_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "forward_date": {
-          "name": "forward_date",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "via_bot_id": {
-          "name": "via_bot_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "business_connection_id": {
-          "name": "business_connection_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "poll_id": {
-          "name": "poll_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "poll_question": {
-          "name": "poll_question",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "edit_date": {
-          "name": "edit_date",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "new_chat_member_ids": {
-          "name": "new_chat_member_ids",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "left_chat_member_user_id": {
-          "name": "left_chat_member_user_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "new_chat_title": {
-          "name": "new_chat_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pinned_message_id": {
-          "name": "pinned_message_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "date": {
-          "name": "date",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "raw": {
-          "name": "raw",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "embedding": {
-          "name": "embedding",
-          "type": "vector(512)",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "telegram_messages_chat_date_idx": {
-          "name": "telegram_messages_chat_date_idx",
-          "columns": [
-            {
-              "expression": "chat_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        },
-        "telegram_messages_chat_thread_date_idx": {
-          "name": "telegram_messages_chat_thread_date_idx",
-          "columns": [
-            {
-              "expression": "chat_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "message_thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        },
-        "telegram_messages_from_user_idx": {
-          "name": "telegram_messages_from_user_idx",
-          "columns": [
-            {
-              "expression": "from_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        },
-        "telegram_messages_chat_type_idx": {
-          "name": "telegram_messages_chat_type_idx",
-          "columns": [
-            {
-              "expression": "chat_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "telegram_messages_chat_id_message_id_pk": {
-          "name": "telegram_messages_chat_id_message_id_pk",
-          "columns": [
-            "chat_id",
-            "message_id"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -2764,28 +2450,21 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.user_photo": {
-      "name": "user_photo",
+    "public.bot_session": {
+      "name": "bot_session",
       "schema": "",
       "columns": {
-        "user_id": {
-          "name": "user_id",
+        "key": {
+          "name": "key",
           "type": "text",
           "primaryKey": true,
           "notNull": true
         },
-        "data": {
-          "name": "data",
-          "type": "bytea",
+        "value": {
+          "name": "value",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
-        },
-        "content_type": {
-          "name": "content_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'image/jpeg'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -2796,22 +2475,374 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "user_photo_user_id_user_id_fk": {
-          "name": "user_photo_user_id_user_id_fk",
-          "tableFrom": "user_photo",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.telegram_messages": {
+      "name": "telegram_messages",
+      "schema": "",
+      "columns": {
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_type": {
+          "name": "chat_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_thread_id": {
+          "name": "message_thread_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_topic_message": {
+          "name": "is_topic_message",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_automatic_forward": {
+          "name": "is_automatic_forward",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_user_id": {
+          "name": "from_user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_first_name": {
+          "name": "from_first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_last_name": {
+          "name": "from_last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_username": {
+          "name": "from_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_is_bot": {
+          "name": "from_is_bot",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "from_is_premium": {
+          "name": "from_is_premium",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_language_code": {
+          "name": "from_language_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sender_chat_id": {
+          "name": "sender_chat_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sender_chat_username": {
+          "name": "sender_chat_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sender_chat_title": {
+          "name": "sender_chat_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_signature": {
+          "name": "author_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entities": {
+          "name": "entities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption_entities": {
+          "name": "caption_entities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reply_to_message_id": {
+          "name": "reply_to_message_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_reply_chat_id": {
+          "name": "external_reply_chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_origin_type": {
+          "name": "forward_origin_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_from_user_id": {
+          "name": "forward_from_user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_from_first_name": {
+          "name": "forward_from_first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_from_username": {
+          "name": "forward_from_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_from_chat_id": {
+          "name": "forward_from_chat_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_from_chat_title": {
+          "name": "forward_from_chat_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "forward_date": {
+          "name": "forward_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "via_bot_id": {
+          "name": "via_bot_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "business_connection_id": {
+          "name": "business_connection_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "poll_id": {
+          "name": "poll_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "poll_question": {
+          "name": "poll_question",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edit_date": {
+          "name": "edit_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_chat_member_ids": {
+          "name": "new_chat_member_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "left_chat_member_user_id": {
+          "name": "left_chat_member_user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_chat_title": {
+          "name": "new_chat_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pinned_message_id": {
+          "name": "pinned_message_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date": {
+          "name": "date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(512)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "compositePrimaryKeys": {},
+      "indexes": {
+        "telegram_messages_chat_date_idx": {
+          "name": "telegram_messages_chat_date_idx",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_messages_chat_thread_date_idx": {
+          "name": "telegram_messages_chat_thread_date_idx",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "message_thread_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_messages_from_user_idx": {
+          "name": "telegram_messages_from_user_idx",
+          "columns": [
+            {
+              "expression": "from_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "telegram_messages_chat_type_idx": {
+          "name": "telegram_messages_chat_type_idx",
+          "columns": [
+            {
+              "expression": "chat_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "telegram_messages_chat_id_message_id_pk": {
+          "name": "telegram_messages_chat_id_message_id_pk",
+          "columns": [
+            "chat_id",
+            "message_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -2924,10 +2955,10 @@
     }
   },
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

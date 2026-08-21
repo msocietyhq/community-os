@@ -18,6 +18,13 @@ export function PublicHeader({
 
   const isFloating = transparent && !scrolled;
 
+  const initials = (user?.name ?? "")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
@@ -54,6 +61,29 @@ export function PublicHeader({
               className="text-sm font-medium px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition-all"
             >
               Dashboard
+            </Link>
+          )}
+          {!isLoading && user?.telegramUsername && (
+            <Link
+              to="/member/$username"
+              params={{ username: user.telegramUsername }}
+              title="Your profile"
+              aria-label="Your profile"
+              className="shrink-0 rounded-full ring-1 ring-white/15 hover:ring-white/40 transition-all"
+            >
+              {user.image ? (
+                <img
+                  src={user.image}
+                  alt=""
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/40 to-indigo-500/40 flex items-center justify-center">
+                  <span className="text-xs font-semibold text-white/80">
+                    {initials}
+                  </span>
+                </div>
+              )}
             </Link>
           )}
         </div>

@@ -11,6 +11,8 @@ interface User {
   name: string;
   email: string;
   image?: string | null;
+  /** Doubles as the profile slug — /member/:telegramUsername. */
+  telegramUsername?: string | null;
 }
 
 interface AuthContext {
@@ -39,6 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: session.user.name,
         email: session.user.email,
         image: session.user.image,
+        // Better Auth types additionalFields as a wide union, so narrow at
+        // runtime rather than asserting the shape.
+        telegramUsername:
+          typeof session.user.telegramUsername === "string"
+            ? session.user.telegramUsername
+            : null,
       }
     : null;
 

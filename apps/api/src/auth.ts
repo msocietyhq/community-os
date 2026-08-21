@@ -47,6 +47,14 @@ export const auth = betterAuth({
         type: "boolean",
         defaultValue: false,
       },
+      // Read-only on the session so the web app can link a signed-in user to
+      // their own public profile at /member/:username. `input: false` keeps it
+      // out of sign-up payloads — it's set by the Telegram login flow.
+      telegramUsername: {
+        type: "string",
+        required: false,
+        input: false,
+      },
     },
   },
   databaseHooks: {

@@ -11,6 +11,7 @@ import {
   rankByConfidenceAndRecency,
 } from "./memory-ranking";
 import { getSimilarityFloor } from "./recall-calibration";
+import { fuseByRRF } from "./reciprocal-rank-fusion";
 
 export interface MemoryInput {
   content: string;
@@ -252,24 +253,9 @@ export async function recallMemoriesHybrid(
     searchMemoriesFTS(query, limit * 2).catch(() => [] as RecalledMemory[]),
   ]);
 
-  const RRF_K = 60;
-  const scores = new Map<string, number>();
-  const byId = new Map<string, RecalledMemory>();
-
-  for (const [rank, row] of semantic.entries()) {
-    scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (RRF_K + rank + 1));
-    byId.set(row.id, row);
-  }
-  for (const [rank, row] of lexical.entries()) {
-    scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (RRF_K + rank + 1));
-    // Keep the semantic row when present — its similarity is the meaningful one.
-    if (!byId.has(row.id)) byId.set(row.id, row);
-  }
-
-  return [...scores.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([id]) => byId.get(id) as RecalledMemory);
+  // Semantic first: when a memory appears in both, its similarity is the
+  // meaningful one, and fuseByRRF keeps the row from the earliest list.
+  return fuseByRRF([semantic, lexical], (m) => m.id, limit);
 }
 
 /** How many candidates to weigh before trimming to `limit`. */

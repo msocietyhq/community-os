@@ -1,4 +1,4 @@
-import { sql, eq, and, inArray, gte } from "drizzle-orm";
+import { sql, eq, and, inArray, gte, desc } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { generateQueryEmbedding } from "./embeddings.service";
@@ -241,4 +241,30 @@ export async function setMessageEmbedding(
         eq(telegramMessages.messageId, messageId),
       ),
     );
+}
+
+/**
+ * A member's most recent messages, newest first.
+ *
+ * Feeds AI profile generation: memories hold durable facts, while raw recent
+ * messages carry current topical signal that hasn't been distilled yet.
+ */
+export async function getRecentMessagesByUser(
+  telegramUserId: number,
+  limit = 100,
+): Promise<{ text: string; date: Date }[]> {
+  return db
+    .select({
+      text: sql<string>`coalesce(${telegramMessages.text}, ${telegramMessages.caption})`,
+      date: telegramMessages.date,
+    })
+    .from(telegramMessages)
+    .where(
+      and(
+        eq(telegramMessages.fromUserId, telegramUserId),
+        sql`coalesce(${telegramMessages.text}, ${telegramMessages.caption}) IS NOT NULL`,
+      ),
+    )
+    .orderBy(desc(telegramMessages.date))
+    .limit(limit);
 }

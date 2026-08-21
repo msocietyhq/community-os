@@ -5,6 +5,7 @@ import { backfillMissingEmbeddings } from "./services/embeddings.service";
 import { backfillInlinePhotos } from "./scripts/backfill-photos";
 import { reputationService } from "./services/reputation.service";
 import { calibrateRecall } from "./services/recall-calibration";
+import { aiProfileService } from "./services/ai-profile.service";
 import { env } from "./env";
 
 app.listen(env.PORT);
@@ -40,6 +41,24 @@ reputationService.recalculateAllScores().catch((err) => {
 calibrateRecall().catch((err) => {
   console.error("Recall calibration failed:", err);
 });
+
+// Builds AI profiles for members who have never had one, so a deploy picks up
+// new joiners. Self-limiting — every member it touches gets stamped, so after
+// the first run this finds only genuine newcomers, usually none.
+//
+// Production only, and deliberately so: unlike the other backfills above this
+// one spends money (a model call and an embedding per member), and `bun dev`
+// runs with --watch, so without the guard every file save would re-trigger it.
+if (process.env.NODE_ENV === "production") {
+  aiProfileService.backfillMissing().catch((err) => {
+    console.error("AI profile backfill failed:", err);
+  });
+} else {
+  console.log(
+    "AI profile backfill skipped (NODE_ENV is not production) — " +
+      "run aiProfileService.backfillMissing() by hand to test it",
+  );
+}
 
 const shutdown = async () => {
   console.log("Shutting down...");

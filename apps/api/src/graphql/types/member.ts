@@ -1,4 +1,5 @@
 import { membersService } from "../../services/members.service";
+import { aiProfileService } from "../../services/ai-profile.service";
 
 /** Ceiling on any page size an agent can request. */
 const MAX_PAGE_SIZE = 100;
@@ -27,6 +28,11 @@ export const memberTypeDefs = /* GraphQL */ `
     websiteUrl: String
     joinedAt: String
     user: UserInfo!
+    """
+    AI-derived summary of this member, built from chat history and memories.
+    Internal to the AI — never rendered on the public site.
+    """
+    aiSummary: String
   }
 
   type MemberConnection {
@@ -44,6 +50,12 @@ export const memberTypeDefs = /* GraphQL */ `
       limit: Int
     ): MemberConnection!
     member(userId: String!): Member
+    """
+    Find members whose AI-derived profile matches a free-text need, e.g.
+    "cybersecurity" or "someone who knows Postgres replication".
+    Ranked best-match first.
+    """
+    membersByContext(query: String!, limit: Int): [Member!]!
   }
 `;
 
@@ -90,6 +102,21 @@ export const memberResolvers = {
       } catch {
         return null;
       }
+    },
+
+    membersByContext: async (
+      _: unknown,
+      args: { query: string; limit?: number },
+    ) => {
+      const limit = Math.min(args.limit ?? 5, MAX_PAGE_SIZE);
+      const userIds = await aiProfileService.searchByContext(args.query, limit);
+
+      // Resolve in rank order — searchByContext returns best match first, and a
+      // bulk fetch would lose that ordering.
+      const resolved = await Promise.all(
+        userIds.map((id) => membersService.findWithUser(id)),
+      );
+      return resolved.filter((m) => m !== null);
     },
   },
 };
