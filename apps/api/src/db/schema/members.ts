@@ -42,6 +42,15 @@ export const members = pgTable("members", {
   /** Embedding of `aiSummary`. MUST NOT be returned from any route. */
   aiEmbedding: vector("ai_embedding", { dimensions: 512 }),
   aiGeneratedAt: timestamp("ai_generated_at"),
+  /**
+   * Generator version this profile was built with.
+   *
+   * Evidence isn't the only reason a profile goes stale — changing the prompt
+   * does too, and nothing else captures that. Bumping `PROMPT_VERSION` in
+   * ai-profile.service.ts makes every older profile eligible for regeneration
+   * on the next run.
+   */
+  aiPromptVersion: integer("ai_prompt_version").notNull().default(0),
   /** Suggestions the member waved off. Persists across regeneration. */
   aiDismissed: jsonb("ai_dismissed")
     .$type<DismissedEntry[]>()

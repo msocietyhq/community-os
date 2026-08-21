@@ -1,0 +1,1 @@
+ALTER TABLE "members" ADD COLUMN "ai_prompt_version" integer DEFAULT 0 NOT NULL;

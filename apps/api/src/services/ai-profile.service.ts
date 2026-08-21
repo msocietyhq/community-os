@@ -49,6 +49,23 @@ const INTER_MEMBER_DELAY_MS = 1_000;
 const MODEL_MAX_RETRIES = 3;
 
 /**
+ * Bump this whenever the generation prompt or evidence format changes.
+ *
+ * Evidence moving is not the only reason a profile is out of date — a better
+ * prompt is too, and nothing else captures that. Profiles below this version
+ * are treated as stale, so the next backfill rebuilds them once and then goes
+ * quiet again.
+ *
+ * 0 → profiles built before this existed.
+ * 1 → evidence carries dates and memory categories; the prompt distinguishes
+ *     what a member discussed from what is true about them.
+ * 2 → stopped describing JSON literals in the prompt, which made the model
+ *     serialise the whole object into `summary` for thin-evidence members and
+ *     fail schema validation.
+ */
+const PROMPT_VERSION = 2;
+
+/**
  * New messages required before raw chat alone triggers a regeneration.
  *
  * Any *memory* is high-signal — they're distilled facts and rare (single digits
@@ -60,6 +77,29 @@ const MIN_NEW_MESSAGES = 10;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** `YYYY-MM-DD` — compact enough to date 150 evidence lines cheaply. */
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * True when the model hand-wrote its JSON into the summary field.
+ *
+ * Observed in production: asked for an empty result, Sonnet returned
+ * `{"summary": "{\"summary\": \"\", \"suggested\": {}}"}` — the whole object
+ * serialised into the string field. The prompt no longer describes JSON
+ * literals, which is the actual fix, but embedding that text would silently
+ * poison the search corpus, so it's worth checking cheaply.
+ */
+function looksLikeSerialisedJson(text: string): boolean {
+  const t = text.trim();
+  if (!t.startsWith("{") && !t.startsWith("[")) return false;
+  try {
+    JSON.parse(t);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Cosine floor below which a member is not a match at all.
@@ -94,9 +134,16 @@ const generationSchema = z.object({
     .describe(
       "2-4 sentences describing this person's work, expertise and current " +
         "interests. Matched against questions like 'who knows about X'. " +
-        "Read only by the AI, never shown to anyone.",
+        "Read only by the AI, never shown to anyone. Empty when the evidence " +
+        "is too thin to say anything useful.",
     ),
-  suggested: aiSuggestedSchema,
+  // Defaulted rather than required: when there's nothing worth suggesting the
+  // model tends to omit the key entirely, and a hard requirement turns that
+  // into a NoObjectGeneratedError for exactly the thin-evidence members who
+  // were never going to produce a profile anyway.
+  suggested: aiSuggestedSchema.default({}).describe(
+    "Candidate profile field values. Omit entirely when nothing is supported.",
+  ),
 });
 
 const GENERATION_PROMPT = `You build a search profile for a member of MSOCIETY, a community of Muslim tech professionals.
@@ -107,11 +154,21 @@ You are given facts the community bot has recorded about one person, plus their 
 
 2. \`suggested\` — candidate values for their public profile fields. These are SUGGESTIONS the member may accept or reject, never assertions of fact. Only include a field when the evidence is clear and specific. Omit anything you are guessing at.
 
+Each memory carries a category. Only \`person_fact\` is a claim *about* this person — the rest (\`technical\`, \`general\`, \`decision\`, \`event_related\`, \`community_preference\`, \`opinion\`) record something they discussed, decided or attended. Roughly 7 in 10 memories are not \`person_fact\`, so this distinction matters:
+- \`summary\`: use everything. What someone repeatedly discusses is the strongest signal for "who here knows about X" — a member who keeps bringing up CI infrastructure should match a question about CI, whether or not anyone recorded it as a fact about them. Attribute it honestly: "often discusses X", not "works on X".
+- \`suggested\`: use \`person_fact\` only. A technical memory about a company's architecture is not evidence the member works there. Never turn a topic they discussed into an employer, title or bio claim.
+
 Rules:
 - Use only what the evidence supports. Do not invent employers, titles or skills.
 - \`bio\` must be written in the member's own voice, first person, max 500 characters.
 - \`skills\` and \`interests\` are short tags (e.g. "Postgres", "Arabic NLP"), not sentences.
-- If the evidence is too thin for a useful summary, return an empty string for \`summary\` and an empty object for \`suggested\`.`;
+- Many members have barely spoken. If there is not enough evidence to say anything useful about someone, leave the summary blank and suggest nothing. That is a perfectly good answer — do not pad it out with generic filler.
+
+Every line of evidence is dated \`[YYYY-MM-DD]\`, and today's date is given. Much of this community's history is old, so weigh it:
+- Where two pieces of evidence conflict, the newer one wins. Someone who mentioned joining a company later than they mentioned leaving another works at the later one.
+- Facts that change — employer, job title, what they're currently building — should reflect the most recent evidence, not the most frequent.
+- Facts that don't change much — domains they know, languages they speak, long-running projects — can draw on older evidence freely.
+- If the only support for a changeable fact is more than a year old, leave it out of \`suggested\` rather than asserting it as current. It can still inform \`summary\`, phrased as past ("worked on X in 2025") rather than present.`;
 
 export interface GenerationResult {
   status: "generated" | "skipped-no-telegram" | "skipped-no-evidence";
@@ -248,7 +305,7 @@ async function processMembers(
 async function markGenerated(userId: string): Promise<void> {
   await db
     .update(members)
-    .set({ aiGeneratedAt: new Date() })
+    .set({ aiGeneratedAt: new Date(), aiPromptVersion: PROMPT_VERSION })
     .where(eq(members.userId, userId));
 }
 
@@ -280,16 +337,27 @@ export const aiProfileService = {
       return { status: "skipped-no-evidence" };
     }
 
+    // Every line is dated. Without dates the model can't tell a fact recorded
+    // last week from one recorded two years ago — it can't prefer the newer of
+    // two conflicting claims, and it states stale facts as current. Most of the
+    // corpus is old: roughly half of all active memories are 90+ days old, and
+    // three quarters of members last posted over a year ago.
     const evidence = [
       `Member: ${account.name}`,
+      `Today: ${isoDate(new Date())}`,
       "",
-      "## Recorded facts",
+      "## Recorded memories (newest first)",
       ...(memories.length
-        ? memories.map((m) => `- ${m.content} (confidence ${m.confidence})`)
+        ? memories.map(
+            (m) =>
+              `- [${isoDate(m.createdAt)}] (${m.category}, confidence ${m.confidence}) ${m.content}`,
+          )
         : ["(none)"]),
       "",
-      "## Recent messages",
-      ...(messages.length ? messages.map((m) => `- ${m.text}`) : ["(none)"]),
+      "## Messages (newest first)",
+      ...(messages.length
+        ? messages.map((m) => `- [${isoDate(m.date)}] ${m.text}`)
+        : ["(none)"]),
     ].join("\n");
 
     const result = await aiService.generateObject(
@@ -308,7 +376,7 @@ export const aiProfileService = {
     // has already validated against the same schema, making this cheap.
     const object = generationSchema.parse(result.object);
 
-    if (!object.summary.trim()) {
+    if (!object.summary.trim() || looksLikeSerialisedJson(object.summary)) {
       await markGenerated(userId);
       return { status: "skipped-no-evidence" };
     }
@@ -322,6 +390,7 @@ export const aiProfileService = {
         aiSuggested: object.suggested,
         aiEmbedding: embedding,
         aiGeneratedAt: new Date(),
+        aiPromptVersion: PROMPT_VERSION,
       })
       .where(eq(members.userId, userId));
 
@@ -437,7 +506,10 @@ export const aiProfileService = {
       FROM ${members} m
       JOIN "user" u ON m.user_id = u.id
       WHERE u.telegram_id IS NOT NULL
-        AND m.ai_generated_at IS NULL
+        AND (
+          m.ai_generated_at IS NULL
+          OR m.ai_prompt_version < ${PROMPT_VERSION}
+        )
     `);
 
     if (rows.length === 0) {
@@ -469,6 +541,7 @@ export const aiProfileService = {
       WHERE u.telegram_id IS NOT NULL
         AND (
           m.ai_generated_at IS NULL
+          OR m.ai_prompt_version < ${PROMPT_VERSION}
           OR EXISTS (
             SELECT 1 FROM bot_memories bm
             WHERE bm.subject_telegram_id::text = u.telegram_id
