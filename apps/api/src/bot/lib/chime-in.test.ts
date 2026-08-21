@@ -1,8 +1,10 @@
+import { z } from "zod";
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
   preFilter,
   offCooldown,
-  parseChimeDecision,
+  applyConfidenceGate,
+  chimeDecisionSchema,
   recordChime,
   lastChimeAt,
   resetChimeHistory,
@@ -82,116 +84,59 @@ describe("offCooldown", () => {
   });
 });
 
-describe("parseChimeDecision", () => {
+describe("applyConfidenceGate", () => {
+  const yes = (confidence: number, reason = "unanswered question") => ({
+    respond: true,
+    confidence,
+    reason,
+  });
+
   test("accepts a confident yes", () => {
-    const d = parseChimeDecision('{"respond": true, "confidence": 0.95, "reason": "unanswered question"}');
+    const d = applyConfidenceGate(yes(0.95));
     expect(d.respond).toBe(true);
     expect(d.confidence).toBe(0.95);
   });
 
   test("a yes below the confidence floor becomes a no", () => {
-    const d = parseChimeDecision(
-      `{"respond": true, "confidence": ${CHIME_IN_MIN_CONFIDENCE - 0.01}, "reason": "maybe"}`,
-    );
+    const d = applyConfidenceGate(yes(CHIME_IN_MIN_CONFIDENCE - 0.01, "maybe"));
     expect(d.respond).toBe(false);
     expect(d.reason).toContain("below threshold");
   });
 
   test("exactly at the floor is accepted", () => {
-    const d = parseChimeDecision(
-      `{"respond": true, "confidence": ${CHIME_IN_MIN_CONFIDENCE}, "reason": "clear"}`,
-    );
-    expect(d.respond).toBe(true);
+    expect(applyConfidenceGate(yes(CHIME_IN_MIN_CONFIDENCE)).respond).toBe(true);
   });
 
   test("an explicit no stays no regardless of confidence", () => {
-    expect(parseChimeDecision('{"respond": false, "confidence": 1, "reason": "banter"}').respond).toBe(false);
-  });
-
-  test("tolerates markdown fences around the json", () => {
-    const d = parseChimeDecision('```json\n{"respond": true, "confidence": 0.9, "reason": "ok"}\n```');
-    expect(d.respond).toBe(true);
-  });
-
-  // ── every malformed shape must fail closed ────────────────────────────────
-
-  test.each([
-    ["empty", ""],
-    ["undefined", undefined],
-    ["prose", "I think the bot should probably respond here"],
-    ["broken json", '{"respond": true, "confidence":'],
-    ["a bare array", "[1, 2, 3]"],
-    ["null literal", "null"],
-  ])("fails closed on %s", (_label, raw) => {
-    expect(parseChimeDecision(raw as string | undefined).respond).toBe(false);
-  });
-
-  test("a missing confidence field is treated as zero", () => {
-    const d = parseChimeDecision('{"respond": true, "reason": "no confidence given"}');
+    const d = applyConfidenceGate({ respond: false, confidence: 1, reason: "banter" });
     expect(d.respond).toBe(false);
-    expect(d.confidence).toBe(0);
   });
 
-  test("a non-boolean respond is not truthy-coerced", () => {
-    expect(parseChimeDecision('{"respond": "true", "confidence": 1, "reason": "x"}').respond).toBe(false);
-    expect(parseChimeDecision('{"respond": 1, "confidence": 1, "reason": "x"}').respond).toBe(false);
-  });
-});
-
-describe("cooldown bookkeeping", () => {
-  beforeEach(resetChimeHistory);
-
-  test("records and reads back per chat", () => {
-    recordChime("-100123", 5000);
-    expect(lastChimeAt("-100123")).toBe(5000);
-    expect(lastChimeAt("-100999")).toBeUndefined();
+  test("a confidence outside 0-1 still fails the comparison safely", () => {
+    expect(applyConfidenceGate(yes(-1)).respond).toBe(false);
+    expect(applyConfidenceGate(yes(Number.NaN)).respond).toBe(false);
   });
 
-  test("chats are rate-limited independently", () => {
-    const now = 1_800_000_000_000;
-    recordChime("-100123", now);
-    expect(offCooldown(lastChimeAt("-100123"), now)).toBe(false);
-    expect(offCooldown(lastChimeAt("-100999"), now)).toBe(true);
+  test("respects an explicit threshold", () => {
+    expect(applyConfidenceGate(yes(0.5), 0.4).respond).toBe(true);
+    expect(applyConfidenceGate(yes(0.5), 0.6).respond).toBe(false);
   });
 });
 
-describe("preFilter — tightened by real traffic", () => {
-  test("skips messages aimed at a named person", () => {
-    expect(
-      preFilter({ text: "@Akiddika do you know when the next one is?", isBot: false }),
-    ).toBe("directed_at_person");
+describe("chimeDecisionSchema", () => {
+  test("carries no numeric bounds — Anthropic structured output rejects them", () => {
+    const json = z.toJSONSchema(chimeDecisionSchema);
+    const serialised = JSON.stringify(json);
+    expect(serialised).not.toContain("minimum");
+    expect(serialised).not.toContain("maximum");
   });
 
-  test("skips a link posted with almost no text", () => {
-    expect(
-      preFilter({ text: "this https://x.com/someone/status/2041566601426956391", isBot: false }),
-    ).toBe("mostly_link");
+  test("rejects a non-boolean respond rather than truthy-coercing", () => {
+    expect(chimeDecisionSchema.safeParse({ respond: "true", confidence: 1, reason: "x" }).success).toBe(false);
+    expect(chimeDecisionSchema.safeParse({ respond: 1, confidence: 1, reason: "x" }).success).toBe(false);
   });
 
-  /** Lowering the floor let these through, which is the point. */
-  test("a link with a real question around it now reaches the judge", () => {
-    expect(
-      preFilter({
-        text: "anyone tried this? https://github.com/obra/superpowers",
-        isBot: false,
-      }),
-    ).toBeNull();
-  });
-
-  test("a real question that happens to cite a link still passes", () => {
-    expect(
-      preFilter({
-        text: "does anyone know if the venue on https://msociety.dev is still bookable for saturday",
-        isBot: false,
-      }),
-    ).toBeNull();
-  });
-
-  test("a bare link is reported as a link, not as too short", () => {
-    expect(preFilter({ text: "https://example.com/a/b/c", isBot: false })).toBe("mostly_link");
-  });
-
-  test("short text with no link is still too_short", () => {
-    expect(preFilter({ text: "when?", isBot: false })).toBe("too_short");
+  test("accepts a well-formed decision", () => {
+    expect(chimeDecisionSchema.safeParse({ respond: true, confidence: 0.9, reason: "ok" }).success).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { htmlToText } from "./research";
+import { htmlToText } from "./html-to-text";
 
 describe("htmlToText", () => {
   test("strips tags and collapses whitespace", () => {

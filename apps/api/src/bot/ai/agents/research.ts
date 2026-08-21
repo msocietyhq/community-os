@@ -7,6 +7,7 @@ import {
 } from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 import { truncate } from "../../../lib/text";
+import { htmlToText } from "../../lib/html-to-text";
 import { env } from "../../../env";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
@@ -26,29 +27,6 @@ interface ExaResult {
   text?: string;
 }
 
-/**
- * Strips a HTML document down to readable text.
- *
- * Deliberately crude — the output feeds an LLM, not a renderer, so structure
- * matters less than dropping the script/style noise that would otherwise eat
- * the token budget.
- */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${truncate(text, max)}…` : text;

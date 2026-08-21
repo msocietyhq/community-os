@@ -15,25 +15,13 @@ import { shouldResume, isExpired } from "../lib/pending-question";
 import {
   preFilter,
   offCooldown,
-  judgeChimeIn,
+
   recordChime,
   lastChimeAt,
   CHIME_IN_CONTEXT_MESSAGES,
 } from "../lib/chime-in";
-
-// Convert Markdown output from AI into Telegram HTML.
-// Escapes HTML entities first, then maps ** / * / _ / ` to tags.
-export function markdownToHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/\*\*(.+?)\*\*/gs, "<b>$1</b>")
-    .replace(/\*([^*\n]+?)\*/g, "<i>$1</i>")
-    .replace(/_([^_\n]+?)_/g, "<i>$1</i>")
-    .replace(/`([^`]+?)`/g, "<code>$1</code>");
-}
+import { judgeChimeIn } from "../lib/chime-in-judge";
+import { markdownToHtml } from "../lib/markdown";
 
 export const aiChatHandler = new Composer<BotContext>();
 

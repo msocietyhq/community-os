@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { markdownToHtml } from "./ai-chat";
+import { markdownToHtml } from "./markdown";
 
 /**
  * Everything the bot sends is LLM output rendered with parse_mode: "HTML" —

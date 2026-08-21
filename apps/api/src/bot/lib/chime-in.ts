@@ -1,4 +1,4 @@
-import { aiService } from "../../services/ai.service";
+import { z } from "zod";
 
 /**
  * Decides whether the bot should answer a message that wasn't addressed to it.
@@ -107,44 +107,47 @@ export interface ChimeDecision {
  * Parses the judge's reply. Anything malformed, unparseable, or below the
  * confidence floor becomes a "no" — silence is always the safe failure.
  */
-export function parseChimeDecision(
-  raw: string | undefined,
+/**
+ * The judge's verdict, enforced by the SDK.
+ *
+ * `confidence` carries no .min()/.max(): Anthropic's structured output rejects
+ * `minimum`/`maximum` on numbers and fails the call outright. The range is
+ * advisory here — `applyConfidenceGate` only compares against a threshold, and
+ * a value outside 0-1 fails that comparison safely either way.
+ */
+export const chimeDecisionSchema = z.object({
+  respond: z.boolean(),
+  confidence: z
+    .number()
+    .describe("How sure that speaking up is welcome, 0-1. 0.9+ only for an unambiguous, unanswered, answerable question."),
+  reason: z.string().describe("A few words"),
+});
+
+/**
+ * Apply the confidence threshold to a verdict.
+ *
+ * Separate from the model call so the gate is testable without one, and so a
+ * "yes" the judge wasn't sure about still resolves to silence.
+ */
+export function applyConfidenceGate(
+  decision: ChimeDecision,
   minConfidence: number = CHIME_IN_MIN_CONFIDENCE,
 ): ChimeDecision {
-  const silent = (reason: string): ChimeDecision => ({
-    respond: false,
-    confidence: 0,
-    reason,
-  });
-
-  if (!raw) return silent("empty response");
-
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return silent("no json in response");
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(match[0]);
-  } catch {
-    return silent("unparseable json");
+  if (!decision.respond) return decision;
+  // `>= minConfidence` rather than `< minConfidence`, so a non-finite value
+  // fails the gate: every comparison against NaN is false, and the negated
+  // form would let a NaN confidence through as a yes.
+  if (!(decision.confidence >= minConfidence)) {
+    return {
+      respond: false,
+      confidence: decision.confidence,
+      reason: `below threshold: ${decision.reason}`,
+    };
   }
-
-  if (typeof parsed !== "object" || parsed === null) return silent("not an object");
-
-  const record = parsed as Record<string, unknown>;
-  const respond = record.respond === true;
-  const confidence = typeof record.confidence === "number" ? record.confidence : 0;
-  const reason = typeof record.reason === "string" ? record.reason : "no reason given";
-
-  if (!respond) return { respond: false, confidence, reason };
-  if (confidence < minConfidence) {
-    return { respond: false, confidence, reason: `below threshold: ${reason}` };
-  }
-
-  return { respond: true, confidence, reason };
+  return decision;
 }
 
-const JUDGE_PROMPT = `You decide whether a community bot should speak up in a group chat it was NOT addressed in.
+export const JUDGE_PROMPT = `You decide whether a community bot should speak up in a group chat it was NOT addressed in.
 
 The bot serves MSOCIETY, a Singapore community of Muslim tech professionals. It knows about
 the community's events, projects, venues, members, reputation scores, and its own chat history.
@@ -167,9 +170,6 @@ Say NO — always — for:
 - Questions the bot has no way to answer
 - Anything you are unsure about
 
-Respond with ONLY a JSON object, no markdown fences:
-{"respond": true|false, "confidence": 0.0-1.0, "reason": "<a few words>"}
-
 confidence is how sure you are that speaking up is welcome. Use 0.9+ only when the message is
 an unambiguous, unanswered, answerable question.`;
 
@@ -180,38 +180,6 @@ export interface ChimeInInput {
   transcript: string;
   chatId: string;
   telegramUserId: number | null;
-}
-
-/**
- * Asks the judge. Errors resolve to silence rather than propagating — this
- * runs on ordinary chat traffic and must never disrupt it.
- */
-export async function judgeChimeIn(input: ChimeInInput): Promise<ChimeDecision> {
-  try {
-    const result = await aiService.generateText(
-      {
-        model: aiService.models.fast,
-        system: JUDGE_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: `${input.transcript}\n\nLatest message to judge:\n"${input.message}"`,
-          },
-        ],
-        maxOutputTokens: 128,
-      },
-      {
-        caller: "chime-in-judge",
-        telegramUserId: input.telegramUserId,
-        chatId: input.chatId,
-      },
-    );
-
-    return parseChimeDecision(result.text);
-  } catch (err) {
-    console.error("[chime-in] judge failed:", err);
-    return { respond: false, confidence: 0, reason: "judge error" };
-  }
 }
 
 /**

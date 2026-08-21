@@ -25,7 +25,7 @@ import {
   buildAdvisorMessages,
   type AdvisorTier,
 } from "./advisor";
-import { checkAdvisorAccess } from "./advisor-access";
+import { checkAdvisorAccess } from "./advisor-gate";
 import { resolveWindow } from "../../lib/usage-window";
 import { aiService } from "../../services/ai.service";
 import {
