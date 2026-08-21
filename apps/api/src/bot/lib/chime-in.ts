@@ -24,15 +24,22 @@ export const CHIME_IN_MIN_CONFIDENCE = 0.8;
 /** Messages of surrounding conversation given to the judge. */
 export const CHIME_IN_CONTEXT_MESSAGES = 10;
 
-/** Too short to be a real question worth interrupting for. */
-const MIN_LENGTH = 20;
+/**
+ * Too short to be a real question worth interrupting for.
+ *
+ * Measured against real traffic: at 20 this dropped genuine answerable
+ * questions ("What is docker?", "Anyone tried this? <link>"). The question
+ * shape check below is the real filter; this only exists to drop reactions
+ * like "really?" and "WHAT".
+ */
+const MIN_LENGTH = 12;
 
 /**
  * A message with none of these is almost never a question the bot can help
  * with. Cheap way to drop the bulk of ordinary chat before spending a token.
  */
 const QUESTION_SHAPE =
-  /\?|\b(anyone|anybody|does\s+\w+\s+know|when('s| is)?|where('s| is)?|who('s| is)?|what('s| is)?|which|how\s+(do|can|many|much)|is\s+there|are\s+there|any\s+(idea|one|body))\b/i;
+  /\?|\b(anyone|anybody|does\s+\w+\s+know|when('s| is)?|where('s| is)?|who('s| is)?|what('s| is)?|which|how\s+(do|can|to|many|much)|is\s+there|are\s+there|any\s+(idea|one|body))\b/i;
 
 /**
  * Reasons a message is skipped before any model sees it. Exposed for logging

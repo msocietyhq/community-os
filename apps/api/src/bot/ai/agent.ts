@@ -6,7 +6,7 @@ import { createTools } from "./tools";
 import { resolveUser, getBotToken, type TelegramUser } from "../lib/auth";
 import { aiService } from "../../services/ai.service";
 import {
-  recallMemories,
+  recallMemoriesHybrid,
   recallMemoriesForSubject,
   resolveSubjectTelegramId,
   incrementAccessCount,
@@ -19,7 +19,7 @@ import { SubagentProgress, type ProgressSink } from "../lib/subagent-progress";
 /** Bridges the memory service into the framework-agnostic context builder. */
 const memoryRecaller: MemoryRecaller = {
   semantic: (query, limit) =>
-    recallMemories(query, { limit, relativeCutoff: DEFAULT_RELATIVE_CUTOFF }),
+    recallMemoriesHybrid(query, { limit, relativeCutoff: DEFAULT_RELATIVE_CUTOFF }),
   bySubject: (telegramId, limit) => recallMemoriesForSubject(telegramId, limit),
   resolveSubject: (name) => resolveSubjectTelegramId(name),
 };

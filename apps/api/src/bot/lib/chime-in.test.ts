@@ -24,8 +24,22 @@ describe("preFilter", () => {
     expect(preFilter({ text: "/help me find the next event", isBot: false })).toBe("command");
   });
 
-  test("skips messages too short to be a real question", () => {
+  test("skips reactions too short to be a real question", () => {
     expect(preFilter({ text: "when?", isBot: false })).toBe("too_short");
+    expect(preFilter({ text: "really?", isBot: false })).toBe("too_short");
+    expect(preFilter({ text: "WHAT", isBot: false })).toBe("too_short");
+  });
+
+  /**
+   * Measured against real traffic: a 20-char floor dropped genuine answerable
+   * questions. The question-shape check is the real filter.
+   */
+  test.each([
+    "What is docker?",
+    "How to be astronaut",
+    "Anyone tried this? https://github.com/obra/superpowers",
+  ])("short but answerable reaches the judge: %s", (text) => {
+    expect(preFilter({ text, isBot: false })).toBeNull();
   });
 
   /** The bulk of group chat: reactions, agreement, banter. */
@@ -148,13 +162,20 @@ describe("preFilter — tightened by real traffic", () => {
     ).toBe("directed_at_person");
   });
 
-  test("skips a shared link with a few words around it", () => {
+  test("skips a link posted with almost no text", () => {
+    expect(
+      preFilter({ text: "this https://x.com/someone/status/2041566601426956391", isBot: false }),
+    ).toBe("mostly_link");
+  });
+
+  /** Lowering the floor let these through, which is the point. */
+  test("a link with a real question around it now reaches the judge", () => {
     expect(
       preFilter({
-        text: "anyone seen this? https://x.com/someone/status/2041566601426956391",
+        text: "anyone tried this? https://github.com/obra/superpowers",
         isBot: false,
       }),
-    ).toBe("mostly_link");
+    ).toBeNull();
   });
 
   test("a real question that happens to cite a link still passes", () => {

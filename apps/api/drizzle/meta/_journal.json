@@ -120,6 +120,13 @@
       "when": 1787237780283,
       "tag": "0016_user_photo",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787310962103,
+      "tag": "0017_memories_fts_index",
+      "breakpoints": true
     }
   ]
 }

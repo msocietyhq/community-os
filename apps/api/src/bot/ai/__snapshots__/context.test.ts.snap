@@ -92,6 +92,11 @@ Each line shows when the fact was learned and how confident you were.
 Facts learned a long time ago may be out of date — say so rather than stating
 them as current. Treat anything below 0.7 confidence as unverified.
 
+A memory is a one-line summary with its context stripped out. When one looks
+stale, ambiguous, or load-bearing for your answer, fetch the message it came
+from with chat_history using the id in [from msg 12345] — that is what was
+actually said, and it usually settles the question.
+
 ### Possibly relevant
 
 These came from a similarity search on the current question. \`match\` is that

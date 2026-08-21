@@ -17,6 +17,8 @@ export interface ContextMemory {
   confidence: number;
   similarity: number;
   createdAt: Date;
+  sourceChatId?: string | null;
+  sourceMessageId?: number | null;
 }
 
 export interface MemoryRecaller {
@@ -95,11 +97,13 @@ function formatMemoryLine(memory: SourcedMemory, now: Date): string {
   const age = formatMemoryAge(memory.createdAt, now);
   const confidence = memory.confidence.toFixed(2);
   const about = memory.subject ? ` (about: ${memory.subject})` : "";
+  // The way back to what was actually said, fetchable via chat_history.
+  const source = memory.sourceMessageId ? ` [from msg ${memory.sourceMessageId}]` : "";
   // Subject recalls have no meaningful similarity — they're selected by who
   // they're about, so showing a score would be noise.
   const match =
     memory.source === "semantic" ? ` · match ${memory.similarity.toFixed(2)}` : "";
-  return `- [${memory.category} · learned ${age} · confidence ${confidence}${match}] ${memory.content}${about}`;
+  return `- [${memory.category} · learned ${age} · confidence ${confidence}${match}] ${memory.content}${about}${source}`;
 }
 
 /**
@@ -178,6 +182,11 @@ ${possiblyRelevant.map((m) => formatMemoryLine(m, now)).join("\n")}`);
 Each line shows when the fact was learned and how confident you were.
 Facts learned a long time ago may be out of date — say so rather than stating
 them as current. Treat anything below 0.7 confidence as unverified.
+
+A memory is a one-line summary with its context stripped out. When one looks
+stale, ambiguous, or load-bearing for your answer, fetch the message it came
+from with chat_history using the id in [from msg 12345] — that is what was
+actually said, and it usually settles the question.
 
 ${blocks.join("\n\n")}`
       : "";

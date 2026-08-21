@@ -39,6 +39,8 @@ import { formatGroupHistory } from "../lib/chat-context";
 import {
   saveMemory,
   recallMemories,
+  recallMemoriesHybrid,
+  type RecalledMemory,
   recallMemoriesForSubject,
   forgetMemoriesBySubject,
   forgetMemory,
@@ -672,10 +674,10 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       execute: async ({ query, category, subject, limit }) => {
         console.log("[main-agent:recall_memory]", { query, category, subject });
 
-        const promises: Promise<
-          { id: string; content: string; category: string; subject: string | null; confidence: number; similarity: number; createdAt: Date }[]
-        >[] = [
-          recallMemories(query, { limit: limit ?? 5 }),
+        // Use the service's own type rather than restating it — a duplicated
+        // shape here silently drops fields when the service gains one.
+        const promises: Promise<RecalledMemory[]>[] = [
+          recallMemoriesHybrid(query, { limit: limit ?? 5 }),
         ];
 
         // If a subject is specified, also fetch their memories by telegram ID
@@ -714,6 +716,8 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             subject: m.subject,
             confidence: m.confidence,
             similarity: m.similarity,
+            // Fetch this with chat_history to see the original conversation.
+            sourceMessageId: m.sourceMessageId,
           })),
         };
       },

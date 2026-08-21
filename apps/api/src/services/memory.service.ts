@@ -30,6 +30,14 @@ export interface RecalledMemory {
   confidence: number;
   similarity: number;
   createdAt: Date;
+  /**
+   * The chat message this fact was learned from, when known.
+   *
+   * A memory is a one-line assertion stripped of its context. This is the way
+   * back to what was actually said — fetchable via chat_history.
+   */
+  sourceChatId: string | null;
+  sourceMessageId: number | null;
 }
 
 /**
@@ -170,6 +178,8 @@ export async function recallMemories(
           "similarity",
         ),
       createdAt: botMemories.createdAt,
+      sourceChatId: botMemories.sourceChatId,
+      sourceMessageId: botMemories.sourceMessageId,
     })
     .from(botMemories)
     .where(
@@ -185,6 +195,81 @@ export async function recallMemories(
   return opts?.relativeCutoff !== undefined
     ? applyRelativeCutoff(rows, opts.relativeCutoff)
     : rows;
+}
+
+/**
+ * Exact-token search over memory content.
+ *
+ * Complements the embedding: cosine similarity is strong on meaning and weak
+ * on literals — names, domains, acronyms — which roughly a fifth of memories
+ * contain.
+ */
+export async function searchMemoriesFTS(
+  query: string,
+  limit: number,
+): Promise<RecalledMemory[]> {
+  return db
+    .select({
+      id: botMemories.id,
+      content: botMemories.content,
+      category: botMemories.category,
+      subject: botMemories.subject,
+      confidence: botMemories.confidence,
+      similarity: sql<number>`ts_rank(
+        to_tsvector('simple', coalesce(${botMemories.content}, '')),
+        plainto_tsquery('simple', ${query})
+      )`.as("similarity"),
+      createdAt: botMemories.createdAt,
+      sourceChatId: botMemories.sourceChatId,
+      sourceMessageId: botMemories.sourceMessageId,
+    })
+    .from(botMemories)
+    .where(
+      and(
+        isNull(botMemories.supersededBy),
+        sql`to_tsvector('simple', coalesce(${botMemories.content}, '')) @@ plainto_tsquery('simple', ${query})`,
+      ),
+    )
+    .orderBy(sql`similarity DESC`)
+    .limit(limit);
+}
+
+/**
+ * Merges semantic and exact-token recall with Reciprocal Rank Fusion, the same
+ * scheme `searchMessagesHybrid` uses (k=60).
+ *
+ * Fusing on *rank* rather than score matters here: cosine similarity and
+ * ts_rank aren't on comparable scales, so they can't simply be added.
+ */
+export async function recallMemoriesHybrid(
+  query: string,
+  opts?: { limit?: number; minSimilarity?: number; relativeCutoff?: number },
+): Promise<RecalledMemory[]> {
+  const limit = opts?.limit ?? 5;
+
+  const [semantic, lexical] = await Promise.all([
+    recallMemories(query, { ...opts, limit: limit * 2 }),
+    searchMemoriesFTS(query, limit * 2).catch(() => [] as RecalledMemory[]),
+  ]);
+
+  const RRF_K = 60;
+  const scores = new Map<string, number>();
+  const byId = new Map<string, RecalledMemory>();
+
+  for (const [rank, row] of semantic.entries()) {
+    scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (RRF_K + rank + 1));
+    byId.set(row.id, row);
+  }
+  for (const [rank, row] of lexical.entries()) {
+    scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (RRF_K + rank + 1));
+    // Keep the semantic row when present — its similarity is the meaningful one.
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id]) => byId.get(id) as RecalledMemory);
 }
 
 /** How many candidates to weigh before trimming to `limit`. */
@@ -211,6 +296,8 @@ export async function recallMemoriesForSubject(
       confidence: botMemories.confidence,
       similarity: sql<number>`1`.as("similarity"),
       createdAt: botMemories.createdAt,
+      sourceChatId: botMemories.sourceChatId,
+      sourceMessageId: botMemories.sourceMessageId,
     })
     .from(botMemories)
     .where(
