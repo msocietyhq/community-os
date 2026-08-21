@@ -1,5 +1,9 @@
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
+import { getMessageContext } from "../../services/messages.service";
 import { aiService } from "../../services/ai.service";
+
+/** Preceding turns shown to the extractor for context. */
+const CONTEXT_MESSAGES = 5;
 
 const NOISE_REGEX =
   /^(ok|lol|haha|heh|nice|thanks|thank you|yes|no|yep|nope|yeah|nah|sure|wow|bruh|bro|gg|true|same|fr|ikr|damn|aight|bet|salam|ws|wa'alaikumussalam|walaikumsalam)[\s!.?]*$/i;
@@ -18,18 +22,41 @@ export function shouldExtractMemory(text: string, isBot: boolean): boolean {
   return true;
 }
 
-const EXTRACTION_PROMPT = `You extract noteworthy facts from group chat messages. Return a JSON array of facts, or an empty array if there are none worth remembering.
+/** Exported so extraction quality can be exercised without writing to the DB. */
+export const EXTRACTION_PROMPT = `You maintain a long-term memory for MSOCIETY, a community of Muslim tech professionals. You are shown one message from their group chat, with the messages just before it for context.
 
-Each fact should be:
-- A standalone statement (e.g. "Ali works at Stripe", "The community prefers Saturday meetups")
-- Categorized as one of: person_fact, community_preference, decision, technical, event_related, general
-- Attributed to a subject (who/what it's about)
+Your job is to record durable facts **about the people in this community** — things worth recalling months later when someone asks "who knows about X?" or "what is Ali working on?".
 
-Rules:
-- Only extract facts that would be useful to recall later
-- Skip greetings, small talk, jokes, and opinions unless they reveal something persistent
-- Keep facts concise (one sentence)
-- Set confidence 0.6-1.0 based on how definitive the statement is
+Extract a fact ONLY when it is:
+- About a person, the community, or a decision they made, AND
+- Still true and useful months from now, AND
+- Actually asserted — not asked, speculated about, or joked about.
+
+Do NOT extract:
+- **World news, articles, or links someone shared.** "Terabytes of credentials were leaked in a supply chain attack" is news, not a memory. That someone *shared* it is also not worth recording.
+- **Industry commentary or opinions.** "Spending 1-2k on tokens is becoming a norm" is an observation about the world, not a fact about anyone.
+- **Terminology musings or questions.** If the message asks something, or wonders aloud, there is no fact in it.
+- **Technical trivia with no owner.** "128GB unified memory is soldered to the package" belongs in documentation, not memory.
+- Greetings, small talk, jokes, reactions.
+
+Good examples:
+- "Faruq is moving his coding agents to exe.dev" — durable, about a person
+- "Syafiq uses pi-memory as a repo-level knowledge extension" — durable, about a person
+- "The community prefers Saturday meetups" — durable, about the community
+
+Bad examples (do not extract):
+- "Datadog rebuilt their Git serving infrastructure" — world news
+- "Multi-model and multi-modal are used interchangeably" — terminology musing
+- "Someone shared an article about open source devtools" — a link share
+
+The \`subject\` must be the **name or @username of the person the fact is about**, exactly as it appears in the chat. If the fact is about the community as a whole, use "community". If you cannot name a specific person or the community, the fact almost certainly does not belong in memory — skip it.
+
+Categories: person_fact, community_preference, decision, technical, event_related, general.
+Prefer person_fact and community_preference. Use technical or general only when the fact is genuinely about a member's own work or setup.
+
+Set confidence 0.6-1.0 based on how definitive the statement is.
+
+Most messages contain nothing worth remembering. Returning an empty array is the correct answer far more often than not.
 
 Respond with ONLY a JSON array, no markdown fences:
 [{"content": "...", "category": "...", "subject": "...", "confidence": 0.8}]
@@ -50,6 +77,16 @@ export async function extractMemories(
     ? `${senderName} (@${senderUsername})`
     : senderName;
 
+  // Without the preceding turns the extractor can't tell an assertion from a
+  // question, or resolve "he"/"it"/"this". Measured on the existing corpus, that
+  // is how a message like "I guess they're the same?" became a recorded fact.
+  const priorTurns = await getMessageContext(chatId, messageId, CONTEXT_MESSAGES);
+  const conversation = priorTurns.length
+    ? priorTurns
+        .map((m) => `${m.sender}: ${m.text}`)
+        .join("\n")
+    : "(no earlier messages)";
+
   const result = await aiService.generateText(
     {
       model: aiService.models.fast,
@@ -57,7 +94,9 @@ export async function extractMemories(
       messages: [
         {
           role: "user",
-          content: `Message from ${senderLabel}:\n"${text}"`,
+          content:
+            `Earlier in the conversation:\n${conversation}\n\n` +
+            `--- Extract from THIS message only ---\n${senderLabel}: "${text}"`,
         },
       ],
       maxOutputTokens: 256,
@@ -96,9 +135,21 @@ export async function extractMemories(
       subjectLower === "i" ||
       subjectLower === "me";
 
+    // Deliberately NO fallback to the sender.
+    //
+    // This used to read `?? senderTelegramId`, which pinned every unresolvable
+    // subject to whoever happened to be speaking. Measured on the corpus that
+    // produced 956 of 1117 active memories (86%) attributed to someone the fact
+    // wasn't about — an industry observation became a fact about the person who
+    // made it, a shared news link became a fact about the sharer. Those then fed
+    // straight into AI profile generation.
+    //
+    // Leaving it null keeps the memory searchable while excluding it from any
+    // individual's profile, which is the honest outcome for a fact about the
+    // world rather than about a person.
     const subjectTelegramId = isSender
       ? senderTelegramId
-      : (await resolveSubjectTelegramId(fact.subject)) ?? senderTelegramId;
+      : await resolveSubjectTelegramId(fact.subject);
 
     memories.push({
       content: fact.content,

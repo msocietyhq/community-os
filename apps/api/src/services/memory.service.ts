@@ -355,9 +355,11 @@ export async function forgetMemoriesBySubject(
 export async function resolveSubjectTelegramId(
   subject: string,
 ): Promise<number | null> {
-  const lower = subject.toLowerCase();
+  // Strip a leading @ so "@faruq" and "faruq" resolve alike.
+  const lower = subject.trim().toLowerCase().replace(/^@/, "");
+  if (!lower) return null;
 
-  const [row] = await db
+  const [exact] = await db
     .select({ telegramId: user.telegramId })
     .from(user)
     .where(
@@ -371,7 +373,31 @@ export async function resolveSubjectTelegramId(
     )
     .limit(1);
 
-  return row?.telegramId ? Number(row.telegramId) : null;
+  if (exact?.telegramId) return Number(exact.telegramId);
+
+  // Chat refers to people by first name — "Faruq", not "Faruq Rasid" — so an
+  // exact-match-only lookup failed for most genuine person facts and (before
+  // the fallback was removed) pinned them to whoever was speaking.
+  //
+  // Only accept a first-name match when it is unambiguous across the community.
+  // Two members called "Ali" means neither is a safe guess, and a wrong guess
+  // is worse than no attribution: it writes a fact onto the wrong profile.
+  const firstNameMatches = await db
+    .select({ telegramId: user.telegramId })
+    .from(user)
+    .where(
+      and(
+        sql`lower(split_part(${user.name}, ' ', 1)) = ${lower}`,
+        sql`${user.telegramId} IS NOT NULL`,
+      ),
+    )
+    .limit(2);
+
+  if (firstNameMatches.length === 1 && firstNameMatches[0]?.telegramId) {
+    return Number(firstNameMatches[0].telegramId);
+  }
+
+  return null;
 }
 
 export function incrementAccessCount(memoryIds: string[]): void {

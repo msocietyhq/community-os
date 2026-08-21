@@ -38,6 +38,7 @@ import type { ProgressHost, SubagentActivity } from "../lib/subagent-progress";
 import { formatGroupHistory } from "../lib/chat-context";
 import {
   saveMemory,
+  resolveSubjectTelegramId,
   recallMemories,
   recallMemoriesHybrid,
   type RecalledMemory,
@@ -45,7 +46,6 @@ import {
   forgetMemoriesBySubject,
   forgetMemory,
   incrementAccessCount,
-  resolveSubjectTelegramId,
 } from "../../services/memory.service";
 
 export interface ToolContext {
@@ -601,11 +601,20 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       }),
       execute: async ({ content, category, subject, confidence }) => {
         console.log("[main-agent:save_memory]", content);
+
+        // Resolve who the fact is actually about rather than assuming it's the
+        // person talking to the bot. This previously hardcoded
+        // `ctx.senderTelegramId`, so a memory the agent saved about someone
+        // else landed on the requester's profile. Unresolvable subjects stay
+        // null — searchable, but not attributed to anyone.
+        const subjectTelegramId =
+          (await resolveSubjectTelegramId(subject)) ?? null;
+
         const result = await saveMemory({
           content,
           category,
           subject,
-          subjectTelegramId: ctx.senderTelegramId,
+          subjectTelegramId,
           sourceChatId: ctx.chatId,
           confidence,
         });

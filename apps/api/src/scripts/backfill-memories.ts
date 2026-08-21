@@ -140,8 +140,11 @@ async function extractBatch(
         subjectTelegramId = resolved;
         console.log(`[backfill:batch-${batchIndex}]   "${f.content}" → subject "${f.subject}" resolved to tid:${resolved}`);
       } else {
-        subjectTelegramId = msg.fromUserId;
-        console.log(`[backfill:batch-${batchIndex}]   "${f.content}" → subject "${f.subject}" not found, fallback to sender tid:${msg.fromUserId}`);
+        // No fallback to the sender — see memory-extractor.ts. Pinning an
+        // unresolvable subject to whoever spoke is what misattributed 86% of
+        // this corpus in the first place.
+        subjectTelegramId = null;
+        console.log(`[backfill:batch-${batchIndex}]   "${f.content}" → subject "${f.subject}" not a member, left unattributed`);
       }
     }
 

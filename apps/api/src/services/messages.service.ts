@@ -268,3 +268,38 @@ export async function getRecentMessagesByUser(
     .orderBy(desc(telegramMessages.date))
     .limit(limit);
 }
+
+/**
+ * The messages immediately preceding one, oldest first.
+ *
+ * Memory extraction needs these to tell an assertion from a question and to
+ * resolve pronouns — judging a single message in isolation is how "I guess
+ * they're the same?" became a recorded fact.
+ */
+export async function getMessageContext(
+  chatId: string,
+  messageId: number,
+  limit: number,
+): Promise<{ sender: string; text: string }[]> {
+  const rows = await db
+    .select({
+      sender: sql<string>`coalesce(${telegramMessages.fromFirstName}, 'Unknown')`,
+      text: sql<string>`coalesce(${telegramMessages.text}, ${telegramMessages.caption})`,
+      messageId: telegramMessages.messageId,
+    })
+    .from(telegramMessages)
+    .where(
+      and(
+        eq(telegramMessages.chatId, chatId),
+        sql`${telegramMessages.messageId} < ${messageId}`,
+        sql`coalesce(${telegramMessages.text}, ${telegramMessages.caption}) IS NOT NULL`,
+      ),
+    )
+    .orderBy(desc(telegramMessages.messageId))
+    .limit(limit);
+
+  // Fetched newest-first for the limit; presented oldest-first for reading.
+  return rows
+    .reverse()
+    .map((r) => ({ sender: r.sender, text: r.text.slice(0, 300) }));
+}

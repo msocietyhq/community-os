@@ -62,8 +62,11 @@ const MODEL_MAX_RETRIES = 3;
  * 2 → stopped describing JSON literals in the prompt, which made the model
  *     serialise the whole object into `summary` for thin-evidence members and
  *     fail schema validation.
+ * 3 → memory attribution corrected. 86% of memories were pinned to whoever
+ *     spoke rather than who they were about, so every profile built before
+ *     this was generated from substantially wrong evidence.
  */
-const PROMPT_VERSION = 2;
+const PROMPT_VERSION = 3;
 
 /**
  * New messages required before raw chat alone triggers a regeneration.
