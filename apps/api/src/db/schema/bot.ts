@@ -92,6 +92,16 @@ export const telegramMessages = pgTable(
 
     // --- Semantic search ---
     embedding: vector("embedding", { dimensions: 512 }),
+
+    /**
+     * When memory extraction last considered this message.
+     *
+     * Set whether or not any fact came out of it, so the backfill is idempotent:
+     * it selects unstamped messages, so re-running is a no-op and a run
+     * interrupted mid-way resumes where it stopped rather than starting over.
+     * Mirrors how `embedding` drives its own backfill.
+     */
+    memoryExtractedAt: timestamp("memory_extracted_at"),
   },
   (table) => [
     primaryKey({ columns: [table.chatId, table.messageId] }),
@@ -103,6 +113,10 @@ export const telegramMessages = pgTable(
     ),
     index("telegram_messages_from_user_idx").on(table.fromUserId),
     index("telegram_messages_chat_type_idx").on(table.chatType),
+    // Drives the memory backfill's "what's left?" query over ~135k rows.
+    index("telegram_messages_memory_pending_idx")
+      .on(table.chatId, table.date)
+      .where(sql`memory_extracted_at IS NULL`),
   ],
 );
 

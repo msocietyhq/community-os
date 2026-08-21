@@ -22,10 +22,14 @@ export function shouldExtractMemory(text: string, isBot: boolean): boolean {
   return true;
 }
 
-/** Exported so extraction quality can be exercised without writing to the DB. */
-export const EXTRACTION_PROMPT = `You maintain a long-term memory for MSOCIETY, a community of Muslim tech professionals. You are shown one message from their group chat, with the messages just before it for context.
-
-Your job is to record durable facts **about the people in this community** — things worth recalling months later when someone asks "who knows about X?" or "what is Ali working on?".
+/**
+ * The rules both extraction paths share.
+ *
+ * One constant because the backfill previously kept its own weaker copy, and
+ * they drifted — the batch prompt never received the exclusions that cut the
+ * noise. One source of truth, two framings.
+ */
+export const EXTRACTION_RULES = `Your job is to record durable facts **about the people in this community** — things worth recalling months later when someone asks "who knows about X?" or "what is Ali working on?".
 
 Extract a fact ONLY when it is:
 - About a person, the community, or a decision they made, AND
@@ -56,10 +60,33 @@ Prefer person_fact and community_preference. Use technical or general only when 
 
 Set confidence 0.6-1.0 based on how definitive the statement is.
 
-Most messages contain nothing worth remembering. Returning an empty array is the correct answer far more often than not.
+Most messages contain nothing worth remembering. Returning an empty array is the correct answer far more often than not.`;
+
+/** Live path: one message, with the preceding turns as context. */
+export const EXTRACTION_PROMPT = `You maintain a long-term memory for MSOCIETY, a community of Muslim tech professionals. You are shown one message from their group chat, with the messages just before it for context.
+
+${EXTRACTION_RULES}
 
 Respond with ONLY a JSON array, no markdown fences:
 [{"content": "...", "category": "...", "subject": "...", "confidence": 0.8}]
+Or [] if nothing worth remembering.`;
+
+/**
+ * Backfill path: a run of consecutive messages, each one a candidate.
+ *
+ * The batch is its own context — the model sees the whole exchange rather than
+ * a single line, which is strictly more information than the live path gets.
+ * Each fact carries the index of the message it came from so it is stored
+ * against the right source.
+ */
+export const BATCH_EXTRACTION_PROMPT = `You maintain a long-term memory for MSOCIETY, a community of Muslim tech professionals. You are shown a run of consecutive messages from their group chat, numbered from 0.
+
+${EXTRACTION_RULES}
+
+Read the whole exchange for context, but extract only facts the messages actually establish. Tag each fact with \`message_index\`: the number of the message it came from.
+
+Respond with ONLY a JSON array, no markdown fences:
+[{"content": "...", "category": "...", "subject": "...", "confidence": 0.8, "message_index": 0}]
 Or [] if nothing worth remembering.`;
 
 /**
