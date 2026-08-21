@@ -423,7 +423,7 @@ async function resolveUserByUsername(username: string) {
   return row ?? null;
 }
 
-async function getTopUsersByTokens(since: Date, limit: number) {
+async function getTopUsersByTokens(since: Date, limit: number, until?: Date) {
   return db
     .select({
       telegramUserId: aiUsage.telegramUserId,
@@ -439,6 +439,7 @@ async function getTopUsersByTokens(since: Date, limit: number) {
     .where(
       and(
         gte(aiUsage.createdAt, since),
+        until ? lte(aiUsage.createdAt, until) : undefined,
         eq(aiUsage.success, true),
       ),
     )

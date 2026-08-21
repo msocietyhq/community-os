@@ -1,13 +1,13 @@
-import type { ThisWeekInHistory } from "../../services/digest.service";
+import type { ThisMonthInHistory } from "../../services/digest.service";
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function formatHistoryDigest(history: ThisWeekInHistory): string {
+export function formatHistoryDigest(history: ThisMonthInHistory): string {
   const lines: string[] = [];
 
-  lines.push("\uD83D\uDCF0 <b>This Week in MSOCIETY History</b>");
+  lines.push("\uD83D\uDCF0 <b>This Month in MSOCIETY History</b>");
   lines.push("");
   lines.push(escapeHtml(history.summary));
 

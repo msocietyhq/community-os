@@ -9,6 +9,7 @@ import {
   desc,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { members } from "../db/schema/members";
@@ -20,7 +21,51 @@ import { reputationService } from "./reputation.service";
 import { aiService } from "./ai.service";
 import { env } from "../env";
 
-export interface ThisWeekInHistory {
+/**
+ * Singapore is a fixed UTC+8 with no DST, so a constant offset converts a
+ * Singapore calendar boundary to the UTC instant our timestamps are stored in.
+ */
+const SGT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+export interface Period {
+  /** First instant of the period, inclusive. */
+  start: Date;
+  /** Last instant of the period, inclusive. */
+  end: Date;
+}
+
+/** UTC instant of 00:00 SGT on the 1st of the month `delta` months from `at`. */
+function sgtMonthStart(at: Date, delta: number): Date {
+  const sgt = new Date(at.getTime() + SGT_OFFSET_MS);
+  return new Date(
+    Date.UTC(sgt.getUTCFullYear(), sgt.getUTCMonth() + delta, 1) - SGT_OFFSET_MS,
+  );
+}
+
+/** The calendar month that most recently ended — 1–31 Jul when run in August. */
+export function previousCalendarMonth(at = new Date()): Period {
+  return {
+    start: sgtMonthStart(at, -1),
+    end: new Date(sgtMonthStart(at, 0).getTime() - 1),
+  };
+}
+
+/** The current calendar month so far — its 1st through `at`. */
+function monthToDate(at = new Date()): Period {
+  return { start: sgtMonthStart(at, 0), end: at };
+}
+
+/** All of `year`'s copy of the Singapore calendar month containing `at`. */
+function sameMonthInYear(at: Date, year: number): Period {
+  const sgt = new Date(at.getTime() + SGT_OFFSET_MS);
+  const month = sgt.getUTCMonth();
+  return {
+    start: new Date(Date.UTC(year, month, 1) - SGT_OFFSET_MS),
+    end: new Date(Date.UTC(year, month + 1, 1) - SGT_OFFSET_MS - 1),
+  };
+}
+
+export interface ThisMonthInHistory {
   year: number;
   summary: string;
   type: "topics" | "anniversary";
@@ -28,7 +73,7 @@ export interface ThisWeekInHistory {
   highlightedMessageAuthor?: string;
 }
 
-export interface WeeklyDigest {
+export interface MonthlyDigest {
   periodStart: Date;
   periodEnd: Date;
   totalMessages: number;
@@ -60,10 +105,37 @@ export interface WeeklyDigest {
   }[];
 }
 
+const MONTH_NAME = new Intl.DateTimeFormat("en-SG", {
+  month: "long",
+  timeZone: "Asia/Singapore",
+});
+
+/**
+ * The model judges before it writes. Keeping the verdict in the same call as
+ * the prose means it can't talk itself into a flashback it already decided
+ * wasn't worth one.
+ */
+const historyVerdictSchema = z.object({
+  worthPosting: z
+    .boolean()
+    .describe("True only if this month genuinely deserves a flashback post"),
+  summary: z
+    .string()
+    .describe("The flashback itself, or an empty string when not posting"),
+  quoteMessageId: z
+    .number()
+    .nullable()
+    .describe("ID of the message to quote, or null if none stands alone"),
+});
+
 export const digestService = {
-  async generateWeeklyDigest(): Promise<WeeklyDigest> {
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  /**
+   * Defaults to the month so far, which is what an on-demand `/digest` should
+   * show. The scheduled run passes the previous calendar month instead, so the
+   * 1st-of-the-month post is a clean "July in review".
+   */
+  async generateMonthlyDigest(period: Period = monthToDate()): Promise<MonthlyDigest> {
+    const { start, end } = period;
     const groupId = env.TELEGRAM_GROUP_ID;
 
     const groupFilter = groupId
@@ -79,7 +151,8 @@ export const digestService = {
       .from(telegramMessages)
       .where(
         and(
-          gte(telegramMessages.date, weekAgo),
+          gte(telegramMessages.date, start),
+          lte(telegramMessages.date, end),
           eq(telegramMessages.fromIsBot, false),
           groupFilter,
         ),
@@ -96,7 +169,8 @@ export const digestService = {
       .from(telegramMessages)
       .where(
         and(
-          gte(telegramMessages.date, weekAgo),
+          gte(telegramMessages.date, start),
+          lte(telegramMessages.date, end),
           eq(telegramMessages.fromIsBot, false),
           isNotNull(telegramMessages.fromUserId),
           groupFilter,
@@ -110,7 +184,7 @@ export const digestService = {
       .orderBy(desc(sql`count(*)`))
       .limit(5);
 
-    // New members this week
+    // New members this month
     const newMembers = await db
       .select({
         name: user.name,
@@ -118,12 +192,12 @@ export const digestService = {
       })
       .from(members)
       .innerJoin(user, eq(members.userId, user.id))
-      .where(gte(members.joinedAt, weekAgo));
+      .where(and(gte(members.joinedAt, start), lte(members.joinedAt, end)));
 
     // Upcoming events (reuse existing service)
     const upcomingEvents = await eventsService.listUpcoming(5);
 
-    // New projects this week
+    // New projects this month
     const newProjects = await db
       .select({
         name: projects.name,
@@ -141,23 +215,25 @@ export const digestService = {
       .innerJoin(user, eq(projectMembers.userId, user.id))
       .where(
         and(
-          gte(projects.createdAt, weekAgo),
+          gte(projects.createdAt, start),
+          lte(projects.createdAt, end),
           isNull(projects.deletedAt),
         ),
       );
 
-    // Top reputation gainers this week
+    // Top reputation gainers this month
     const reputationLeaders = await reputationService.getLeaderboardSince(
-      weekAgo,
+      start,
       5,
+      end,
     );
 
-    // Top AI users this week
-    const aiUsage = await aiService.getTopUsersByTokens(weekAgo, 3);
+    // Top AI users this month
+    const aiUsage = await aiService.getTopUsersByTokens(start, 3, end);
 
     return {
-      periodStart: weekAgo,
-      periodEnd: now,
+      periodStart: start,
+      periodEnd: end,
       totalMessages: messageStats?.totalMessages ?? 0,
       uniqueActiveMembers: messageStats?.uniqueActiveMembers ?? 0,
       topContributors: topContributors.map((r) => ({
@@ -174,7 +250,16 @@ export const digestService = {
     };
   },
 
-  async getThisWeekInHistory(): Promise<ThisWeekInHistory | null> {
+  /**
+   * A flashback to this calendar month in a past year, or `null` when nothing
+   * from back then clears the bar.
+   *
+   * Returning `null` is the common case by design: this posts once a month, and
+   * a mediocre "people chatted about deployment" recap is worse than silence.
+   * The model is asked to judge before it writes, and told that declining is
+   * the expected answer.
+   */
+  async getThisMonthInHistory(): Promise<ThisMonthInHistory | null> {
     const now = new Date();
     const currentYear = now.getFullYear();
     const groupId = env.TELEGRAM_GROUP_ID;
@@ -194,15 +279,7 @@ export const digestService = {
     }[] = [];
 
     for (let y = currentYear - 1; y >= currentYear - 10; y--) {
-      const rangeStart = new Date(now);
-      rangeStart.setFullYear(y);
-      rangeStart.setDate(rangeStart.getDate() - 3);
-      rangeStart.setHours(0, 0, 0, 0);
-
-      const rangeEnd = new Date(now);
-      rangeEnd.setFullYear(y);
-      rangeEnd.setDate(rangeEnd.getDate() + 3);
-      rangeEnd.setHours(23, 59, 59, 999);
+      const { start: rangeStart, end: rangeEnd } = sameMonthInYear(now, y);
 
       const groupFilter = groupId
         ? eq(telegramMessages.chatId, groupId)
@@ -241,7 +318,7 @@ export const digestService = {
               ),
             )
             .orderBy(desc(telegramMessages.replyToMessageId))
-            .limit(50),
+            .limit(60),
           db
             .select({ title: events.title })
             .from(events)
@@ -306,7 +383,7 @@ export const digestService = {
 
       try {
         const messageSample = best.messages
-          .slice(0, 30)
+          .slice(0, 40)
           .map((m) => {
             const author = m.fromUsername ? `@${m.fromUsername}` : m.fromFirstName ?? "unknown";
             return `[${m.messageId}] ${author}: ${m.text}`;
@@ -315,60 +392,62 @@ export const digestService = {
         const eventList =
           best.eventTitles.length > 0
             ? `Events held: ${best.eventTitles.join(", ")}`
-            : "No events that week.";
+            : "No events that month.";
         const projectList =
           best.projectNames.length > 0
             ? `Projects launched: ${best.projectNames.join(", ")}`
-            : "No new projects that week.";
+            : "No new projects that month.";
 
-        const result = await aiService.generateText(
+        const monthName = MONTH_NAME.format(now);
+
+        const result = await aiService.generateObject(
           {
-            model: aiService.models.fast,
-            prompt: `You're writing a "This week in ${best.year}" flashback for a Muslim tech community newsletter (MSOCIETY, Singapore).
+            model: aiService.models.smart,
+            schema: historyVerdictSchema,
+            prompt: `You're deciding whether a "This month in ${best.year}" flashback is worth posting to a Muslim tech community's Telegram group (MSOCIETY, Singapore), and writing it if so.
 
-Here's what happened during this week in ${best.year}:
+Here's what happened during ${monthName} ${best.year}:
 - ${best.messageCount} chat messages were exchanged. Here are some of them:
 ${messageSample}
 - ${eventList}
 - ${projectList}
 
-Do two things (output raw content only — no headers, labels, or markdown formatting like "Summary:" or "Quote:"):
-1. Write a short, engaging 2-3 sentence flashback. Be a little witty or nostalgic. Match the tone to the content — if serious topics came up, be respectful. Don't use emojis. Start with "This week in ${best.year}," and keep it under 280 characters. Do NOT include or paraphrase the quoted message in the summary — the quote will be displayed separately.
-2. Pick ONE message that would make the best standalone quote — something insightful, funny, or representative of the community vibe. On the very last line, output QUOTE: followed by the message ID number. If no message is quote-worthy, output QUOTE: none`,
+First judge: is any of this TRULY interesting to look back on? Set worthPosting true only if there is a specific, concrete hook — a memorable exchange, a launch, a decision that still shapes things today, a genuinely funny or moving moment, a milestone. Set it false for routine chatter, logistics, scheduling, greetings, or anything where the flashback would amount to "people talked about stuff". Declining is the expected answer most months; a forgettable post is worse than no post, and you are not being asked to find something.
+
+If worthPosting is false, leave summary empty and quoteMessageId null.
+
+If worthPosting is true:
+- summary: a 2-3 sentence flashback starting with "This month in ${best.year},". Witty or nostalgic, respectful if the topics were serious. No emojis, no markdown, under 280 characters. Do NOT include or paraphrase the quoted message — the quote is displayed separately.
+- quoteMessageId: the ID of the ONE message that stands alone best — insightful, funny, or true to the community's character. Null if none is quote-worthy.`,
           },
           { caller: "digest" },
         );
 
-        // Parse summary and quote ID from AI response
-        const responseText = result.text.trim();
-        const quoteMatch = responseText.match(/\nQUOTE:\s*(.+)$/i);
-        const summary = quoteMatch
-          ? responseText.slice(0, quoteMatch.index).trim()
-          : responseText;
+        // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.
+        const verdict = historyVerdictSchema.parse(result.object);
 
-        let highlightedMessage: string | undefined;
-        let highlightedMessageAuthor: string | undefined;
-
-        if (quoteMatch) {
-          const quoteValue = quoteMatch[1]!.trim();
-          if (quoteValue !== "none") {
-            const quoteId = Number(quoteValue);
-            const quoted = best.messages.find((m) => m.messageId === quoteId);
-            if (quoted) {
-              highlightedMessage = quoted.text;
-              highlightedMessageAuthor = quoted.fromUsername
-                ? `@${quoted.fromUsername}`
-                : quoted.fromFirstName ?? undefined;
-            }
-          }
+        if (!verdict.worthPosting || !verdict.summary.trim()) {
+          console.log(
+            `History digest: ${best.year} judged not interesting enough to post`,
+          );
+          return null;
         }
+
+        const quoted =
+          verdict.quoteMessageId === null
+            ? undefined
+            : best.messages.find((m) => m.messageId === verdict.quoteMessageId);
 
         return {
           year: best.year,
-          summary,
+          summary: verdict.summary.trim(),
           type: "topics",
-          highlightedMessage,
-          highlightedMessageAuthor,
+          highlightedMessage: quoted?.text,
+          highlightedMessageAuthor: quoted
+            ? quoted.fromUsername
+              ? `@${quoted.fromUsername}`
+              : quoted.fromFirstName ?? undefined
+            : undefined,
         };
       } catch (err) {
         console.error("AI generation failed for history digest:", err);
@@ -389,7 +468,6 @@ Do two things (output raw content only — no headers, labels, or markdown forma
         and(
           isNotNull(members.joinedAt),
           sql`extract(month from ${members.joinedAt}) = extract(month from now())`,
-          sql`extract(day from ${members.joinedAt}) between extract(day from now()) - 3 and extract(day from now()) + 3`,
           sql`extract(year from ${members.joinedAt}) < extract(year from now())`,
         ),
       )
@@ -410,7 +488,7 @@ Do two things (output raw content only — no headers, labels, or markdown forma
               : years === 3
                 ? "3rd"
                 : `${years}th`;
-        return `This week marks ${name}'s ${suffix} year in the community!`;
+        return `This month marks ${name}'s ${suffix} year in the community!`;
       });
 
       return {

@@ -1,4 +1,4 @@
-import type { WeeklyDigest } from "../../services/digest.service";
+import type { MonthlyDigest } from "../../services/digest.service";
 
 const SG_DATE = new Intl.DateTimeFormat("en-SG", {
   day: "numeric",
@@ -43,11 +43,11 @@ function displayName(
   return "Anonymous";
 }
 
-export function formatWeeklyDigest(digest: WeeklyDigest): string {
+export function formatMonthlyDigest(digest: MonthlyDigest): string {
   const lines: string[] = [];
 
   // Header
-  lines.push("*MSOCIETY Weekly Digest*");
+  lines.push("*MSOCIETY Monthly Digest*");
   lines.push(
     `_${SG_DATE.format(digest.periodStart)} — ${SG_DATE.format(digest.periodEnd)}_`,
   );

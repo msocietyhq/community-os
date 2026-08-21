@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, asc, isNotNull, not, or } from "drizzle-orm";
+import { eq, desc, and, gte, lte, asc, isNotNull, not, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { reputationTriggers } from "../db/schema/reputation";
@@ -323,8 +323,12 @@ export const reputationService = {
     return rows;
   },
 
-  /** Leaderboard of reputation gained since a given date. */
-  async getLeaderboardSince(since: Date, limit = 5) {
+  /**
+   * Leaderboard of reputation gained since a given date, optionally capped at
+   * `until` so a digest covering a closed period doesn't count replies that
+   * arrived after that period ended.
+   */
+  async getLeaderboardSince(since: Date, limit = 5, until?: Date) {
     const triggers = await loadTriggers();
     const keywordTriggers = triggers.filter((t) => t.triggerType === "keyword");
     if (keywordTriggers.length === 0) return [];
@@ -348,6 +352,7 @@ export const reputationService = {
       .where(
         and(
           gte(telegramMessages.date, since),
+          until ? lte(telegramMessages.date, until) : undefined,
           isNotNull(telegramMessages.text),
         ),
       );
