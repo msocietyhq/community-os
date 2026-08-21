@@ -2,6 +2,7 @@ import { sql, eq, and, inArray, gte, desc } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { generateQueryEmbedding } from "./embeddings.service";
+import { truncate } from "../lib/text";
 
 /**
  * Returns true if the given Telegram user has sent at least one message in the given chat.
@@ -290,5 +291,5 @@ export async function getMessageContext(
   // Fetched newest-first for the limit; presented oldest-first for reading.
   return rows
     .reverse()
-    .map((r) => ({ sender: r.sender, text: r.text.slice(0, 300) }));
+    .map((r) => ({ sender: r.sender, text: truncate(r.text, 300) }));
 }

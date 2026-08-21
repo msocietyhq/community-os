@@ -22,6 +22,7 @@ import {
   shouldExtractMemory,
 } from "../bot/lib/memory-extractor";
 import { withRetry } from "../lib/retry";
+import { truncate } from "../lib/text";
 
 /** Messages per model call. Also the size of the context window the model sees. */
 const BATCH_SIZE = 10;
@@ -157,7 +158,7 @@ export async function backfillMemories(): Promise<MemoryBackfillResult> {
         messageId: r.messageId,
         sender: r.sender,
         senderTelegramId: r.senderTelegramId,
-        text: r.text.slice(0, 600),
+        text: truncate(r.text, 600),
       }));
 
     for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
