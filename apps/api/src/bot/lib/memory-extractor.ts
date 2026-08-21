@@ -1,6 +1,72 @@
+import { z } from "zod";
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
 import { getMessageContext } from "../../services/messages.service";
 import { aiService } from "../../services/ai.service";
+
+const MEMORY_CATEGORIES = [
+  "person_fact",
+  "community_preference",
+  "decision",
+  "technical",
+  "event_related",
+  "general",
+] as const;
+
+/**
+ * The extractor's output shape.
+ *
+ * Enforced by the SDK rather than parsed out of prose. This previously asked for
+ * "ONLY a JSON array" in the prompt and hand-parsed the reply, which broke the
+ * moment the model wrapped its answer in a fence and appended commentary.
+ * Describing the format in the prompt also invites the model to hand-write JSON
+ * instead of filling fields — the same mistake cost us the profile generator's
+ * thin-evidence path.
+ *
+ * `facts` is defaulted because "nothing worth remembering" is the common answer,
+ * and a required key turns that correct result into a schema error.
+ */
+export const factSchema = z.object({
+  content: z.string().describe("The fact, as one standalone sentence"),
+  category: z.enum(MEMORY_CATEGORIES),
+  subject: z
+    .string()
+    .describe(
+      "Name or @username of the person the fact is about, or 'community'",
+    ),
+  // No .min()/.max() here: Anthropic's structured output rejects `minimum` and
+  // `maximum` on numbers ("For 'number' type, properties maximum, minimum are
+  // not supported"), which fails every call. Range is enforced by clampConfidence
+  // at the point of use instead.
+  confidence: z.number().default(0.8),
+});
+
+export const extractionSchema = z.object({
+  facts: z.array(factSchema).default([]),
+});
+
+/** Batch variant: each fact also says which message it came from. */
+export const batchExtractionSchema = z.object({
+  facts: z
+    .array(
+      factSchema.extend({
+        // Plain z.number(), not .int(): Zod emits safe-integer minimum/maximum
+        // bounds for .int(), and Anthropic's structured output rejects those on
+        // integers just as it does on numbers. Rounded at the point of use.
+        message_index: z
+          .number()
+          .describe("Index of the message this fact came from"),
+      }),
+    )
+    .default([]),
+});
+
+export type ExtractedFact = z.infer<typeof factSchema>;
+
+/** Keeps confidence in 0-1, since the schema can't express the bound. */
+export function clampConfidence(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0.8;
+  return Math.min(1, Math.max(0, value));
+}
 
 /** Preceding turns shown to the extractor for context. */
 const CONTEXT_MESSAGES = 5;
@@ -65,11 +131,7 @@ Most messages contain nothing worth remembering. Returning an empty array is the
 /** Live path: one message, with the preceding turns as context. */
 export const EXTRACTION_PROMPT = `You maintain a long-term memory for MSOCIETY, a community of Muslim tech professionals. You are shown one message from their group chat, with the messages just before it for context.
 
-${EXTRACTION_RULES}
-
-Respond with ONLY a JSON array, no markdown fences:
-[{"content": "...", "category": "...", "subject": "...", "confidence": 0.8}]
-Or [] if nothing worth remembering.`;
+${EXTRACTION_RULES}`;
 
 /**
  * Backfill path: a run of consecutive messages, each one a candidate.
@@ -83,11 +145,7 @@ export const BATCH_EXTRACTION_PROMPT = `You maintain a long-term memory for MSOC
 
 ${EXTRACTION_RULES}
 
-Read the whole exchange for context, but extract only facts the messages actually establish. Tag each fact with \`message_index\`: the number of the message it came from.
-
-Respond with ONLY a JSON array, no markdown fences:
-[{"content": "...", "category": "...", "subject": "...", "confidence": 0.8, "message_index": 0}]
-Or [] if nothing worth remembering.`;
+Read the whole exchange for context, but extract only facts the messages actually establish. Tag each fact with the index of the message it came from.`;
 
 /**
  * Extract memories from a message using Haiku. Fire-and-forget.
@@ -114,9 +172,10 @@ export async function extractMemories(
         .join("\n")
     : "(no earlier messages)";
 
-  const result = await aiService.generateText(
+  const result = await aiService.generateObject(
     {
       model: aiService.models.fast,
+      schema: extractionSchema,
       system: EXTRACTION_PROMPT,
       messages: [
         {
@@ -126,29 +185,16 @@ export async function extractMemories(
             `--- Extract from THIS message only ---\n${senderLabel}: "${text}"`,
         },
       ],
-      maxOutputTokens: 256,
+      maxOutputTokens: 512,
     },
     { caller: "memory-extractor", telegramUserId: senderTelegramId, chatId },
   );
 
-  if (!result.text) return;
-
-  let facts: Array<{
-    content: string;
-    category: string;
-    subject: string;
-    confidence?: number;
-  }>;
-
-  try {
-    const jsonMatch = result.text.match(/\[[\s\S]*\]/);
-    facts = JSON.parse(jsonMatch ? jsonMatch[0] : result.text);
-  } catch {
-    console.error("[memory-extractor] failed to parse response:", result.text);
-    return;
-  }
-
-  if (!Array.isArray(facts) || facts.length === 0) return;
+  // `aiService.generateObject` widens its result to `unknown` (its return type
+  // drops generateObject's generic), so re-parse to recover the type. The SDK
+  // has already validated against this schema.
+  const { facts } = extractionSchema.parse(result.object);
+  if (facts.length === 0) return;
 
   const senderNameLower = senderName.toLowerCase();
   const senderUsernameLower = senderUsername?.toLowerCase() ?? "";
@@ -185,7 +231,7 @@ export async function extractMemories(
       subjectTelegramId,
       sourceChatId: chatId,
       sourceMessageId: messageId,
-      confidence: fact.confidence ?? 0.8,
+      confidence: clampConfidence(fact.confidence),
     });
   }
 

@@ -22,6 +22,8 @@ import {
 } from "./memory.service";
 import {
   BATCH_EXTRACTION_PROMPT,
+  batchExtractionSchema,
+  clampConfidence,
   shouldExtractMemory,
 } from "../bot/lib/memory-extractor";
 import { withRetry } from "../lib/retry";
@@ -38,13 +40,6 @@ const INTER_BATCH_DELAY_MS = 250;
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-interface BatchFact {
-  content: string;
-  category: string;
-  subject: string;
-  confidence?: number;
-  message_index?: number;
-}
 
 interface PendingMessage {
   chatId: string;
@@ -73,35 +68,27 @@ async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
     .map((m, i) => `[${i}] ${m.sender}: ${m.text}`)
     .join("\n");
 
-  const result = await aiService.generateText(
+  const result = await aiService.generateObject(
     {
       model: aiService.models.fast,
+      schema: batchExtractionSchema,
       system: BATCH_EXTRACTION_PROMPT,
       messages: [{ role: "user", content: transcript }],
-      maxOutputTokens: 512,
+      maxOutputTokens: 1024,
     },
     { caller: "memory-backfill" },
   );
 
-  if (!result.text) return [];
-
-  let facts: BatchFact[];
-  try {
-    const match = result.text.match(/\[[\s\S]*\]/);
-    facts = JSON.parse(match ? match[0] : result.text);
-  } catch {
-    console.error(
-      "[memory-backfill] unparseable response:",
-      result.text.slice(0, 200),
-    );
-    return [];
-  }
-
-  if (!Array.isArray(facts)) return [];
+  // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.
+  const { facts } = batchExtractionSchema.parse(result.object);
 
   const memories: MemoryInput[] = [];
   for (const fact of facts) {
-    const source = batch[fact.message_index ?? -1];
+    // Rounded because the schema can't constrain it to an integer — see
+    // memory-extractor.ts. An out-of-range index drops the fact rather than
+    // guessing: mis-assigning provenance is worse than losing one fact.
+    const index = Math.round(fact.message_index);
+    const source = batch[index];
     if (!source || !fact.content) continue;
 
     const subjectLower = (fact.subject ?? "").toLowerCase();
@@ -122,7 +109,7 @@ async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
       subjectTelegramId,
       sourceChatId: source.chatId,
       sourceMessageId: source.messageId,
-      confidence: fact.confidence ?? 0.8,
+      confidence: clampConfidence(fact.confidence),
     });
   }
 
