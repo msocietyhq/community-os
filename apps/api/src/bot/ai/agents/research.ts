@@ -6,6 +6,7 @@ import {
   type SubagentActivity,
 } from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
+import { truncate } from "../../../lib/text";
 import { env } from "../../../env";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
@@ -50,7 +51,7 @@ export function htmlToText(html: string): string {
 }
 
 function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  return text.length > max ? `${truncate(text, max)}…` : text;
 }
 
 export function createResearchTools(_ctx: ToolContext) {

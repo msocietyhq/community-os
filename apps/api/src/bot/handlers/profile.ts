@@ -12,6 +12,7 @@ import type {
 import { env } from "../../env";
 import { bot } from "../bot";
 import { hasUserMessages } from "../../services/messages.service";
+import { truncate } from "../../lib/text";
 import { aiProfileService } from "../../services/ai-profile.service";
 import {
   additiveKey,
@@ -402,7 +403,7 @@ function applyFieldUpdate(
 ): UpdateMemberInput {
   switch (field) {
     case "bio":
-      return { bio: text.slice(0, 500) };
+      return { bio: truncate(text, 500) };
     case "title":
       return { currentTitle: text.trim() };
     case "company":

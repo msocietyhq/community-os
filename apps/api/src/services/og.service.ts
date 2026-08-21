@@ -1,6 +1,7 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { env } from "../env";
+import { truncate as clipText } from "../lib/text";
 
 type ProjectMember = {
 	id: string;
@@ -129,7 +130,7 @@ const NATURE_COLORS: Record<
 
 function truncate(text: string, max: number): string {
 	if (text.length <= max) return text;
-	return `${text.slice(0, max - 1).trimEnd()}…`;
+	return `${clipText(text, max - 1).trimEnd()}…`;
 }
 
 function getInitials(name: string): string {

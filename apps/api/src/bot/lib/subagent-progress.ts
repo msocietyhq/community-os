@@ -12,6 +12,7 @@
  */
 
 import type { Tool } from "ai";
+import { truncate } from "../../lib/text";
 import type { EventsToolName } from "../ai/agents/events";
 import type { MembersToolName } from "../ai/agents/members";
 import type { VenuesToolName } from "../ai/agents/venues";
@@ -387,7 +388,7 @@ export function renderProgress(batches: SubagentBatch[]): string {
     .join("\n\n");
 
   if (text.length <= MAX_MESSAGE_CHARS) return text;
-  return `${text.slice(0, MAX_MESSAGE_CHARS)}\n…`;
+  return `${truncate(text, MAX_MESSAGE_CHARS)}\n…`;
 }
 
 export interface SubagentProgressOptions {
