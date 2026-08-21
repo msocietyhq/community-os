@@ -4,6 +4,7 @@ import { backfillMissingMembers } from "./db/backfill-members";
 import { backfillMissingEmbeddings } from "./services/embeddings.service";
 import { backfillInlinePhotos } from "./scripts/backfill-photos";
 import { reputationService } from "./services/reputation.service";
+import { calibrateRecall } from "./services/recall-calibration";
 import { env } from "./env";
 
 app.listen(env.PORT);
@@ -32,6 +33,12 @@ backfillInlinePhotos().catch((err) => {
 
 reputationService.recalculateAllScores().catch((err) => {
   console.error("Reputation recalculation failed:", err);
+});
+
+// Re-derives the memory recall floor from the corpus. Cheap (pure SQL over
+// stored vectors) and self-correcting as the corpus changes character.
+calibrateRecall().catch((err) => {
+  console.error("Recall calibration failed:", err);
 });
 
 const shutdown = async () => {

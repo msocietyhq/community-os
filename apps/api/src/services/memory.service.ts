@@ -9,8 +9,8 @@ import {
 import {
   applyRelativeCutoff,
   rankByConfidenceAndRecency,
-  MIN_SIMILARITY_FLOOR,
 } from "./memory-ranking";
+import { getSimilarityFloor } from "./recall-calibration";
 
 export interface MemoryInput {
   content: string;
@@ -161,7 +161,7 @@ export async function recallMemories(
   opts?: { limit?: number; minSimilarity?: number; relativeCutoff?: number },
 ): Promise<RecalledMemory[]> {
   const limit = opts?.limit ?? 5;
-  const minSimilarity = opts?.minSimilarity ?? MIN_SIMILARITY_FLOOR;
+  const minSimilarity = opts?.minSimilarity ?? getSimilarityFloor();
 
   const embedding = await generateQueryEmbedding(query);
   const vectorLiteral = `[${embedding.join(",")}]`;

@@ -5,13 +5,13 @@
  */
 
 /**
- * Absolute cosine-similarity floor applied in SQL.
+ * @deprecated Superseded by `recall-calibration.getSimilarityFloor()`, which
+ * derives the floor from the corpus's own noise distribution.
  *
- * Measured against the live corpus with voyage-3-lite: relevant query/memory
- * pairs land in the 0.40–0.65 band (e.g. "who is organising the next event"
- * → "Ashiqurrah is responsible for planning the next meetup" scores 0.544).
- * The previous 0.6 floor discarded almost every true positive, so this exists
- * only to drop obvious noise — relevance is decided by `applyRelativeCutoff`.
+ * Kept only so callers passing an explicit `minSimilarity` have a documented
+ * reference point. Measuring production showed a hand-picked absolute floor is
+ * close to meaningless here: two *unrelated* memories average 0.345, so this
+ * value sat at the median of the noise. See `recall-calibration.ts`.
  */
 export const MIN_SIMILARITY_FLOOR = 0.35;
 
