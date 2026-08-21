@@ -375,13 +375,9 @@ export async function resolveSubjectTelegramId(
 
   if (exact?.telegramId) return Number(exact.telegramId);
 
-  // Chat refers to people by first name — "Faruq", not "Faruq Rasid" — so an
-  // exact-match-only lookup failed for most genuine person facts and (before
-  // the fallback was removed) pinned them to whoever was speaking.
-  //
-  // Only accept a first-name match when it is unambiguous across the community.
-  // Two members called "Ali" means neither is a safe guess, and a wrong guess
-  // is worse than no attribution: it writes a fact onto the wrong profile.
+  // Chat uses first names — "Faruq", not "Faruq Rasid" — so exact-match alone
+  // failed most genuine person facts. Only accept it when unambiguous: two
+  // members called "Ali" means a wrong guess writes onto the wrong profile.
   const firstNameMatches = await db
     .select({ telegramId: user.telegramId })
     .from(user)

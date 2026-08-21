@@ -1,15 +1,10 @@
 /**
  * Rebuilds the memory corpus from chat history.
  *
- * Idempotent by construction: every message it considers is stamped with
- * `memory_extracted_at`, whether or not a fact came out of it. So the query for
- * remaining work is "unstamped messages", re-running is a no-op once drained,
- * and a run killed mid-way resumes rather than restarting. Mirrors how
- * `backfillMissingEmbeddings` works off `embedding IS NULL`.
- *
- * Messages are processed in consecutive runs rather than one at a time: the run
- * is its own conversational context, so the model sees the exchange instead of
- * an isolated line, and it costs roughly a tenth as many calls.
+ * Idempotent: every message considered is stamped, so remaining work is
+ * "unstamped messages" — re-running is a no-op and an interrupted run resumes.
+ * Processed in consecutive runs so each batch is its own context, at roughly a
+ * tenth the calls of one-at-a-time.
  */
 import { and, asc, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
@@ -56,13 +51,7 @@ export interface MemoryBackfillResult {
   failed: number;
 }
 
-/**
- * Extract from one run of consecutive messages.
- *
- * Facts whose `message_index` is out of range are dropped rather than guessed
- * at — attributing a fact to the wrong message would corrupt its provenance,
- * and provenance is the only way back to what was actually said.
- */
+/** Extract from one run of consecutive messages. */
 async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
   const transcript = batch
     .map((m, i) => `[${i}] ${m.sender}: ${m.text}`)
@@ -84,9 +73,8 @@ async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
 
   const memories: MemoryInput[] = [];
   for (const fact of facts) {
-    // Rounded because the schema can't constrain it to an integer — see
-    // memory-extractor.ts. An out-of-range index drops the fact rather than
-    // guessing: mis-assigning provenance is worse than losing one fact.
+    // Rounded because the schema can't constrain it. Out-of-range drops the
+    // fact — wrong provenance is worse than one lost fact.
     const index = Math.round(fact.message_index);
     const source = batch[index];
     if (!source || !fact.content) continue;
@@ -94,10 +82,8 @@ async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
     const subjectLower = (fact.subject ?? "").toLowerCase();
     const isSender = subjectLower === source.sender.toLowerCase();
 
-    // No fallback to the sender when the subject can't be resolved — pinning an
-    // unresolvable subject to whoever spoke is what misattributed 86% of the
-    // previous corpus. The sender's own id is used only when the fact is
-    // explicitly about them.
+    // No fallback to the sender — see memory-extractor.ts. The sender's id is
+    // used only when the fact is explicitly about them.
     const subjectTelegramId = isSender
       ? source.senderTelegramId
       : await resolveSubjectTelegramId(fact.subject);
@@ -158,8 +144,7 @@ export async function backfillMemories(): Promise<MemoryBackfillResult> {
 
     if (rows.length === 0) break;
 
-    // Everything in the chunk gets stamped, including what the pre-LLM filter
-    // rejects — otherwise trivial messages are re-scanned on every run forever.
+    // Stamp everything, including filter rejects, or they're re-scanned forever.
     const stampKeys = rows.map((r) => ({
       chatId: r.chatId,
       messageId: r.messageId,
@@ -190,8 +175,7 @@ export async function backfillMemories(): Promise<MemoryBackfillResult> {
           extracted += memories.length;
         }
       } catch (err) {
-        // A failed batch still gets stamped. Leaving it pending would make the
-        // next boot retry the same poison batch before reaching new work.
+        // Still stamped: leaving it pending would retry a poison batch forever.
         console.error("[memory-backfill] gave up on a batch:", err);
         failed++;
       }
@@ -217,7 +201,7 @@ async function stampProcessed(
 ): Promise<void> {
   if (!keys.length) return;
 
-  // Grouped by chat so this stays a handful of statements rather than one per row.
+  // Grouped by chat: a handful of statements rather than one per row.
   const byChat = new Map<string, number[]>();
   for (const k of keys) {
     const list = byChat.get(k.chatId) ?? [];

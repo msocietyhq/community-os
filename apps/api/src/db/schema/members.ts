@@ -42,14 +42,7 @@ export const members = pgTable("members", {
   /** Embedding of `aiSummary`. MUST NOT be returned from any route. */
   aiEmbedding: vector("ai_embedding", { dimensions: 512 }),
   aiGeneratedAt: timestamp("ai_generated_at"),
-  /**
-   * Generator version this profile was built with.
-   *
-   * Evidence isn't the only reason a profile goes stale — changing the prompt
-   * does too, and nothing else captures that. Bumping `PROMPT_VERSION` in
-   * ai-profile.service.ts makes every older profile eligible for regeneration
-   * on the next run.
-   */
+  /** Generator version. Bumping PROMPT_VERSION marks older profiles stale. */
   aiPromptVersion: integer("ai_prompt_version").notNull().default(0),
   /** Suggestions the member waved off. Persists across regeneration. */
   aiDismissed: jsonb("ai_dismissed")
@@ -59,16 +52,12 @@ export const members = pgTable("members", {
 });
 
 /**
- * Columns returned for a member's own record.
+ * Columns for a member's own record. Enumerated, not `select *`: `ai_embedding`
+ * is 512 floats that must never reach a browser or an audit row. Feeds both
+ * `GET /me` and the `PATCH /me` audit payload.
  *
- * Enumerated rather than `select *` on purpose: `ai_embedding` is 512 floats
- * that must never reach a browser or an audit row. This list feeds both
- * `GET /api/v1/members/me` and the `oldValue`/`newValue` audit payload written
- * by `PATCH /api/v1/members/me`.
- *
- * Lives here rather than in members.service.ts so the guard test can import it
- * without dragging in `env` and the bot — members.service transitively imports
- * both, which fails at import time outside a configured environment.
+ * Lives here, not members.service.ts, so the guard test can import it without
+ * pulling in `env` and the bot.
  */
 export const MEMBER_SELF_COLUMNS = {
   id: members.id,

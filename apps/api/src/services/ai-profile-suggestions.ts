@@ -24,13 +24,7 @@ export const SCALAR_FIELDS = [
 /** Fields accumulating values, where a suggestion is a set of additions. */
 export const ADDITIVE_FIELDS = ["skills", "interests"] as const;
 
-/**
- * How long a dismissal holds. Roughly six months.
- *
- * Without expiry, dismissing `skills:kubernetes` in March would permanently
- * suppress it even after a November spent running a cluster — the evidence
- * changed but the dismissal didn't.
- */
+/** ~6 months. Without expiry, a March dismissal outlives the evidence behind it. */
 export const DISMISSAL_TTL_DAYS = 182;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -45,16 +39,9 @@ export function additiveKey(field: string, value: string): string {
 }
 
 /**
- * Identifies a dismissed scalar suggestion, e.g. `bio:a3f1e2d0`.
- *
- * Hashing the text rather than keying on the field name means dismissing one
- * suggested bio doesn't mean "never offer a bio again" — a differently-worded
- * regeneration hashes differently and surfaces.
- *
- * The hash can't tell a meaningful rewrite from a trivial reword, so a
- * near-identical regeneration will resurface a dismissed suggestion. Accepted:
- * scalar suggestions stop entirely once the member authors the field, which is
- * the common path out.
+ * Identifies a dismissed scalar suggestion, e.g. `bio:a3f1e2d0`. Hashing the
+ * text (not the field name) means a reworded regeneration surfaces again rather
+ * than "never offer a bio again" — at the cost of trivial rewords resurfacing.
  */
 export function scalarKey(field: string, suggestion: string): string {
   const hash = createHash("sha256")

@@ -13,17 +13,9 @@ const MEMORY_CATEGORIES = [
 ] as const;
 
 /**
- * The extractor's output shape.
- *
- * Enforced by the SDK rather than parsed out of prose. This previously asked for
- * "ONLY a JSON array" in the prompt and hand-parsed the reply, which broke the
- * moment the model wrapped its answer in a fence and appended commentary.
- * Describing the format in the prompt also invites the model to hand-write JSON
- * instead of filling fields — the same mistake cost us the profile generator's
- * thin-evidence path.
- *
- * `facts` is defaulted because "nothing worth remembering" is the common answer,
- * and a required key turns that correct result into a schema error.
+ * Output shape, enforced by the SDK. Don't describe this format in the prompt —
+ * that invites the model to hand-write JSON instead of filling fields.
+ * `facts` is defaulted: "nothing worth remembering" is the common answer.
  */
 export const factSchema = z.object({
   content: z.string().describe("The fact, as one standalone sentence"),
@@ -33,10 +25,8 @@ export const factSchema = z.object({
     .describe(
       "Name or @username of the person the fact is about, or 'community'",
     ),
-  // No .min()/.max() here: Anthropic's structured output rejects `minimum` and
-  // `maximum` on numbers ("For 'number' type, properties maximum, minimum are
-  // not supported"), which fails every call. Range is enforced by clampConfidence
-  // at the point of use instead.
+  // No .min()/.max(): Anthropic's structured output rejects `minimum`/`maximum`
+  // on numbers and fails every call. Bounded by clampConfidence instead.
   confidence: z.number().default(0.8),
 });
 
@@ -49,9 +39,8 @@ export const batchExtractionSchema = z.object({
   facts: z
     .array(
       factSchema.extend({
-        // Plain z.number(), not .int(): Zod emits safe-integer minimum/maximum
-        // bounds for .int(), and Anthropic's structured output rejects those on
-        // integers just as it does on numbers. Rounded at the point of use.
+        // Not .int(): Zod emits safe-integer minimum/maximum for it, which
+        // the provider rejects the same way. Rounded at the point of use.
         message_index: z
           .number()
           .describe("Index of the message this fact came from"),
@@ -88,13 +77,7 @@ export function shouldExtractMemory(text: string, isBot: boolean): boolean {
   return true;
 }
 
-/**
- * The rules both extraction paths share.
- *
- * One constant because the backfill previously kept its own weaker copy, and
- * they drifted — the batch prompt never received the exclusions that cut the
- * noise. One source of truth, two framings.
- */
+/** Shared by both extraction paths, which previously kept copies that drifted. */
 export const EXTRACTION_RULES = `Your job is to record durable facts **about the people in this community** — things worth recalling months later when someone asks "who knows about X?" or "what is Ali working on?".
 
 Extract a fact ONLY when it is:
@@ -162,9 +145,8 @@ export async function extractMemories(
     ? `${senderName} (@${senderUsername})`
     : senderName;
 
-  // Without the preceding turns the extractor can't tell an assertion from a
-  // question, or resolve "he"/"it"/"this". Measured on the existing corpus, that
-  // is how a message like "I guess they're the same?" became a recorded fact.
+  // Without prior turns the extractor can't tell an assertion from a question,
+  // or resolve pronouns — that's how "I guess they're the same?" became a fact.
   const priorTurns = await getMessageContext(chatId, messageId, CONTEXT_MESSAGES);
   const conversation = priorTurns.length
     ? priorTurns
@@ -208,18 +190,9 @@ export async function extractMemories(
       subjectLower === "i" ||
       subjectLower === "me";
 
-    // Deliberately NO fallback to the sender.
-    //
-    // This used to read `?? senderTelegramId`, which pinned every unresolvable
-    // subject to whoever happened to be speaking. Measured on the corpus that
-    // produced 956 of 1117 active memories (86%) attributed to someone the fact
-    // wasn't about — an industry observation became a fact about the person who
-    // made it, a shared news link became a fact about the sharer. Those then fed
-    // straight into AI profile generation.
-    //
-    // Leaving it null keeps the memory searchable while excluding it from any
-    // individual's profile, which is the honest outcome for a fact about the
-    // world rather than about a person.
+    // No fallback to the sender. `?? senderTelegramId` here once misattributed
+    // 86% of the corpus — a shared news link became a fact about the sharer.
+    // Null keeps the memory searchable but off anyone's profile.
     const subjectTelegramId = isSender
       ? senderTelegramId
       : await resolveSubjectTelegramId(fact.subject);

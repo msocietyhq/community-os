@@ -243,12 +243,7 @@ export async function setMessageEmbedding(
     );
 }
 
-/**
- * A member's most recent messages, newest first.
- *
- * Feeds AI profile generation: memories hold durable facts, while raw recent
- * messages carry current topical signal that hasn't been distilled yet.
- */
+/** A member's most recent messages, newest first. Feeds profile generation. */
 export async function getRecentMessagesByUser(
   telegramUserId: number,
   limit = 100,
@@ -269,13 +264,7 @@ export async function getRecentMessagesByUser(
     .limit(limit);
 }
 
-/**
- * The messages immediately preceding one, oldest first.
- *
- * Memory extraction needs these to tell an assertion from a question and to
- * resolve pronouns — judging a single message in isolation is how "I guess
- * they're the same?" became a recorded fact.
- */
+/** The messages immediately preceding one, oldest first. Context for extraction. */
 export async function getMessageContext(
   chatId: string,
   messageId: number,

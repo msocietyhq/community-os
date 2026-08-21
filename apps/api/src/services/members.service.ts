@@ -171,9 +171,8 @@ export const membersService = {
         linkedinUrl: members.linkedinUrl,
         websiteUrl: members.websiteUrl,
         joinedAt: members.joinedAt,
-        // Exposed on the GraphQL Member type, which is AI-only (the /graphql
-        // HTTP mount is removed). Deliberately absent from findByUsername and
-        // list, which back public REST routes.
+        // For the AI-only GraphQL Member type. Deliberately absent from
+        // findByUsername and list, which back public REST routes.
         aiSummary: members.aiSummary,
         user: {
           id: user.id,

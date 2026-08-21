@@ -1,12 +1,9 @@
 /**
  * Retry with exponential backoff and full jitter.
  *
- * Written for background sweeps that make many provider calls in a row, where a
- * single 429 or a transient 503 should cost a pause rather than the whole run.
- *
- * The AI SDK retries individual model calls on its own, but nothing wraps the
- * Voyage embedding calls, and neither covers a *sequence* of calls that should
- * be re-attempted as a unit. That's what this is for.
+ * For background sweeps where a 429 should cost a pause, not the whole run. The
+ * AI SDK retries its own model calls, but nothing covers the embedding calls or
+ * a *sequence* that should be re-attempted as a unit.
  *
  * Pure apart from the clock — `sleep` is injectable so tests don't wait.
  */
@@ -53,12 +50,7 @@ export function isRetryableError(error: unknown): boolean {
   return TRANSIENT_MESSAGE.test(String((error as Error)?.message ?? ""));
 }
 
-/**
- * The provider's own instruction on when to come back, in ms.
- *
- * Honouring this matters more than the backoff curve: guessing shorter than
- * the stated window just burns another 429.
- */
+/** Retry-After in ms. Guessing shorter than the stated window burns another 429. */
 export function retryAfterMs(error: unknown): number | null {
   const headers = APICallError.isInstance(error)
     ? error.responseHeaders
@@ -107,8 +99,7 @@ export async function withRetry<T>(
 
       if (attempt === attempts || !isRetryableError(error)) throw error;
 
-      // Full jitter: exponential ceiling, uniform below it. Spreads retries so
-      // a batch that hits the same limit doesn't march back in lockstep.
+      // Full jitter, so a batch hitting the same limit doesn't retry in lockstep.
       const ceiling = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
       const backoff = Math.floor(random() * ceiling);
       const delayMs = Math.min(

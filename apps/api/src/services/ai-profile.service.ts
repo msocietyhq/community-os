@@ -35,63 +35,35 @@ const MEMORY_LIMIT = 50;
 /** How many raw messages to feed the generator. */
 const MESSAGE_LIMIT = 100;
 
-/**
- * Gap between members during the nightly sweep.
- *
- * Nothing is waiting on this run, so pacing it is free insurance: a second per
- * member keeps even a few-hundred-member sweep well under provider request
- * limits rather than finding them via 429s. Transient failures are still
- * retried with backoff on top of this.
- */
+/** Nothing waits on the sweep, so pace it well clear of provider rate limits. */
 const INTER_MEMBER_DELAY_MS = 1_000;
 
 /** Per-model-call retries inside the AI SDK, beneath our own outer retry. */
 const MODEL_MAX_RETRIES = 3;
 
 /**
- * Bump this whenever the generation prompt or evidence format changes.
- *
- * Evidence moving is not the only reason a profile is out of date — a better
- * prompt is too, and nothing else captures that. Profiles below this version
- * are treated as stale, so the next backfill rebuilds them once and then goes
- * quiet again.
- *
- * 0 → profiles built before this existed.
- * 1 → evidence carries dates and memory categories; the prompt distinguishes
- *     what a member discussed from what is true about them.
- * 2 → stopped describing JSON literals in the prompt, which made the model
- *     serialise the whole object into `summary` for thin-evidence members and
- *     fail schema validation.
- * 3 → memory attribution corrected. 86% of memories were pinned to whoever
- *     spoke rather than who they were about, so every profile built before
- *     this was generated from substantially wrong evidence.
+ * Bump when the prompt or evidence format changes — profiles below this version
+ * are stale, so the next backfill rebuilds them once and then goes quiet.
+ * Evidence moving is not the only reason a profile is out of date.
  */
 const PROMPT_VERSION = 3;
 
 /**
- * New messages required before raw chat alone triggers a regeneration.
- *
- * Any *memory* is high-signal — they're distilled facts and rare (single digits
- * per week across the whole community), so one is enough. Raw messages are the
- * opposite: without a threshold, a member who says "salam" costs a Sonnet call
- * that night to rewrite near-identical prose.
+ * New messages needed before chat alone triggers a regeneration. Any single
+ * memory is enough (they're distilled and rare); raw messages are noisy, and
+ * without a threshold one "salam" costs a Sonnet call to rewrite the same prose.
  */
 const MIN_NEW_MESSAGES = 10;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** `YYYY-MM-DD` — compact enough to date 150 evidence lines cheaply. */
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
- * True when the model hand-wrote its JSON into the summary field.
- *
- * Observed in production: asked for an empty result, Sonnet returned
- * `{"summary": "{\"summary\": \"\", \"suggested\": {}}"}` — the whole object
- * serialised into the string field. The prompt no longer describes JSON
- * literals, which is the actual fix, but embedding that text would silently
- * poison the search corpus, so it's worth checking cheaply.
+ * True when the model hand-wrote its JSON into the summary field rather than
+ * filling it. Rare now the prompt no longer describes JSON, but embedding that
+ * text would silently poison the search corpus.
  */
 function looksLikeSerialisedJson(text: string): boolean {
   const t = text.trim();
@@ -105,29 +77,17 @@ function looksLikeSerialisedJson(text: string): boolean {
 }
 
 /**
- * Cosine floor below which a member is not a match at all.
+ * Cosine floor below which a member isn't a match. Without one, search returns
+ * the nearest neighbour however distant — naming someone for "rust" who has
+ * never touched it.
  *
- * Without a floor, `searchSemantic` returns the nearest neighbour however
- * distant it is — "rust systems programming" would confidently name someone who
- * has never touched Rust, because they were the closest of the candidates.
+ * Not `recall-calibration.getSimilarityFloor()`: that's derived from
+ * `bot_memories`, which is one-line facts. Member summaries are prose and score
+ * lower — measured true matches at 0.435-0.503 against noise below 0.28, where
+ * the memory floor sat at 0.482 and would have rejected a real match.
  *
- * `recall-calibration.getSimilarityFloor()` is deliberately NOT reused here: it
- * derives its floor from the `bot_memories` corpus, which is one-line facts.
- * Member summaries are multi-sentence prose, and their scores distribute lower.
- * Measured against a real generated summary:
- *
- *   0.503  "mosque community technology"      true match
- *   0.435  "product design and gamification"  true match
- *   0.277  "cybersecurity job opportunities"  noise
- *   0.150  "underwater basket weaving"        noise
- *   0.142  "rust systems programming"         noise
- *
- * The memory floor at the time was 0.482 — high enough to reject the 0.435 true
- * match. 0.35 sits in the gap between the two clusters.
- *
- * This is measured on a thin sample. Once a decent number of members have
- * profiles, this should be calibrated from the corpus the way
- * `recall-calibration.ts` does for memories rather than left as a constant.
+ * Measured on a thin sample; worth calibrating from the corpus once enough
+ * members have profiles.
  */
 export const MEMBER_SIMILARITY_FLOOR = 0.35;
 
@@ -140,10 +100,8 @@ const generationSchema = z.object({
         "Read only by the AI, never shown to anyone. Empty when the evidence " +
         "is too thin to say anything useful.",
     ),
-  // Defaulted rather than required: when there's nothing worth suggesting the
-  // model tends to omit the key entirely, and a hard requirement turns that
-  // into a NoObjectGeneratedError for exactly the thin-evidence members who
-  // were never going to produce a profile anyway.
+  // Defaulted: the model omits the key when there's nothing to suggest, and a
+  // hard requirement turns that correct answer into a NoObjectGeneratedError.
   suggested: aiSuggestedSchema.default({}).describe(
     "Candidate profile field values. Omit entirely when nothing is supported.",
   ),
@@ -237,14 +195,9 @@ async function searchLexical(
 }
 
 /**
- * Stamp `ai_generated_at` without writing a profile.
- *
- * Called when a member is skipped, so the staleness predicate treats them as
- * up to date. Without this they stay `ai_generated_at IS NULL` and are picked
- * up again every single night — and a member whose evidence is too thin for a
- * summary would burn a model call on every one of those runs. They still come
- * back the moment genuinely new evidence lands, because the predicate compares
- * against this timestamp.
+ * Stamp `ai_generated_at` for a skipped member, so the staleness predicate
+ * treats them as current. Without it they're re-selected every run, burning a
+ * model call each time. New evidence still brings them back.
  */
 export interface SweepResult {
   generated: number;
@@ -252,12 +205,7 @@ export interface SweepResult {
   failed: number;
 }
 
-/**
- * Run a list of members through generation: paced, retried, fault-isolated.
- *
- * Shared by the boot backfill and the monthly sweep — they differ only in which
- * members they select.
- */
+/** Paced, retried, fault-isolated. Shared by the boot backfill and monthly sweep. */
 async function processMembers(
   userIds: string[],
   label: string,

@@ -94,13 +94,9 @@ export const telegramMessages = pgTable(
     embedding: vector("embedding", { dimensions: 512 }),
 
     /**
-     * When memory extraction last considered this message.
-     *
-     * Set whether or not any fact came out of it, so the backfill is idempotent:
-     * it selects unstamped messages, so re-running is a no-op and a run
-     * interrupted mid-way resumes where it stopped rather than starting over.
-     * Mirrors how `embedding` drives its own backfill.
-     */
+      * When extraction last considered this message — set even if no fact came
+      * out of it, so the backfill can select unstamped rows and stay idempotent.
+      */
     memoryExtractedAt: timestamp("memory_extracted_at"),
   },
   (table) => [
