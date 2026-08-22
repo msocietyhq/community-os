@@ -21,9 +21,33 @@ import {
   CHIME_IN_CONTEXT_MESSAGES,
 } from "../lib/chime-in";
 import { judgeChimeIn } from "../lib/chime-in-judge";
-import { markdownToHtml } from "../lib/markdown";
+import { toTelegramMarkdown } from "../lib/markdown";
 
 export const aiChatHandler = new Composer<BotContext>();
+
+/**
+ * Send model output as MarkdownV2, falling back to plain text if Telegram
+ * rejects it.
+ *
+ * Telegram refuses a whole message when a parse mode doesn't validate, so a
+ * single formatting edge case would otherwise turn a good answer into nothing
+ * at all. The retry drops formatting rather than the reply.
+ */
+async function replyFormatted(
+  ctx: BotContext,
+  text: string,
+  options: Parameters<BotContext["reply"]>[1] = {},
+) {
+  try {
+    return await ctx.reply(toTelegramMarkdown(text), {
+      ...options,
+      parse_mode: "MarkdownV2",
+    });
+  } catch (err) {
+    console.error("[ai-chat] MarkdownV2 rejected, sending plain:", err);
+    return await ctx.reply(text, options);
+  }
+}
 
 aiChatHandler.on("message:text", async (ctx) => {
   const botUsername = env.TELEGRAM_BOT_USERNAME;
@@ -152,8 +176,7 @@ aiChatHandler.on("message:text", async (ctx) => {
   // a group never reaches the handler — it isn't a mention or a reply.
   let questionMessageId: number | null = null;
   const askUser = async (question: string) => {
-    const sent = await ctx.reply(markdownToHtml(question), {
-      parse_mode: "HTML",
+    const sent = await replyFormatted(ctx, question, {
       reply_markup: { force_reply: true, selective: true },
     });
     questionMessageId = sent.message_id;
@@ -205,9 +228,8 @@ aiChatHandler.on("message:text", async (ctx) => {
       return;
     }
 
-    const sentMsg = await ctx.reply(markdownToHtml(responseText), {
+    const sentMsg = await replyFormatted(ctx, responseText, {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
-      parse_mode: "HTML",
     });
 
     rememberTurn(sentMsg.message_id, responseMessages);

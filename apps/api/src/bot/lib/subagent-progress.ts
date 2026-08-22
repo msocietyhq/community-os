@@ -197,6 +197,8 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
 
   web_search: "searching the web",
   fetch_url: "reading a page",
+  hacker_news_search: "searching Hacker News",
+  github_search_repos: "searching GitHub",
 
   get_github_org: "reading the GitHub org",
   get_github_repo: "reading the repo",
@@ -291,6 +293,9 @@ const TOOL_PHRASES: Partial<Record<TrackedToolName, (args: Args) => string | und
   get_github_org: (a) => wrap("reading org", short(a.owner)),
 
   web_search: (a) => wrap("searching for", short(a.query)),
+  hacker_news_search: (a) =>
+    wrap(a.kind === "comment" ? "reading HN opinions on" : "searching HN for", short(a.query)),
+  github_search_repos: (a) => wrap("searching GitHub for", short(a.query)),
   fetch_url: (a) => {
     const raw = short(a.url);
     if (!raw) return undefined;

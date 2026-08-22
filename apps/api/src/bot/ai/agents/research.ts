@@ -7,10 +7,12 @@ import {
 } from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 import { truncate } from "../../../lib/text";
-import { htmlToText } from "../../lib/html-to-text";
+import { htmlToMarkdown } from "../../lib/html-to-markdown";
 import { env } from "../../../env";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
+const HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search";
+const GITHUB_SEARCH_URL = "https://api.github.com/search/repositories";
 
 /** Per-result text budget. Five results at this size fit comfortably in Haiku. */
 const RESULT_TEXT_MAX = 1500;
@@ -99,6 +101,193 @@ export function createResearchTools(_ctx: ToolContext) {
       },
     }),
 
+    hacker_news_search: tool({
+      description:
+        "Search Hacker News for what working engineers actually said about something. Use for opinions, real-world experience reports, and whether a tool is worth adopting — the comments carry judgement a vendor page never will. Also the best way to find well-received new projects.",
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe("Keywords to search for, e.g. 'sqlite in production'"),
+        kind: z
+          .enum(["story", "comment", "show_hn"])
+          .optional()
+          .default("story")
+          .describe(
+            "story = submissions, comment = discussion text (best for opinions), show_hn = project launches",
+          ),
+        min_points: z
+          .number()
+          .optional()
+          .describe("Only results scoring above this. Defaults to 10 for stories, unset for comments."),
+        days: z
+          .number()
+          .optional()
+          .describe("Restrict to the last N days. Omit to search all time."),
+        num_results: z.number().min(1).max(10).optional().default(5),
+      }),
+      execute: async ({ query, kind, min_points, days, num_results }) => {
+        console.log("[research-agent:hacker_news_search]", kind, query);
+
+        const filters: string[] = [];
+        // Comment scores are mostly 0, so a points floor there hides everything.
+        const points = min_points ?? (kind === "comment" ? undefined : 10);
+        if (points !== undefined) filters.push(`points>${points}`);
+        if (days !== undefined) {
+          filters.push(
+            `created_at_i>${Math.floor(Date.now() / 1000) - days * 86400}`,
+          );
+        }
+
+        const params = new URLSearchParams({
+          query,
+          tags: kind,
+          hitsPerPage: String(num_results ?? 5),
+        });
+        if (filters.length) params.set("numericFilters", filters.join(","));
+
+        try {
+          const res = await fetch(`${HN_SEARCH_URL}?${params}`, {
+            headers: { "User-Agent": "msociety-bot/1.0 (+https://msociety.dev)" },
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          });
+          if (!res.ok) return { error: `Hacker News search failed (${res.status})` };
+
+          const json = (await res.json()) as {
+            hits?: {
+              objectID?: string;
+              title?: string;
+              story_title?: string;
+              url?: string;
+              points?: number;
+              num_comments?: number;
+              author?: string;
+              created_at?: string;
+              comment_text?: string;
+            }[];
+          };
+
+          const hits = json.hits ?? [];
+          if (hits.length === 0) return { results: [], note: "No matching discussions." };
+
+          return {
+            results: hits.map((h) => ({
+              title: h.title ?? h.story_title ?? "Untitled",
+              // The discussion is usually the point; the linked article is extra.
+              discussion: h.objectID
+                ? `https://news.ycombinator.com/item?id=${h.objectID}`
+                : undefined,
+              url: h.url,
+              points: h.points,
+              comments: h.num_comments,
+              author: h.author,
+              date: h.created_at?.slice(0, 10),
+              text: h.comment_text
+                ? clip(htmlToMarkdown(h.comment_text), RESULT_TEXT_MAX)
+                : undefined,
+            })),
+          };
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.error("[research-agent:hacker_news_search] failed:", reason);
+          return { error: `Hacker News search failed: ${reason}` };
+        }
+      },
+    }),
+
+    github_search_repos: tool({
+      description:
+        "Find public GitHub repositories by topic, language or popularity. Use when someone asks what libraries exist for a problem, what's new in an ecosystem, or how popular a project is. Returns real star counts and descriptions.",
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe("Keywords, e.g. 'postgres migration tool'"),
+        language: z
+          .string()
+          .optional()
+          .describe("Restrict to a language, e.g. 'rust'"),
+        min_stars: z.number().optional().describe("Only repos above this star count"),
+        created_after: z
+          .string()
+          .optional()
+          .describe("ISO date (YYYY-MM-DD) — use to find recently created projects"),
+        sort: z
+          .enum(["stars", "updated", "forks"])
+          .optional()
+          .default("stars")
+          .describe("Ranking. 'updated' surfaces actively maintained projects."),
+        num_results: z.number().min(1).max(10).optional().default(5),
+      }),
+      execute: async ({ query, language, min_stars, created_after, sort, num_results }) => {
+        const qualifiers = [
+          query,
+          language ? `language:${language}` : "",
+          min_stars !== undefined ? `stars:>${min_stars}` : "",
+          created_after ? `created:>${created_after}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        console.log("[research-agent:github_search_repos]", qualifiers);
+
+        const headers: Record<string, string> = {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        };
+        if (env.GITHUB_TOKEN) headers.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
+
+        const url = `${GITHUB_SEARCH_URL}?q=${encodeURIComponent(qualifiers)}&sort=${sort ?? "stars"}&order=desc&per_page=${num_results ?? 5}`;
+
+        try {
+          const res = await fetch(url, {
+            headers,
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          });
+          if (res.status === 403) {
+            return {
+              error:
+                "GitHub rate limit reached. Try again shortly, or answer from search results instead.",
+            };
+          }
+          if (!res.ok) return { error: `GitHub search failed (${res.status})` };
+
+          const json = (await res.json()) as {
+            total_count?: number;
+            items?: {
+              full_name: string;
+              html_url: string;
+              description: string | null;
+              stargazers_count: number;
+              language: string | null;
+              created_at: string;
+              pushed_at: string;
+              archived: boolean;
+            }[];
+          };
+
+          const items = json.items ?? [];
+          if (items.length === 0) return { results: [], note: "No matching repositories." };
+
+          return {
+            totalMatches: json.total_count,
+            results: items.map((r) => ({
+              name: r.full_name,
+              url: r.html_url,
+              stars: r.stargazers_count,
+              language: r.language,
+              description: r.description,
+              created: r.created_at.slice(0, 10),
+              lastPush: r.pushed_at.slice(0, 10),
+              archived: r.archived || undefined,
+            })),
+          };
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.error("[research-agent:github_search_repos] failed:", reason);
+          return { error: `GitHub search failed: ${reason}` };
+        }
+      },
+    }),
+
     fetch_url: tool({
       description:
         "Fetch a specific web page and return its readable text. Use when someone shares a link, or to read a page found via web_search in full.",
@@ -138,7 +327,7 @@ export function createResearchTools(_ctx: ToolContext) {
           }
 
           const body = await res.text();
-          const text = contentType.includes("html") ? htmlToText(body) : body.trim();
+          const text = contentType.includes("html") ? htmlToMarkdown(body) : body.trim();
 
           return {
             url: res.url,
@@ -177,8 +366,15 @@ export function createResearchAgent(ctx: ToolContext) {
         model: aiService.models.fast,
         system: `You research questions using the live web for the MSOCIETY community bot. Today's date is ${today}.
 
+Pick the tool that fits the question:
+- web_search for facts, news, docs, anything current.
+- hacker_news_search when the question is really "is this any good?" — opinions, war stories, whether a tool survives contact with production. Search comments for judgement, show_hn for new projects.
+- github_search_repos for "what libraries exist for X", ecosystem surveys, or real popularity numbers.
+- fetch_url when a result's excerpt isn't enough, or someone shares a link.
+
 Search first, then fetch a page only when the excerpts don't answer the question.
 Prefer primary sources (official docs, release notes, the project's own site) over aggregators.
+Star counts and HN scores come from the tools — never estimate them yourself.
 
 Answer in 2-4 sentences. Always cite the source URL you relied on.
 If the results don't actually answer the question, say so plainly rather than guessing.

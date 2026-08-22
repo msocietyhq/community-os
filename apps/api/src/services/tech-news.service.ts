@@ -51,10 +51,15 @@ const SEARCH_QUERIES: { section: Section; query: string }[] = [
  * writing about — the spread is what keeps infrastructure, security and systems
  * projects in the running at all.
  */
-const REPO_QUERIES = [
-  "new open source infrastructure, database or systems programming project",
-  "new open source security, privacy or developer productivity tool",
-];
+// Repo discovery is Hacker News only, deliberately.
+//
+// Exa was tried and dropped: with no date filter it returned an identical set
+// on every run (measured 20/20 across back-to-back calls), so the same
+// perennials resurfaced week after week, and it contributed almost none of the
+// picks worth keeping. Star-ranking GitHub's own 7-day window was tried too and
+// yields a noisy pool — real projects sitting next to `deploy-vercel` and
+// capability-report repos. An HN front-page slot is a human vouching for
+// something; a star count in a rolling window is not.
 
 export interface NewsItem {
   title: string;
@@ -102,20 +107,35 @@ const pickSchema = z.object({
     .describe("One sentence on why this matters, for this audience"),
 });
 
+/**
+ * Every section defaults to empty. The prompt tells the model that leaving a
+ * section out is a valid answer, and it takes that literally by omitting the
+ * key — so a required array turns the correct response into a
+ * `NoObjectGeneratedError` and loses the whole roundup over a quiet week for
+ * Singapore or Islamic tech. Observed in a real run. Same trap as `suggested`
+ * in ai-profile.service.
+ */
 const curationSchema = z.object({
   stories: z
     .array(pickSchema)
+    .default([])
     .describe("The 3-5 strongest global stories, best first. Empty if none are good."),
   repos: z
     .array(pickSchema)
+    .default([])
     .describe("The 2-4 most interesting repos, best first. Empty if none are."),
   local: z
     .array(pickSchema)
+    .default([])
     .describe("Up to 3 Singapore/SEA headlines, best first. Empty if none are good."),
   islamic: z
     .array(pickSchema)
+    .default([])
     .describe("Up to 3 Muslim/Islamic tech headlines, best first. Empty if none are good."),
 });
+
+/** Exported for testing — the omitted-section case is easy to regress. */
+export const curationSchemaForTest = curationSchema;
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -378,49 +398,34 @@ function keepRepo(repo: z.infer<typeof repoSchema>, oldestAllowed: Date): boolea
 }
 
 /**
- * Discovery is HN first, Exa second: HN surfaces projects an engineering
- * audience already vouched for, while Exa reflects whatever the web is writing
- * about — which skews hard to whatever is fashionable that month. Either way
- * every number in the post comes from the GitHub API, never from the finder.
+ * Repos that reached the Hacker News front page in the last week.
+ *
+ * HN only finds them; every number in the post comes from the GitHub API, so a
+ * link someone posted can never put an invented star count in the roundup.
+ *
+ * An empty result is a fine outcome — the repos section simply doesn't render.
+ * Padding it from a star-ranked pool is what produced the junk picks.
  */
 async function discoverRepos(hnStories: HnStory[]): Promise<Repo[]> {
   const pointsByPath = new Map<string, number>();
-  const paths: string[] = [];
-
-  const consider = (url: string, points?: number) => {
-    const path = parseRepoPath(url);
-    if (!path) return;
+  for (const story of hnStories) {
+    const path = parseRepoPath(story.url);
+    if (!path) continue;
     const key = path.toLowerCase();
-    if (pointsByPath.has(key)) return;
-    pointsByPath.set(key, points ?? 0);
-    paths.push(path);
-  };
-
-  for (const story of hnStories) consider(story.url, story.points);
-
-  const exaBatches = await Promise.all(
-    REPO_QUERIES.map((query) =>
-      exaSearch({
-        query,
-        type: "auto",
-        numResults: 10,
-        includeDomains: ["github.com"],
-        contents: { text: { maxCharacters: 200 } },
-      }),
-    ),
-  );
-  for (const result of exaBatches.flat()) {
-    if (result.url) consider(result.url);
+    // Keep the highest-scoring submission when a repo was posted more than once.
+    if ((pointsByPath.get(key) ?? -1) < story.points) {
+      pointsByPath.set(key, story.points);
+    }
   }
 
-  const selected = paths.slice(0, MAX_REPO_ENRICHMENTS);
-  if (selected.length === 0) return [];
+  const paths = [...pointsByPath.keys()].slice(0, MAX_REPO_ENRICHMENTS);
+  if (paths.length === 0) return [];
 
   const oldestAllowed = new Date();
   oldestAllowed.setMonth(oldestAllowed.getMonth() - MAX_REPO_AGE_MONTHS);
 
   const enriched = await Promise.all(
-    selected.map(async (path): Promise<Repo | null> => {
+    paths.map(async (path): Promise<Repo | null> => {
       const parsed = repoSchema.safeParse(await githubFetch(`/repos/${path}`));
       if (!parsed.success || !keepRepo(parsed.data, oldestAllowed)) return null;
 
@@ -431,40 +436,14 @@ async function discoverRepos(hnStories: HnStory[]): Promise<Repo[]> {
         stars: repo.stargazers_count,
         language: repo.language,
         description: repo.description,
-        hnPoints: pointsByPath.get(path.toLowerCase()) || undefined,
+        hnPoints: pointsByPath.get(path) || undefined,
       };
     }),
   );
 
-  return enriched.filter((r): r is Repo => r !== null);
-}
-
-/**
- * Fallback when discovery comes up empty — ranks by raw stars among recently
- * created repos. Blunter than buzz, but keeps the section alive rather than
- * silently dropping it.
- */
-async function fetchRisingRepos(): Promise<Repo[]> {
-  const query = `created:>${daysAgo(30)} stars:>${MIN_REPO_STARS}`;
-  const raw = await githubFetch(
-    `/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=20`,
-  );
-
-  const parsed = z.object({ items: z.array(repoSchema).optional() }).safeParse(raw);
-  if (!parsed.success) return [];
-
-  const oldestAllowed = new Date();
-  oldestAllowed.setMonth(oldestAllowed.getMonth() - MAX_REPO_AGE_MONTHS);
-
-  return (parsed.data.items ?? [])
-    .filter((r) => keepRepo(r, oldestAllowed))
-    .map((r) => ({
-      name: r.full_name,
-      url: r.html_url,
-      stars: r.stargazers_count,
-      language: r.language,
-      description: r.description,
-    }));
+  return enriched
+    .filter((r): r is Repo => r !== null)
+    .sort((a, b) => (b.hnPoints ?? 0) - (a.hnPoints ?? 0));
 }
 
 // ── Curation ────────────────────────────────────────────────
@@ -556,12 +535,10 @@ export const techNewsService = {
       if (key) hnPointsByUrl.set(key, story.points);
     }
 
-    const [exaStories, discovered] = await Promise.all([
+    const [exaStories, rawRepos] = await Promise.all([
       fetchStories(hnPointsByUrl),
       discoverRepos(hnStories),
     ]);
-
-    const rawRepos = discovered.length > 0 ? discovered : await fetchRisingRepos();
 
     // HN stories that aren't repo links stand as news candidates on their own.
     const hnNews: Omit<Candidate, "id">[] = hnStories

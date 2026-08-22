@@ -1,64 +1,83 @@
 import { describe, expect, test } from "bun:test";
-import { markdownToHtml } from "./markdown";
+import { escapeMarkdownV2, toTelegramMarkdown } from "./markdown";
 
-/**
- * Everything the bot sends is LLM output rendered with parse_mode: "HTML" —
- * including ask_user questions, which may quote a member's own words back.
- * Escaping happens before markdown conversion, so injected markup is inert.
- */
-describe("markdownToHtml", () => {
-  test("plain text passes through", () => {
-    expect(markdownToHtml("hello there")).toBe("hello there");
+/** Telegram rejects a message when any reserved character is left unescaped. */
+const RESERVED = "_*[]()~`>#+-=|{}.!";
+
+function unescapedReserved(out: string): string[] {
+  const bad: string[] = [];
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i]!;
+    if (!RESERVED.includes(ch)) continue;
+    if (i > 0 && out[i - 1] === "\\") continue;
+    bad.push(ch);
+  }
+  return bad;
+}
+
+describe("toTelegramMarkdown", () => {
+  // Each of these was mangled by the regex implementation this replaced.
+  test("leaves snake_case identifiers intact", () => {
+    const out = toTelegramMarkdown("Set max_output_tokens and min_p in your_config.json");
+    expect(out).toContain("max\\_output\\_tokens");
+    expect(out).not.toContain("<i>");
   });
 
-  test("escapes HTML before converting markdown", () => {
-    expect(markdownToHtml("<script>alert(1)</script>")).toBe(
-      "&lt;script&gt;alert(1)&lt;/script&gt;",
+  test("keeps a URL containing brackets whole", () => {
+    const out = toTelegramMarkdown(
+      "See [the docs](https://en.wikipedia.org/wiki/Foo_(bar)) for more.",
     );
+    // The regex version truncated the href at the first inner paren.
+    expect(out).toContain("Foo\\_\\(bar\\)");
   });
 
-  test("escapes ampersands", () => {
-    expect(markdownToHtml("Tom & Jerry")).toBe("Tom &amp; Jerry");
+  test("renders a fenced code block as a code block", () => {
+    const out = toTelegramMarkdown("Try:\n```ts\nconst a = arr[0] * 2;\n```");
+    expect(out).toContain("```");
+    // Contents of a code fence must not be escaped or turned into emphasis.
+    expect(out).toContain("const a = arr[0] * 2;");
   });
 
-  test("a member's injected tags cannot become real markup", () => {
-    const out = markdownToHtml('Did you mean <b onclick="x">this</b>?');
-    // The text survives verbatim; what matters is that no real tag is emitted.
-    expect(out).toContain("&lt;b onclick=");
-    expect(out).not.toMatch(/<b[ >]/);
-    expect(out).not.toContain("</b>");
+  test("does not italicise arithmetic with underscores", () => {
+    const out = toTelegramMarkdown("The formula a_1 + b_2 = c_3 holds.");
+    expect(out).not.toContain("<i>");
+    expect(out).toContain("a\\_1");
   });
 
-  test("bold, italic and code convert to Telegram tags", () => {
-    expect(markdownToHtml("**bold**")).toBe("<b>bold</b>");
-    expect(markdownToHtml("*italic*")).toBe("<i>italic</i>");
-    expect(markdownToHtml("_italic_")).toBe("<i>italic</i>");
-    expect(markdownToHtml("`code`")).toBe("<code>code</code>");
+  test("converts emphasis to MarkdownV2", () => {
+    const out = toTelegramMarkdown("**bold** and *italic*");
+    expect(out).toContain("*bold*");
+    expect(out).toContain("_italic_");
   });
 
-  test("links convert to anchors", () => {
-    expect(markdownToHtml("[msociety](https://msociety.dev)")).toBe(
-      '<a href="https://msociety.dev">msociety</a>',
+  test("escapes constructs Telegram has no syntax for", () => {
+    // A pipe table would otherwise break the parse.
+    const out = toTelegramMarkdown("| a | b |\n|---|---|\n| 1 | 2 |");
+    expect(unescapedReserved(out.replace(/```[\s\S]*?```/g, ""))).toEqual([]);
+  });
+
+  test("leaves no unescaped reserved characters in prose", () => {
+    const out = toTelegramMarkdown(
+      "Costs $5.00 (roughly) — see item #3! Ratio is 1+2=3.",
     );
+    expect(unescapedReserved(out)).toEqual([]);
   });
 
-  test("bold wins over italic on doubled asterisks", () => {
-    expect(markdownToHtml("**strong**")).not.toContain("<i>");
+  test("returns a string for empty input rather than throwing", () => {
+    expect(typeof toTelegramMarkdown("")).toBe("string");
+  });
+});
+
+describe("escapeMarkdownV2", () => {
+  test("escapes every reserved character", () => {
+    expect(unescapedReserved(escapeMarkdownV2(RESERVED))).toEqual([]);
   });
 
-  test("italic does not span newlines", () => {
-    // A lone asterisk on one line shouldn't italicise the rest of the message.
-    expect(markdownToHtml("2 * 3\nand 4 * 5")).toBe("2 * 3\nand 4 * 5");
+  test("escapes backslashes so they can't form an escape pair", () => {
+    expect(escapeMarkdownV2("a\\b")).toBe("a\\\\b");
   });
 
-  test("empty input is safe", () => {
-    expect(markdownToHtml("")).toBe("");
-  });
-
-  test("a question containing markup is safe to send", () => {
-    const question = 'Which event — "<Tech Halaqah>" or "AI & Ethics"?';
-    const out = markdownToHtml(question);
-    expect(out).toContain("&lt;Tech Halaqah&gt;");
-    expect(out).toContain("AI &amp; Ethics");
+  test("leaves ordinary prose alone", () => {
+    expect(escapeMarkdownV2("hello world")).toBe("hello world");
   });
 });
