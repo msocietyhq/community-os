@@ -103,6 +103,23 @@ export type AdvisorTierLimit = (typeof ADVISOR_TIER_LIMITS)[number];
 const money = (v: number | null) => (v === null ? "unlimited" : `$${v}`);
 const onOff = (v: boolean) => (v ? "on" : "off");
 
+/**
+ * One-line preview of a long text value, for a menu button label.
+ *
+ * `String.prototype.slice` cuts by UTF-16 code unit, so truncating mid-emoji
+ * leaves a lone surrogate. Telegram rejects that outright — "button text must
+ * be encoded in UTF-8" — and the whole menu page fails to render, not just the
+ * one button. `Array.from` iterates by code point, so a cut always lands on a
+ * character boundary.
+ *
+ * Newlines are collapsed too: a button label spanning lines renders badly.
+ */
+export function previewText(value: string, max = 30): string {
+  const oneLine = value.replace(/\s+/g, " ").trim();
+  const points = Array.from(oneLine);
+  return points.length <= max ? oneLine : `${points.slice(0, max).join("")}…`;
+}
+
 // ── Defaults lifted from the current hardcoded copy ──────────
 
 export const DEFAULT_WELCOME_TEXT = `Welcome to MSOCIETY, {name}! 👋
@@ -306,7 +323,7 @@ export const BOT_SETTINGS = {
       "Sent once when someone joins the group or first speaks. {name} becomes a tappable mention. Telegram HTML is allowed and checked by preview.",
     group: "welcome",
     control: "text",
-    format: (v) => `${v.slice(0, 30)}…`,
+    format: (v) => previewText(v),
   }),
   "welcome.returningText": def<string>({
     schema: z.string().min(1).max(2000),
@@ -316,7 +333,7 @@ export const BOT_SETTINGS = {
       "Sent when someone who previously left rejoins the group. Same placeholders as the new member welcome.",
     group: "welcome",
     control: "text",
-    format: (v) => `${v.slice(0, 30)}…`,
+    format: (v) => previewText(v),
   }),
   "welcome.showProfileButton": def<boolean>({
     schema: z.boolean(),

@@ -51,6 +51,23 @@ describe("renderIndexPage", () => {
       expect(() => renderIndexPage(group, snapshot)).not.toThrow();
     }
   });
+
+  // Telegram rejects a lone surrogate with "button text must be encoded in
+  // UTF-8" and fails the WHOLE message — one bad label takes down the entire
+  // page. The Welcome index hit this for real: a 30-code-unit slice cut 👋 in
+  // half. A UTF-8 round-trip replaces invalid sequences, so inequality
+  // detects precisely what Telegram would reject.
+  test("every button label on every index page is valid UTF-8", () => {
+    for (const group of SETTING_GROUPS) {
+      const page = renderIndexPage(group, snapshot);
+      for (const button of page.keyboard.inline_keyboard.flat()) {
+        expect(
+          Buffer.from(button.text, "utf8").toString("utf8"),
+          `${group}: "${button.text}" is not valid UTF-8`,
+        ).toBe(button.text);
+      }
+    }
+  });
 });
 
 describe("renderSettingPage", () => {

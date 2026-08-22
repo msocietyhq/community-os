@@ -5,6 +5,7 @@ import {
   SETTING_GROUPS,
   callbackFor,
   isPaused,
+  previewText,
   type PauseState,
 } from "./bot-settings";
 
@@ -44,6 +45,22 @@ describe("registry invariants", () => {
     }
   });
 
+  // Telegram rejects a lone surrogate with "button text must be encoded in
+  // UTF-8" and fails the ENTIRE message, not just the offending button. A
+  // UTF-8 round-trip replaces invalid sequences with U+FFFD, so inequality
+  // detects exactly what Telegram would reject.
+  test("no formatted default contains a lone surrogate", () => {
+    for (const key of SETTING_KEYS) {
+      const def = BOT_SETTINGS[key];
+      const format = def.format as (v: unknown) => string;
+      const out = format(def.default);
+      expect(
+        Buffer.from(out, "utf8").toString("utf8"),
+        `${key} formats to invalid UTF-8`,
+      ).toBe(out);
+    }
+  });
+
   test("format never throws on the default value", () => {
     for (const key of SETTING_KEYS) {
       const def = BOT_SETTINGS[key];
@@ -80,5 +97,35 @@ describe("isPaused", () => {
       until: new Date("2026-08-22T11:00:00Z"),
     };
     expect(isPaused(s, now)).toBe(false);
+  });
+});
+
+describe("previewText", () => {
+  test("leaves a short string alone", () => {
+    expect(previewText("hello")).toBe("hello");
+  });
+
+  test("collapses newlines so a button label stays on one line", () => {
+    expect(previewText("a\n\nb   c")).toBe("a b c");
+  });
+
+  // The bug this exists for: slice(0, 30) cut U+1F44B in half and Telegram
+  // rejected the whole menu page.
+  test("never splits a surrogate pair", () => {
+    const text = `${"a".repeat(29)}👋 tail`;
+    const out = previewText(text);
+    expect(Buffer.from(out, "utf8").toString("utf8")).toBe(out);
+    expect(out.endsWith("…")).toBe(true);
+  });
+
+  test("counts by code point, not code unit", () => {
+    // 5 emoji = 10 UTF-16 units but 5 code points, so nothing is truncated.
+    expect(previewText("👋👋👋👋👋", 5)).toBe("👋👋👋👋👋");
+  });
+
+  test("truncates on a boundary when the limit lands mid-emoji", () => {
+    const out = previewText("👋👋👋", 2);
+    expect(out).toBe("👋👋…");
+    expect(Buffer.from(out, "utf8").toString("utf8")).toBe(out);
   });
 });
