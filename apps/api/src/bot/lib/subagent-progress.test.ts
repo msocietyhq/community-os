@@ -4,6 +4,7 @@ import {
   SubagentProgress,
   type Scheduler,
   trackToolCalls,
+  SUBAGENT_TOOLS,
   toolLabel,
   describeToolCall,
   graphqlRootField,
@@ -1233,5 +1234,108 @@ describe("main-agent root entry", () => {
     progress.start("Research", "rate limits");
     await settle();
     expect(sink.current()).toContain("Running 1 subagent");
+  });
+});
+
+describe("SUBAGENT_TOOLS", () => {
+  // Each of these already renders as a nested entry, so logging the call too
+  // showed the same work twice — once as `↳ events`, once as "✅ Events — …".
+  test("a sub-agent launcher is not logged as a main-agent tool call", async () => {
+    const sink = makeSink();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      revealDelayMs: 0,
+      minEditIntervalMs: 0,
+    });
+    const root = progress.rootActivity("Thinking");
+
+    const tools = {
+      events: {
+        execute: async () => {
+          root.start("Events", "list all events");
+        },
+      },
+    } as unknown as Record<string, never>;
+
+    const wrapped = trackToolCalls(tools, root, SUBAGENT_TOOLS);
+    await (wrapped as Record<string, { execute: () => Promise<void> }>)
+      .events!.execute();
+    await settle();
+
+    const text = sink.current() ?? "";
+    expect(text).toContain("Events — list all events");
+    // The `↳ events` line the wrapper would otherwise have added.
+    expect(text).not.toContain("↳ events");
+  });
+
+  test("an ordinary tool is still logged", async () => {
+    const sink = makeSink();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      revealDelayMs: 0,
+      minEditIntervalMs: 0,
+    });
+    const root = progress.rootActivity("Thinking");
+
+    const tools = {
+      recall_memory: { execute: async () => {} },
+    } as unknown as Record<string, never>;
+
+    const wrapped = trackToolCalls(tools, root, SUBAGENT_TOOLS);
+    await (wrapped as Record<string, { execute: () => Promise<void> }>)
+      .recall_memory!.execute();
+    await settle();
+
+    expect(sink.current()).toContain("recall memory");
+  });
+
+  // Catches a rename: every entry must be a tool the progress display knows.
+  test("every name is a labelled tool or a sub-agent delegate", () => {
+    const delegates = ["events", "members", "venues", "projects", "research", "github"];
+    for (const name of SUBAGENT_TOOLS) {
+      const known = delegates.includes(name) || toolLabel(name) !== name;
+      expect(known, `${name} is not a recognised tool`).toBe(true);
+    }
+  });
+});
+
+describe("reveal timing", () => {
+  // A turn the model answers straight from context has nothing to report, and
+  // used to flash "⏳ Pondering" for a moment before deleting itself.
+  test("opening the root alone never posts a message", async () => {
+    const sink = makeSink();
+    const clock = makeScheduler();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      scheduler: clock.scheduler,
+      minEditIntervalMs: 0,
+    });
+
+    progress.rootActivity("Pondering");
+    expect(clock.pendingCount()).toBe(0);
+
+    clock.fire();
+    await settle();
+    await progress.finish();
+
+    expect(sink.sent).toEqual([]);
+  });
+
+  test("the first tool call arms the reveal", async () => {
+    const sink = makeSink();
+    const clock = makeScheduler();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      scheduler: clock.scheduler,
+      minEditIntervalMs: 0,
+    });
+
+    const root = progress.rootActivity("Pondering");
+    root.toolStart("recall_memory", {});
+    expect(clock.pendingCount()).toBe(1);
+
+    clock.fire();
+    await settle();
+    expect(sink.sent).toHaveLength(1);
   });
 });

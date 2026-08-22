@@ -17,6 +17,7 @@ import { guardToolResult } from "./tool-result-guard";
 import {
   SubagentProgress,
   trackToolCalls,
+  SUBAGENT_TOOLS,
   type ProgressSink,
 } from "../lib/subagent-progress";
 
@@ -138,7 +139,9 @@ export async function runAgent({
     proposeSettings,
   });
 
-  const trackedTools = trackToolCalls(tools, rootActivity);
+  // SUBAGENT_TOOLS are skipped: each already renders as a nested entry, so
+  // logging the call as well showed the same work twice.
+  const trackedTools = trackToolCalls(tools, rootActivity, SUBAGENT_TOOLS);
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 

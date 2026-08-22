@@ -13,6 +13,7 @@
 
 import type { Tool } from "ai";
 import { FormattedString } from "@grammyjs/parse-mode";
+import { ADVISOR_TOOL_NAMES } from "../ai/advisor";
 import { clip } from "../../lib/text";
 import type { EventsToolName } from "../ai/agents/events";
 import type { MembersToolName } from "../ai/agents/members";
@@ -110,10 +111,6 @@ export interface SubagentHandle {
 }
 
 /**
- * How long work must run before the status message appears. Fast lookups
- * finish silently rather than flashing a message for half a second.
- */
-/**
  * What the main agent's own line is called while it works.
  *
  * Rotated per turn purely for texture — the label carries no information, and
@@ -140,6 +137,10 @@ export function pickThinkingVerb(
   return THINKING_VERBS[index] ?? THINKING_VERBS[0];
 }
 
+/**
+ * How long work must run before the status message appears. Fast lookups
+ * finish silently rather than flashing a message for half a second.
+ */
 export const REVEAL_DELAY_MS = 1500;
 
 /** Telegram rejects messages over 4096 characters; stay well clear. */
@@ -541,7 +542,9 @@ export class SubagentProgress implements ProgressHost {
   rootActivity(name: string = pickThinkingVerb()): SubagentActivity {
     const entry: SubagentEntry = { ...newEntry(name, ""), isRoot: true };
     this.batches.push([entry]);
-    this.armReveal();
+    // Deliberately no armReveal(): opening the root only means a turn started,
+    // and a turn that answers straight from the model has nothing to report.
+    // The first tool call or sub-agent arms it — see toolStart and start.
     return this.createHandle(entry).activity;
   }
 
@@ -612,6 +615,11 @@ export class SubagentProgress implements ProgressHost {
     const activity: SubagentActivity = {
       toolStart: (toolName, args) => {
         if (entry.state !== "running") return () => {};
+
+        // Arms the reveal for the root, whose creation deliberately doesn't:
+        // the first tool call is the earliest point there is anything to say.
+        // A no-op for sub-agents, which armed it when they started.
+        this.armReveal();
         entry.activeTools = [...entry.activeTools, toolName];
 
         const phrase = describeToolCall(toolName, args);
@@ -728,6 +736,30 @@ function newEntry(name: string, query: string): SubagentEntry {
 }
 
 /**
+ * Tools that open their own sub-agent entry — every caller of `withProgress`
+ * in ai/tools.ts.
+ *
+ * The main agent's tool log skips these: each already renders as a nested
+ * "✅ Events — list all events" line, so logging the call as well showed the
+ * same work twice — once as `↳ events`, once as the sub-agent it launched.
+ *
+ * Lives here rather than beside `withProgress` because ai/tools.ts pulls in
+ * `env`, which validates at import time — anything importing it becomes
+ * untestable. Kept in step by subagent-progress.test.ts, which asserts every
+ * name is a real tool.
+ */
+export const SUBAGENT_TOOLS: ReadonlySet<string> = new Set([
+  "events",
+  "members",
+  "venues",
+  "projects",
+  "research",
+  "github",
+  ADVISOR_TOOL_NAMES.big,
+  ADVISOR_TOOL_NAMES.bigger,
+]);
+
+/**
  * Wraps every tool in a sub-agent's toolset so it reports while it runs.
  *
  * Returns the toolset untouched when there is nothing to report to, so the
@@ -736,6 +768,12 @@ function newEntry(name: string, query: string): SubagentEntry {
 export function trackToolCalls<T extends Record<string, Tool>>(
   tools: T,
   activity: SubagentActivity | undefined,
+  /**
+   * Tools to leave unwrapped because they report themselves. Used for the main
+   * agent's own log: a sub-agent launcher already shows as a nested entry, so
+   * logging the call too would report the same work twice.
+   */
+  skip?: ReadonlySet<string>,
 ): T {
   if (!activity) return tools;
 
@@ -743,7 +781,7 @@ export function trackToolCalls<T extends Record<string, Tool>>(
 
   for (const [name, definition] of Object.entries(tools)) {
     const run = definition.execute;
-    if (!run) {
+    if (!run || skip?.has(name)) {
       tracked[name] = definition;
       continue;
     }
