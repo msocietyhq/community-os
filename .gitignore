@@ -35,3 +35,6 @@ coverage/
 
 # Turbo (not used but just in case)
 .turbo/
+
+# Agent worktrees — nested git repos, never part of this one
+.claude/worktrees/
