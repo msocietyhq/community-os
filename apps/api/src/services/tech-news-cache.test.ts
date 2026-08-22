@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { dailyCache, sgtDayKey } from "./tech-news.service";
+// Imported from the pure module, not the service: tech-news.service pulls in
+// the database and `env`, which validates at import time and throws when the
+// test runner hasn't loaded apps/api/.env.
+import { dailyCache, sgtDayKey } from "./daily-cache";
 
 /** A loader that counts invocations and resolves when told to. */
 function countingLoader<T>(value: T) {

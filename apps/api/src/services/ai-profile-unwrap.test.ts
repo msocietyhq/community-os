@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { generationSchema, unwrapCollapsedProfile } from "./ai-profile.service";
+// Imported from the pure module, not the service: ai-profile.service pulls in
+// the database and `env`, which validates at import time and throws when the
+// test runner hasn't loaded apps/api/.env.
+import { generationSchema, unwrapCollapsedProfile } from "./ai-profile-unwrap";
 
 /** Verbatim from a production `NoObjectGeneratedError` (member 54c26d04…). */
 const COLLAPSED_FROM_PRODUCTION = {

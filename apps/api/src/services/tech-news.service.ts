@@ -2,6 +2,7 @@ import { z } from "zod";
 import { aiService } from "./ai.service";
 import { env } from "../env";
 import { clip } from "../lib/text";
+import { curationSchema } from "./tech-news-schema";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const GITHUB_API = "https://api.github.com";
@@ -96,47 +97,8 @@ interface RepoCandidate {
   hnPoints?: number;
 }
 
-/**
- * The model picks by `id` and never writes a URL. Everything the post links to
- * is looked up from the fetched candidates, so a confident hallucination can
- * cost us a bad blurb but never a fabricated link.
- */
-const pickSchema = z.object({
-  id: z.number().describe("id of the candidate"),
-  why: z
-    .string()
-    .describe("One sentence on why this matters, for this audience"),
-});
-
-/**
- * Every section defaults to empty. The prompt tells the model that leaving a
- * section out is a valid answer, and it takes that literally by omitting the
- * key — so a required array turns the correct response into a
- * `NoObjectGeneratedError` and loses the whole roundup over a quiet week for
- * Singapore or Islamic tech. Observed in a real run. Same trap as `suggested`
- * in ai-profile.service.
- */
-const curationSchema = z.object({
-  stories: z
-    .array(pickSchema)
-    .default([])
-    .describe("The 3-5 strongest global stories, best first. Empty if none are good."),
-  repos: z
-    .array(pickSchema)
-    .default([])
-    .describe("The 2-4 most interesting repos, best first. Empty if none are."),
-  local: z
-    .array(pickSchema)
-    .default([])
-    .describe("Up to 3 Singapore/SEA headlines, best first. Empty if none are good."),
-  islamic: z
-    .array(pickSchema)
-    .default([])
-    .describe("Up to 3 Muslim/Islamic tech headlines, best first. Empty if none are good."),
-});
-
-/** Exported for testing — the omitted-section case is easy to regress. */
-export const curationSchemaForTest = curationSchema;
+/** Re-exported so the service stays the single import surface for callers. */
+export { curationSchema, curationSchema as curationSchemaForTest };
 
 /** ISO date `days` ago, the granularity Exa filters on. */
 function daysAgo(days: number): string {
@@ -460,63 +422,10 @@ function renderCandidates(items: Candidate[]): string {
     .join("\n\n");
 }
 
-const SGT_DAY = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Singapore",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
+import { dailyCache, sgtDayKey } from "./daily-cache";
 
-/** `YYYY-MM-DD` as it reads in Singapore — the cache rolls over at midnight SGT. */
-export function sgtDayKey(at: Date = new Date()): string {
-  return SGT_DAY.format(at);
-}
-
-/**
- * Memoises one value per Singapore calendar day.
- *
- * A roundup costs several searches, up to 14 GitHub calls and a Sonnet call, so
- * `/technews` run twice in a row should not pay for it twice — and shouldn't
- * return a *different* answer either, since the model reranks on every run.
- *
- * In-memory on purpose: a deploy dropping the cache costs one regeneration,
- * which is cheaper than the table and migration persisting it would need.
- *
- * Concurrent callers share one in-flight load, so spamming the command while
- * the first is still running doesn't fan out into parallel generations. A
- * rejected load is never cached, so a transient failure retries next time.
- */
-export function dailyCache<T>(load: () => Promise<T>) {
-  let cachedDay: string | null = null;
-  let cachedValue: T | undefined;
-  let inFlight: Promise<T> | null = null;
-  let inFlightDay: string | null = null;
-
-  return async function get(
-    opts: { force?: boolean; now?: Date } = {},
-  ): Promise<T> {
-    const today = sgtDayKey(opts.now);
-
-    if (!opts.force) {
-      if (cachedDay === today) return cachedValue as T;
-      if (inFlight && inFlightDay === today) return inFlight;
-    }
-
-    inFlightDay = today;
-    inFlight = load()
-      .then((value) => {
-        cachedDay = today;
-        cachedValue = value;
-        return value;
-      })
-      .finally(() => {
-        inFlight = null;
-        inFlightDay = null;
-      });
-
-    return inFlight;
-  };
-}
+// Re-exported so the service stays the single import surface for callers.
+export { dailyCache, sgtDayKey };
 
 export const techNewsService = {
   /**

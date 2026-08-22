@@ -29,6 +29,13 @@ import {
   aiSuggestedSchema,
   type DismissedEntry,
 } from "@community-os/shared/validators";
+import {
+  generationSchema,
+  unwrapCollapsedProfile,
+} from "./ai-profile-unwrap";
+
+// Re-exported so the service stays the single import surface for callers.
+export { generationSchema, unwrapCollapsedProfile };
 
 /** How many distilled facts to feed the generator. */
 const MEMORY_LIMIT = 50;
@@ -77,60 +84,6 @@ function looksLikeSerialisedJson(text: string): boolean {
 }
 
 /**
- * Undoes the model collapsing its entire answer into one stringified field.
- *
- * Seen in production: `{"suggested": "{\"summary\": …, \"skills\": […]}"}` —
- * valid JSON, wrong shape. `generateObject` validates before it returns, so
- * this throws `NoObjectGeneratedError` and neither `withRetry` nor the
- * `looksLikeSerialisedJson` guard below ever sees it. The member is then
- * retried on every boot forever, because failures aren't stamped.
- *
- * The content is intact in these responses — only the nesting is wrong — so
- * unwrapping recovers a real profile instead of discarding it. Runs as a
- * preprocess step, which the SDK applies during its own validation; the
- * generated JSON Schema is unaffected.
- */
-export function unwrapCollapsedProfile(value: unknown): unknown {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return value;
-  }
-  const outer = value as Record<string, unknown>;
-
-  // The payload has been seen stringified under either key.
-  for (const key of ["suggested", "summary"] as const) {
-    const raw = outer[key];
-    if (typeof raw !== "string" || !raw.trim().startsWith("{")) continue;
-
-    let inner: unknown;
-    try {
-      inner = JSON.parse(raw);
-    } catch {
-      continue;
-    }
-    if (typeof inner !== "object" || inner === null || Array.isArray(inner)) {
-      continue;
-    }
-
-    // Whatever the outer object still holds legitimately wins over the blob.
-    const { summary: innerSummary, ...innerRest } = inner as Record<string, unknown>;
-    const outerSummary = key === "summary" ? undefined : outer.summary;
-    const outerSuggested = key === "suggested" ? undefined : outer.suggested;
-
-    return {
-      summary: typeof outerSummary === "string" ? outerSummary : innerSummary,
-      suggested: {
-        ...(typeof outerSuggested === "object" && outerSuggested !== null
-          ? outerSuggested
-          : {}),
-        ...innerRest,
-      },
-    };
-  }
-
-  return value;
-}
-
-/**
  * Cosine floor below which a member isn't a match. Without one, search returns
  * the nearest neighbour however distant — naming someone for "rust" who has
  * never touched it.
@@ -144,25 +97,6 @@ export function unwrapCollapsedProfile(value: unknown): unknown {
  * members have profiles.
  */
 export const MEMBER_SIMILARITY_FLOOR = 0.35;
-
-export const generationSchema = z.preprocess(
-  unwrapCollapsedProfile,
-  z.object({
-    summary: z
-      .string()
-      .describe(
-        "2-4 sentences describing this person's work, expertise and current " +
-          "interests. Matched against questions like 'who knows about X'. " +
-          "Read only by the AI, never shown to anyone. Empty when the evidence " +
-          "is too thin to say anything useful.",
-      ),
-    // Defaulted: the model omits the key when there's nothing to suggest, and a
-    // hard requirement turns that correct answer into a NoObjectGeneratedError.
-    suggested: aiSuggestedSchema.default({}).describe(
-      "Candidate profile field values. Omit entirely when nothing is supported.",
-    ),
-  }),
-);
 
 const GENERATION_PROMPT = `You build a search profile for a member of MSOCIETY, a community of Muslim tech professionals.
 

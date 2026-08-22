@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { curationSchemaForTest } from "./tech-news.service";
+// Imported from the pure module, not the service: tech-news.service pulls in
+// the database and `env`, which validates at import time and throws when the
+// test runner hasn't loaded apps/api/.env.
+import { curationSchema as curationSchemaForTest } from "./tech-news-schema";
 
 describe("curationSchema", () => {
   // Regression: the model omits a section when nothing qualifies, which the
