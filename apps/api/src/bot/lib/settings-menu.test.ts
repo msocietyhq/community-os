@@ -3,6 +3,7 @@ import {
   BOT_SETTINGS,
   SETTING_GROUPS,
   SETTING_KEYS,
+  keysInGroup,
   type SettingsSnapshot,
 } from "@community-os/shared/bot-settings";
 import {
@@ -11,6 +12,7 @@ import {
   renderDraftCard,
   renderIndexPage,
   renderSettingPage,
+  INDEX_TABLE_WIDTH,
 } from "./settings-menu";
 import type { SettingsDraft } from "./settings-draft";
 
@@ -24,17 +26,36 @@ const labels = (page: { keyboard: { inline_keyboard: unknown[][] } }) =>
     .map((b) => (b as { text: string }).text);
 
 describe("renderIndexPage", () => {
-  test("lists one button per setting in the group plus navigation", () => {
+  test("packs settings two per row, then navigation and history", () => {
     const page = renderIndexPage("behaviour", snapshot);
-    // 5 behaviour settings each on their own row, then a nav row, then history.
-    expect(page.keyboard.inline_keyboard).toHaveLength(7);
+    // 5 behaviour settings over 3 rows, then a nav row, then history.
+    expect(page.keyboard.inline_keyboard).toHaveLength(5);
     expect(page.text).toContain("Behaviour");
   });
 
-  test("button labels carry the current value", () => {
-    expect(labels(renderIndexPage("behaviour", snapshot))).toContain(
-      "Chime-ins · on",
-    );
+  test("one button per setting, labelled with the name alone", () => {
+    const buttons = labels(renderIndexPage("behaviour", snapshot));
+    for (const key of keysInGroup("behaviour")) {
+      expect(buttons).toContain(BOT_SETTINGS[key].label);
+    }
+  });
+
+  // Buttons carry no formatting at all, and a long welcome-text preview on a
+  // label made every button a different width. Values live in the body's
+  // monospace table instead, where they can be aligned.
+  test("current values live in the body table, not on buttons", () => {
+    const page = renderIndexPage("behaviour", snapshot);
+    expect(page.text).toContain("Chime-ins");
+    expect(page.text).toMatch(/Chime-ins\s+on/);
+    expect(labels(page)).not.toContain("Chime-ins · on");
+  });
+
+  // A welcome template is 52 characters — far past the width budget — so text
+  // settings collapse to a one-word state here. The content is one tap away.
+  test("text settings show a state word, not their content", () => {
+    const page = renderIndexPage("welcome", snapshot);
+    expect(page.text).toMatch(/New member welcome\s+default/);
+    expect(page.text).not.toContain("MSOCIETY");
   });
 
   test("navigation wraps around the group list", () => {
@@ -50,6 +71,31 @@ describe("renderIndexPage", () => {
     for (const group of SETTING_GROUPS) {
       expect(() => renderIndexPage(group, snapshot)).not.toThrow();
     }
+  });
+
+  // Telegram wraps a <pre> block past roughly 30 monospace characters on a
+  // narrow phone, which would destroy the alignment. A future long label or a
+  // long formatted value must fail here rather than in production.
+  test("no table row exceeds the monospace width budget", () => {
+    for (const group of SETTING_GROUPS) {
+      const page = renderIndexPage(group, snapshot);
+      const table = page.text.match(/<pre>([\s\S]*)<\/pre>/)?.[1] ?? "";
+      for (const row of table.split("\n")) {
+        expect(
+          Array.from(row).length,
+          `${group}: "${row}" is wider than the budget`,
+        ).toBeLessThanOrEqual(INDEX_TABLE_WIDTH);
+      }
+    }
+  });
+
+  test("values are right-aligned to a common edge", () => {
+    const page = renderIndexPage("behaviour", snapshot);
+    const table = page.text.match(/<pre>([\s\S]*)<\/pre>/)?.[1] ?? "";
+    const widths = new Set(
+      table.split("\n").map((row) => Array.from(row).length),
+    );
+    expect(widths.size, "every row should end at the same column").toBe(1);
   });
 
   // Telegram rejects a lone surrogate with "button text must be encoded in
@@ -95,6 +141,19 @@ describe("renderSettingPage", () => {
     for (const key of SETTING_KEYS) {
       expect(() => renderSettingPage(key, snapshot, null)).not.toThrow();
     }
+  });
+
+  // The setting page is where admin-authored welcome text actually reaches a
+  // formatted message. Unescaped, a stray `<` makes Telegram reject the whole
+  // page — the same class of failure as the lone-surrogate bug.
+  test("HTML in a setting's value is escaped, not interpreted", () => {
+    const hostile = {
+      ...snapshot,
+      "welcome.newMemberText": "<b>hi</b> & bye",
+    };
+    const page = renderSettingPage("welcome.newMemberText", hostile, null);
+    expect(page.text).toContain("&lt;b&gt;hi&lt;/b&gt; &amp; bye");
+    expect(page.text).not.toContain("<b>hi</b>");
   });
 
   test("every generated callback fits Telegram's limit", () => {

@@ -1,17 +1,9 @@
+import { escapeHtml } from "./telegram-html";
+
 export interface WelcomeVars {
   telegramId: number;
   firstName: string;
   username?: string;
-}
-
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-};
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>]/g, (char) => HTML_ESCAPES[char] ?? char);
 }
 
 /**

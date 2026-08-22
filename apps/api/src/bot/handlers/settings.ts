@@ -42,6 +42,7 @@ import {
 } from "../lib/settings-draft";
 import { parseEditValue } from "../lib/settings-parse";
 import { renderWelcome } from "../lib/welcome-template";
+import { escapeHtml } from "../lib/telegram-html";
 
 export const settingsHandler = new Composer<BotContext>();
 
@@ -104,7 +105,7 @@ async function showPage(
 ): Promise<void> {
   await ctx.answerCallbackQuery(toast ? { text: toast } : undefined);
   await ctx.editMessageText(page.text, {
-    parse_mode: "Markdown",
+    parse_mode: "HTML",
     reply_markup: page.keyboard,
   });
 }
@@ -126,7 +127,7 @@ settingsHandler.command("settings", async (ctx) => {
   const snapshot = await getSettings();
   const page = renderIndexPage("availability", snapshot);
   await ctx.reply(page.text, {
-    parse_mode: "Markdown",
+    parse_mode: "HTML",
     reply_markup: page.keyboard,
   });
 });
@@ -269,13 +270,13 @@ settingsHandler.callbackQuery(/^set:hist:([^:]*):(\d+)$/, async (ctx) => {
               : entry.key;
             const when = entry.at?.toISOString().slice(0, 10) ?? "?";
             const via = entry.source === "ai_draft" ? " · via AI" : "";
-            return `• ${label} · ${entry.action} · ${when}${via}`;
+            return `• ${escapeHtml(label)} · <i>${escapeHtml(entry.action)}</i> · ${when}${via}`;
           })
           .join("\n");
 
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(`🕘 *Recent changes*\n\n${body}`, {
-    parse_mode: "Markdown",
+  await ctx.editMessageText(`🕘 <b>Recent changes</b>\n\n${body}`, {
+    parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
         [
@@ -417,9 +418,9 @@ async function settingsTextConversation(
   key: SettingKey,
 ): Promise<void> {
   await ctx.reply(
-    `Send the new text for *${BOT_SETTINGS[key].label}*, or /cancel.\n\n` +
+    `Send the new text for <b>${escapeHtml(BOT_SETTINGS[key].label)}</b>, or /cancel.\n\n` +
       `Placeholders: {name}, {first_name}, {username}`,
-    { parse_mode: "Markdown" },
+    { parse_mode: "HTML" },
   );
 
   const message = await conversation.waitFor("message:text");
@@ -473,7 +474,7 @@ async function settingsTextConversation(
 
   const page = renderConfirmation(change);
   await ctx.reply(page.text, {
-    parse_mode: "Markdown",
+    parse_mode: "HTML",
     reply_markup: page.keyboard,
   });
 }

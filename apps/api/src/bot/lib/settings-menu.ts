@@ -13,6 +13,7 @@ import {
   type SettingsSnapshot,
 } from "@community-os/shared/bot-settings";
 import type { DriftedChange, SettingsDraft } from "./settings-draft";
+import { escapeHtml } from "./telegram-html";
 
 export interface RenderedPage {
   text: string;
@@ -33,6 +34,36 @@ function display(key: SettingKey, snapshot: SettingsSnapshot): string {
   return formatValue(key, snapshot[key]);
 }
 
+/**
+ * The value as it appears in the aligned index table.
+ *
+ * Text settings collapse to default/custom/silent rather than a content
+ * preview: a welcome template runs to 52 characters, which would wrap the
+ * monospace block on a narrow phone. The full text is one tap away on the
+ * setting's own page.
+ */
+function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
+  const def = BOT_SETTINGS[key];
+  if (def.control !== "text") return formatValue(key, snapshot[key]);
+
+  const value = snapshot[key];
+  if (value === null) return "silent";
+  return value === def.default ? "default" : "custom";
+}
+
+/**
+ * Widest a monospace row may be before Telegram wraps it on a narrow phone.
+ * Asserted for every page by settings-menu.test.ts, so a future long label
+ * fails a test rather than silently wrapping in production.
+ */
+export const INDEX_TABLE_WIDTH = 28;
+
+/** Pads label and value apart to a fixed width — the space-between effect. */
+function tableRow(label: string, value: string, width: number): string {
+  const gap = Math.max(1, width - label.length - value.length);
+  return `${label}${" ".repeat(gap)}${value}`;
+}
+
 // ── Index ───────────────────────────────────────────────────
 
 export function renderIndexPage(
@@ -44,15 +75,17 @@ export function renderIndexPage(
     SETTING_GROUPS[(index - 1 + SETTING_GROUPS.length) % SETTING_GROUPS.length]!;
   const next = SETTING_GROUPS[(index + 1) % SETTING_GROUPS.length]!;
 
+  const keys = keysInGroup(group);
+
+  // Values live in the message body, not the button labels: a button carries
+  // no formatting at all, and a long welcome-text preview on a label made
+  // every button a different width. Two per row halves the vertical sprawl.
   const keyboard = new InlineKeyboard();
-  for (const key of keysInGroup(group)) {
-    keyboard
-      .text(
-        `${BOT_SETTINGS[key].label} · ${display(key, snapshot)}`,
-        callbackFor("view", key),
-      )
-      .row();
-  }
+  keys.forEach((key, i) => {
+    keyboard.text(BOT_SETTINGS[key].label, callbackFor("view", key));
+    if (i % 2 === 1) keyboard.row();
+  });
+  if (keys.length % 2 === 1) keyboard.row();
 
   keyboard
     .text(`‹ ${SETTING_GROUP_LABELS[prev]}`, `set:idx:${prev}`)
@@ -60,10 +93,25 @@ export function renderIndexPage(
     .row()
     .text("Recent changes", "set:hist::0");
 
+  // A <pre> block is the only place Telegram gives fixed-width characters, so
+  // it is the only way to align a value to the right. The trade is that
+  // entities aren't parsed inside it — no italics in here, by design.
+  const rows = keys
+    .map((key) =>
+      escapeHtml(
+        tableRow(
+          BOT_SETTINGS[key].label,
+          indexValue(key, snapshot),
+          INDEX_TABLE_WIDTH,
+        ),
+      ),
+    )
+    .join("\n");
+
   const text =
-    `⚙️ *Bot Settings · ${SETTING_GROUP_LABELS[group]}*  ` +
-    `_${index + 1}/${SETTING_GROUPS.length}_\n\n` +
-    `Tap a setting to see what it does and change it.`;
+    `⚙️ <b>Bot Settings · ${SETTING_GROUP_LABELS[group]}</b>  ` +
+    `<i>${index + 1}/${SETTING_GROUPS.length}</i>\n\n` +
+    `<pre>${rows}</pre>`;
 
   return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
 }
@@ -87,9 +135,9 @@ const COOLDOWN_PRESETS = [0, 15, 30, 60, 180];
 const CONFIDENCE_PRESETS = [0.6, 0.7, 0.8, 0.9, 0.95];
 const MONEY_PRESETS: Partial<Record<SettingKey, (number | null)[]>> = {
   "cost.dailyCapUsd": [2, 5, 10, 25, null],
-  "cost.monthlyCapUsd": [50, 100, 150, 300, null],
+  "cost.monthlyCapUsd": [15, 30, 60, 120, null],
   "cost.advisorDailyBudgetUsd": [0.1, 0.25, 0.5, 1, 2],
-  "cost.alertThresholdUsd": [2, 5, 10, 25, null],
+  "cost.alertThresholdUsd": [1, 2, 5, 10, null],
 };
 
 const QUIET_HOUR_PRESETS = ["off", "23:00-07:00", "22:00-08:00"];
@@ -197,17 +245,20 @@ export function renderSettingPage(
       ? "never"
       : `${changed.at.toISOString().slice(0, 10)}${changed.by ? "" : " (system)"}`;
 
+  // The full value for text settings, in a <pre> block. Entities aren't parsed
+  // inside <pre>, so the admin's own markup shows as written rather than being
+  // interpreted — which is what you want when editing a template.
   const body =
     def.control === "text"
-      ? `\n\`\`\`\n${String(snapshot[key] ?? "(silent)")}\n\`\`\`\n`
+      ? `\n<pre>${escapeHtml(String(snapshot[key] ?? "(silent)"))}</pre>\n`
       : "";
 
   const text =
-    `*${def.label}*\n\n` +
-    `${def.description}\n${body}\n` +
-    `Current:  ${display(key, snapshot)}\n` +
-    `Default:  ${formatValue(key, def.default)}\n` +
-    `Changed:  ${changedLine}`;
+    `<b>${escapeHtml(def.label)}</b>\n\n` +
+    `${escapeHtml(def.description)}\n${body}\n` +
+    `Current:  <i>${escapeHtml(display(key, snapshot))}</i>\n` +
+    `Default:  <i>${escapeHtml(formatValue(key, def.default))}</i>\n` +
+    `Changed:  <i>${escapeHtml(changedLine)}</i>`;
 
   return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
 }
@@ -225,8 +276,10 @@ export function renderConfirmation(change: {
     .text("‹ Settings", `set:idx:${def.group}`);
 
   const text =
-    `✓ *Updated — ${def.label}*\n\n` +
-    `${formatValue(change.key, change.from)}  →  ${formatValue(change.key, change.to)}`;
+    `✓ <b>Updated — ${escapeHtml(def.label)}</b>\n\n` +
+    `<i>${escapeHtml(formatValue(change.key, change.from))}</i>` +
+    `  →  ` +
+    `<i>${escapeHtml(formatValue(change.key, change.to))}</i>`;
 
   return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
 }
@@ -236,8 +289,12 @@ export function renderConfirmation(change: {
 function line(key: string, from: unknown, to: unknown): string {
   const settingKey = key as SettingKey;
   const def = BOT_SETTINGS[settingKey];
-  if (!def) return `${key}: ?`;
-  return `${def.label}: ${formatValue(settingKey, from)} → ${formatValue(settingKey, to)}`;
+  if (!def) return escapeHtml(`${key}: ?`);
+  return (
+    `${escapeHtml(def.label)}: ` +
+    `<i>${escapeHtml(formatValue(settingKey, from))}</i> → ` +
+    `<i>${escapeHtml(formatValue(settingKey, to))}</i>`
+  );
 }
 
 export function renderDraftCard(
@@ -265,15 +322,17 @@ export function renderDraftCard(
 
   const header =
     draft.changes.length === 0
-      ? "📝 *No changes left in this draft*"
-      : `📝 *Proposed changes (${draft.changes.length})*`;
+      ? "📝 <b>No changes left in this draft</b>"
+      : `📝 <b>Proposed changes (${draft.changes.length})</b>`;
 
   const warning =
     drifted.length > 0
       ? `\n\n⚠️ Some of these changed since the draft was made. Ask me again to rebuild it.`
       : "";
 
-  const rationale = draft.rationale ? `\n\n_"${draft.rationale}"_` : "";
+  const rationale = draft.rationale
+    ? `\n\n<i>"${escapeHtml(draft.rationale)}"</i>`
+    : "";
 
   const text = `${header}\n\n${rows.join("\n")}${rationale}${warning}`;
 
@@ -289,7 +348,7 @@ export function renderApplied(
 
   const rows = changes.map((c) => `• ${line(c.key, c.from, c.to)}  ✓`);
   const text =
-    `✓ *Applied ${changes.length} change${changes.length === 1 ? "" : "s"}*\n\n` +
+    `✓ <b>Applied ${changes.length} change${changes.length === 1 ? "" : "s"}</b>\n\n` +
     rows.join("\n");
 
   return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };

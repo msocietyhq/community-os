@@ -100,7 +100,10 @@ export type DmAccessLevel = (typeof DM_ACCESS_LEVELS)[number];
 export const ADVISOR_TIER_LIMITS = ["off", "big", "bigger"] as const;
 export type AdvisorTierLimit = (typeof ADVISOR_TIER_LIMITS)[number];
 
-const money = (v: number | null) => (v === null ? "unlimited" : `$${v}`);
+/** `$5`, but `$0.50` rather than `$0.5` for fractional amounts. */
+const usd = (v: number) =>
+  Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
+
 const onOff = (v: boolean) => (v ? "on" : "off");
 
 /**
@@ -203,33 +206,33 @@ export const BOT_SETTINGS = {
   // ── cost ──
   "cost.dailyCapUsd": def<number | null>({
     schema: z.number().min(0).max(1000).nullable(),
-    default: 10,
-    label: "Community daily cap",
+    default: 5,
+    label: "Daily cap",
     description:
       "Total AI spend allowed across the whole community per UTC day. When reached, all AI calls stop until midnight UTC. Empty means unlimited.",
     group: "cost",
     control: "money",
-    format: (v) => (v === null ? "unlimited" : `$${v}/day`),
+    format: (v) => (v === null ? "unlimited" : `${usd(v)}/day`),
   }),
   "cost.monthlyCapUsd": def<number | null>({
     schema: z.number().min(0).max(10000).nullable(),
-    default: 150,
-    label: "Community monthly cap",
+    default: 30,
+    label: "Monthly cap",
     description:
       "Total AI spend allowed across the whole community per calendar month (UTC). Empty means unlimited.",
     group: "cost",
     control: "money",
-    format: (v) => (v === null ? "unlimited" : `$${v}/mo`),
+    format: (v) => (v === null ? "unlimited" : `${usd(v)}/mo`),
   }),
   "cost.advisorDailyBudgetUsd": def<number>({
     schema: z.number().min(0).max(50),
     default: 0.5,
-    label: "Per-member advisor budget",
+    label: "Advisor budget",
     description:
       "How much each member may spend per UTC day on the deep-reasoning escalation tiers. Roughly two Opus escalations at the default.",
     group: "cost",
     control: "money",
-    format: (v) => `$${v}/day`,
+    format: (v) => `${usd(v)}/day`,
   }),
   "cost.advisorMaxTier": def<AdvisorTierLimit>({
     schema: z.enum(ADVISOR_TIER_LIMITS),
@@ -249,7 +252,7 @@ export const BOT_SETTINGS = {
       "DM every admin once when the day's spend crosses this amount. A warning only — nothing is blocked. Empty disables the alert.",
     group: "cost",
     control: "money",
-    format: money,
+    format: (v) => (v === null ? "off" : usd(v)),
   }),
 
   // ── behaviour ──
@@ -328,7 +331,7 @@ export const BOT_SETTINGS = {
   "welcome.returningText": def<string>({
     schema: z.string().min(1).max(2000),
     default: DEFAULT_RETURNING_TEXT,
-    label: "Returning member welcome",
+    label: "Returning welcome",
     description:
       "Sent when someone who previously left rejoins the group. Same placeholders as the new member welcome.",
     group: "welcome",
