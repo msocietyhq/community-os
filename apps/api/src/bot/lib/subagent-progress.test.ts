@@ -1191,8 +1191,10 @@ describe("main-agent root entry", () => {
 
     expect(sink.current()).not.toContain("Thinking");
     expect(sink.current()).toContain("✅ Research — rate limits");
-    // Promoted to the top level rather than left indented under nothing.
-    expect(sink.current()!.startsWith("✅")).toBe(true);
+    // Headed, with the work promoted to the top level rather than left
+    // indented under nothing.
+    expect(sink.current()!.startsWith("🏁 Completed\n")).toBe(true);
+    expect(sink.current()).toContain("\n✅ Research — rate limits");
   });
 
   // Nothing survives the settle, and render() skips an empty text — which
@@ -1213,6 +1215,25 @@ describe("main-agent root entry", () => {
 
     await progress.finish();
     expect(deleted).toHaveLength(1);
+  });
+
+  // The header must not appear with nothing beneath it: a non-empty render
+  // would stop finish() deleting a message that has nothing to say.
+  test("no Completed header when the root produced nothing", async () => {
+    const sink = makeSink();
+    const texts: string[] = [];
+    const progress = new SubagentProgress({
+      sink: { ...sink.sink, delete: async () => {} },
+      revealDelayMs: 0,
+      minEditIntervalMs: 0,
+    });
+    const root = progress.rootActivity("Thinking");
+    root.toolStart("chat_history", {})();
+    await settle();
+    await progress.finish();
+
+    texts.push(...sink.sent, ...sink.edits.map((e) => e.text));
+    expect(texts.some((t) => t.includes("Completed"))).toBe(false);
   });
 
   test("a sink that cannot delete simply leaves the message", async () => {

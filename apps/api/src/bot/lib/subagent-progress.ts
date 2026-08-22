@@ -427,12 +427,20 @@ function renderBatch(batch: SubagentBatch): FormattedString {
     // interesting while it's happening. What survives is what it actually
     // produced, promoted to the top level. A root that produced nothing
     // renders empty, and finish() deletes the message.
-    const entries =
-      root.state === "running"
-        ? renderEntry(root, 0)
-        : root.children.flatMap((child) => renderEntry(child, 0));
+    if (root.state === "running") {
+      return FormattedString.join(renderEntry(root, 0), "\n");
+    }
 
-    return FormattedString.join(entries, "\n");
+    const entries = root.children.flatMap((child) => renderEntry(child, 0));
+
+    // No heading when there's nothing under it — that would make the render
+    // non-empty and stop finish() from deleting a message with nothing to say.
+    if (entries.length === 0) return new FormattedString("");
+
+    return FormattedString.join(
+      [new FormattedString("🏁 ").concat(FormattedString.b("Completed")), ...entries],
+      "\n",
+    );
   }
 
   const entries = batch.flatMap((e) => renderEntry(e, 0));
