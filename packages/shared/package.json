@@ -8,7 +8,8 @@
     "./constants": "./src/constants.ts",
     "./validators": "./src/validators/index.ts",
     "./types": "./src/types/index.ts",
-    "./abilities": "./src/abilities.ts"
+    "./abilities": "./src/abilities.ts",
+    "./bot-settings": "./src/bot-settings.ts"
   },
   "scripts": {
     "type-check": "tsgo --noEmit"

@@ -150,6 +150,8 @@ export const AUDIT_ACTIONS = [
   "ban",
   "unban",
   "role_change",
+  "reset",
+  "undo",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -162,6 +164,7 @@ export const AUDIT_ENTITY_TYPES = [
   "subdomain",
   "venue",
   "reputation",
+  "bot_setting",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

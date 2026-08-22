@@ -26,6 +26,7 @@ export type Subjects =
   | "Fund"
   | "Reputation"
   | "Audit"
+  | "Settings"
   | "all";
 
 export type Actions =
@@ -88,6 +89,9 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("read", "Reputation");
     can("create", "Reputation");
     can("read", "Audit");
+    // Bot settings
+    can("read", "Settings");
+    can("update", "Settings");
   }
 
   // member — ownership-conditioned where applicable

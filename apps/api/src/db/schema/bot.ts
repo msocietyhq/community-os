@@ -13,6 +13,7 @@ import {
   real,
 } from "drizzle-orm/pg-core";
 import { vector } from "../types";
+import { user } from "./auth";
 
 export const botSession = pgTable("bot_session", {
   key: text("key").primaryKey(),
@@ -172,3 +173,18 @@ export const botMemories = pgTable(
     index("bot_memories_source_idx").on(table.sourceChatId, table.sourceMessageId),
   ],
 );
+
+/**
+ * Overridden bot settings, one row per key.
+ *
+ * Rows exist ONLY for settings that have been changed — anything absent falls
+ * back to the registry default in @community-os/shared. That makes "reset to
+ * default" a DELETE, and lets a new default ship in code without a data
+ * migration.
+ */
+export const botSettings = pgTable("bot_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedBy: text("updated_by").references(() => user.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
