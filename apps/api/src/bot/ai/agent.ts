@@ -14,7 +14,11 @@ import {
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
 import { guardToolResult } from "./tool-result-guard";
-import { SubagentProgress, type ProgressSink } from "../lib/subagent-progress";
+import {
+  SubagentProgress,
+  trackToolCalls,
+  type ProgressSink,
+} from "../lib/subagent-progress";
 
 /** Bridges the memory service into the framework-agnostic context builder. */
 const memoryRecaller: MemoryRecaller = {
@@ -38,6 +42,11 @@ interface AgentParams {
   progressSink?: ProgressSink;
   /** Puts a clarifying question to the member. Omit to disable ask_user. */
   askUser?: (question: string) => Promise<void>;
+  /**
+   * Report every main-agent tool call, not just sub-agents. DM-only: a group
+   * shouldn't get a running commentary of the bot's internals.
+   */
+  trackAllTools?: boolean;
   /** Renders an AI-proposed settings change card. Omit to disable the tool. */
   proposeSettings?: (input: {
     changes: { key: string; from: unknown; to: unknown }[];
@@ -61,6 +70,7 @@ export async function runAgent({
   progressSink,
   askUser,
   proposeSettings,
+  trackAllTools,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
@@ -108,15 +118,27 @@ export async function runAgent({
     ? new SubagentProgress({ sink: progressSink })
     : undefined;
 
+  /**
+   * In DMs the main agent reports its own tool calls, not just its sub-agents.
+   *
+   * Handing the root activity back as `ctx.progress` is what makes sub-agents
+   * nest underneath it — `SubagentActivity extends ProgressHost`, so
+   * `withProgress` in tools.ts needs no change at all.
+   */
+  const rootActivity =
+    progress && trackAllTools ? progress.rootActivity() : undefined;
+
   const tools = createTools({
     api,
     graphql,
     chatId,
     senderTelegramId,
-    progress,
+    progress: rootActivity ?? progress,
     askUser,
     proposeSettings,
   });
+
+  const trackedTools = trackToolCalls(tools, rootActivity);
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 
@@ -140,7 +162,7 @@ export async function runAgent({
         model: aiService.models.fast,
         system,
         messages,
-        tools,
+        tools: trackedTools,
         stopWhen: stepCountIs(10),
         maxOutputTokens: 1024,
       },

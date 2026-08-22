@@ -1123,3 +1123,81 @@ describe("stacking by phrase", () => {
     expect(sink.current()).toContain("↳ looking up members ×2");
   });
 });
+
+describe("main-agent root entry", () => {
+  /** DM behaviour: the main agent reports its own tool calls, not just sub-agents. */
+  function withRoot() {
+    const sink = makeSink();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      revealDelayMs: 0,
+      minEditIntervalMs: 0,
+    });
+    return { sink, progress, root: progress.rootActivity() };
+  }
+
+  test("logs the main agent's own tool calls", async () => {
+    const { sink, root } = withRoot();
+    root.toolStart("recall_memory", { query: "aziz" })();
+    await settle();
+    expect(sink.current()).toContain("recall memory");
+  });
+
+  // The member's question is on screen directly above, so repeating it is noise.
+  test("shows no task line for the root", async () => {
+    const { sink, root } = withRoot();
+    root.toolStart("chat_history", {})();
+    await settle();
+    expect(sink.current()).toContain("⏳ Answering\n");
+    expect(sink.current()).not.toContain("Answering —");
+  });
+
+  // The heading counts sub-agents, and the root isn't one.
+  test("suppresses the batch heading", async () => {
+    const { sink, root } = withRoot();
+    root.toolStart("chat_history", {})();
+    await settle();
+    expect(sink.current()).not.toContain("Running");
+    expect(sink.current()).not.toContain("subagent");
+  });
+
+  test("nests sub-agents underneath the root", async () => {
+    const { sink, root } = withRoot();
+    const sub = root.start("Research", "rate limits");
+    sub.activity.toolStart("web_search", { query: "rate limits" })();
+    await settle();
+
+    const lines = (sink.current() ?? "").split("\n");
+    const rootLine = lines.findIndex((l) => l.includes("Answering"));
+    const subLine = lines.findIndex((l) => l.includes("Research"));
+    expect(rootLine).toBeGreaterThanOrEqual(0);
+    expect(subLine).toBeGreaterThan(rootLine);
+    // Indented relative to the root, i.e. a child rather than a sibling.
+    expect(lines[subLine]!.startsWith(" ")).toBe(true);
+  });
+
+  // The root has no natural completion point — the turn ending is its
+  // completion, so finish() must settle it or it renders as still running.
+  test("settles the root on finish", async () => {
+    const { sink, root, progress } = withRoot();
+    root.toolStart("chat_history", {})();
+    // Let the reveal land first — finish() posts nothing if it never revealed.
+    await settle();
+    await progress.finish();
+    expect(sink.current()).toContain("✅ Answering");
+    expect(sink.current()).not.toContain("⏳ Answering");
+  });
+
+  // Group behaviour must be untouched: no root, heading intact.
+  test("a reporter without a root keeps the sub-agent heading", async () => {
+    const sink = makeSink();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      revealDelayMs: 0,
+      minEditIntervalMs: 0,
+    });
+    progress.start("Research", "rate limits");
+    await settle();
+    expect(sink.current()).toContain("Running 1 subagent");
+  });
+});

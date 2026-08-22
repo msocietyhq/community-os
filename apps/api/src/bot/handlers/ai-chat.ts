@@ -280,6 +280,9 @@ aiChatHandler.on("message:text", async (ctx) => {
       progressSink,
       askUser,
       proposeSettings,
+      // DM-only: the group gets sub-agent progress as before, without a
+      // running commentary of every lookup the bot makes.
+      trackAllTools: isPrivate,
     });
 
     // The question is already on screen; a second message would just repeat

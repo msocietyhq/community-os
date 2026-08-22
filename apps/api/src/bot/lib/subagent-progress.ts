@@ -51,6 +51,14 @@ export interface SubagentEntry {
   toolLog: ToolCall[];
   /** Sub-agents spawned by this one, in start order. */
   children: SubagentEntry[];
+  /**
+   * The main agent's own entry, rather than a sub-agent.
+   *
+   * Renders without a task line (the member's question is already on screen
+   * directly above) and suppresses the batch heading, which counts sub-agents
+   * and would otherwise report the main agent as one.
+   */
+  isRoot?: boolean;
 }
 
 /** A round of sub-agents started together at the top level. */
@@ -332,11 +340,14 @@ function renderEntry(entry: SubagentEntry, depth: number): FormattedString[] {
   const pad = INDENT.repeat(depth);
   const name = FormattedString.b(entry.name);
   const task = oneLine(entry.query, QUERY_MAX);
+  // The root entry has no task line — the member's question is on screen just
+  // above it, so repeating it is noise.
+  const suffix = entry.query ? ` — ${task}` : "";
 
   const lines: FormattedString[] = [];
 
   if (entry.state === "running") {
-    lines.push(new FormattedString(`${pad}⏳ `).concat(name).plain(` — ${task}`));
+    lines.push(new FormattedString(`${pad}⏳ `).concat(name).plain(suffix));
 
     // Newest last, oldest folded away — the recent calls are what matter.
     const shown = entry.toolLog.slice(-MAX_TOOL_LINES);
@@ -357,10 +368,10 @@ function renderEntry(entry: SubagentEntry, depth: number): FormattedString[] {
     lines.push(
       new FormattedString(`${pad}❌ `)
         .concat(name)
-        .plain(` — ${task} (failed: ${why})`),
+        .plain(`${suffix} (failed: ${why})`),
     );
   } else {
-    lines.push(new FormattedString(`${pad}✅ `).concat(name).plain(` — ${task}`));
+    lines.push(new FormattedString(`${pad}✅ `).concat(name).plain(suffix));
   }
 
   for (const child of entry.children) {
@@ -371,6 +382,12 @@ function renderEntry(entry: SubagentEntry, depth: number): FormattedString[] {
 }
 
 function renderBatch(batch: SubagentBatch): FormattedString {
+  const entries = batch.flatMap((e) => renderEntry(e, 0));
+
+  // A main-agent batch needs no heading: it counts sub-agents, and the root
+  // isn't one. Its own line already says what's happening.
+  if (batch.some((e) => e.isRoot)) return FormattedString.join(entries, "\n");
+
   const settled = batch.every((e) => e.state !== "running");
   const heading = FormattedString.b(
     settled
@@ -378,10 +395,7 @@ function renderBatch(batch: SubagentBatch): FormattedString {
       : `Running ${batch.length} ${plural(batch.length)}`,
   );
 
-  return FormattedString.join(
-    [heading, ...batch.flatMap((e) => renderEntry(e, 0))],
-    "\n",
-  );
+  return FormattedString.join([heading, ...entries], "\n");
 }
 
 /**
@@ -461,6 +475,24 @@ export class SubagentProgress implements ProgressHost {
     return this.createHandle(entry);
   }
 
+  /**
+   * Opens the main agent's own entry and returns its activity.
+   *
+   * Used in DMs only. Because `SubagentActivity extends ProgressHost`, handing
+   * this back as `ctx.progress` makes every sub-agent nest underneath it with
+   * no change at the call sites — the same recursion that already handles
+   * sub-agents spawning sub-agents.
+   *
+   * Not settled explicitly: `finish()` renders the final state, and a root
+   * left running reads correctly as "this is what it did".
+   */
+  rootActivity(name = "Answering"): SubagentActivity {
+    const entry: SubagentEntry = { ...newEntry(name, ""), isRoot: true };
+    this.batches.push([entry]);
+    this.armReveal();
+    return this.createHandle(entry).activity;
+  }
+
   /** Successful results from every depth, for when the main agent produces no text. */
   completedResults(): string[] {
     const out: string[] = [];
@@ -485,6 +517,16 @@ export class SubagentProgress implements ProgressHost {
     this.cancelThrottle = null;
 
     if (!this.revealed && this.messageId === null) return;
+
+    // The root has no natural completion point — the turn ending IS its
+    // completion. Settle it here or the final message shows it still running.
+    for (const entry of this.batches.flat()) {
+      if (entry.isRoot && entry.state === "running") {
+        entry.state = "done";
+        entry.activeTools = [];
+        entry.toolLog = [];
+      }
+    }
 
     this.revealed = true;
     // The end state should land immediately, not wait out the throttle.
