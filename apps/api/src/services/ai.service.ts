@@ -95,12 +95,20 @@ function resolveModelId(model: Parameters<typeof generateText>[0]["model"]): str
  * Anthropic caches the request prefix (tools → system → messages) and serves
  * later reads at ~10% of input price. Every caller here has a stable system
  * prompt and tool list, and an agent loop re-sends that prefix on every step,
- * so this is the single largest cost lever available. Prefixes below the
- * model's minimum simply don't cache — there is no penalty for asking.
+ * so this is the single largest cost lever available.
+ *
+ * Applies to `generateObject` as well as `generateText`: the structured-output
+ * callers are the repetitive ones — the profile sweep sends the same long
+ * system prompt once per member across the whole community.
+ *
+ * Prefixes below the model's minimum simply don't cache, and there is no
+ * penalty for asking. That minimum is per-model and higher than you'd guess:
+ * measured against this provider version, Sonnet 5 cached a 5.2k-token prefix
+ * while Haiku 4.5 declined a 2.4k one, reporting zero rather than erroring.
  */
-function withPromptCaching(
-  params: Parameters<typeof generateText>[0],
-): Parameters<typeof generateText>[0] {
+function withPromptCaching<
+  T extends { providerOptions?: Parameters<typeof generateText>[0]["providerOptions"] },
+>(params: T): T {
   const existing = params.providerOptions?.anthropic;
   return {
     ...params,
@@ -164,7 +172,7 @@ async function trackedGenerateObject<T extends Parameters<typeof generateObject>
   const start = performance.now();
 
   try {
-    const result = await generateObject(params);
+    const result = await generateObject(withPromptCaching(params));
     const durationMs = Math.round(performance.now() - start);
 
     trackUsage({
