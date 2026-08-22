@@ -136,7 +136,14 @@ export const DEFAULT_RETURNING_TEXT = `Welcome back, {name}! 👋`;
 
 export const DEFAULT_MAINTENANCE_REPLY =
   "I'm paused right now — I'll be back shortly.";
-export const DEFAULT_DENIED_REPLY = "This bot is for MSOCIETY members.";
+/**
+ * Actionable rather than a flat refusal: a real group member who joined while
+ * the bot wasn't an admin, and has never posted, has no member record yet and
+ * would otherwise be told they aren't a member when they are. One message in
+ * the group registers them.
+ */
+export const DEFAULT_DENIED_REPLY =
+  "This bot is for MSOCIETY members. If you're in the group, say salam there first and I'll recognise you.";
 
 // ── The registry ────────────────────────────────────────────
 
@@ -174,7 +181,7 @@ export const BOT_SETTINGS = {
   }),
   "dm.access": def<DmAccessLevel>({
     schema: z.enum(DM_ACCESS_LEVELS),
-    default: "everyone",
+    default: "members",
     label: "DM access",
     description:
       "Who may use the bot in a direct message, including commands. Hierarchical: everyone, then members only, then admins only. Admins always get through.",

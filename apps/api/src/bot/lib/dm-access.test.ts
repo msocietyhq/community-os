@@ -1,5 +1,24 @@
 import { describe, expect, test } from "bun:test";
+import { BOT_SETTINGS } from "@community-os/shared/bot-settings";
 import { decideDmAccess } from "./dm-access";
+
+describe("dm.access default", () => {
+  // Security-relevant: at "everyone" any stranger reaches the whole command
+  // set. Pinned so it can't drift back without a deliberate edit here.
+  test("defaults to members only", () => {
+    expect(BOT_SETTINGS["dm.access"].default).toBe("members");
+  });
+
+  test("a stranger is blocked under the default", () => {
+    expect(
+      decideDmAccess({
+        level: BOT_SETTINGS["dm.access"].default,
+        role: null,
+        banned: false,
+      }).allowed,
+    ).toBe(false);
+  });
+});
 
 describe("decideDmAccess", () => {
   test("everyone lets a stranger through", () => {

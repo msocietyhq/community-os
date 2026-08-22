@@ -27,7 +27,9 @@ export async function dmAccessMiddleware(
   const settings = await getSettings();
   const level = settings["dm.access"];
 
-  // Fast path: the default level admits everyone, so skip the user lookup.
+  // Only "everyone" can skip the lookup, and it is no longer the default — so
+  // most DMs now cost one indexed resolveUser query. Acceptable: DM volume is
+  // low, and the alternative is letting strangers reach the whole command set.
   if (level === "everyone") return next();
 
   const resolved = await resolveUser(String(from.id));
