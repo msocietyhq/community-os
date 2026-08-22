@@ -27,8 +27,12 @@ describe("toTelegramMarkdown", () => {
     const out = toTelegramMarkdown(
       "See [the docs](https://en.wikipedia.org/wiki/Foo_(bar)) for more.",
     );
-    // The regex version truncated the href at the first inner paren.
-    expect(out).toContain("Foo\\_\\(bar\\)");
+    // The regex version truncated the href at the first inner paren, producing
+    // a broken link and leaking a stray ")" into the text. Inside a link
+    // destination MarkdownV2 only reserves ")" and "\", so the underscore
+    // stays bare — what matters is that the whole path survives.
+    expect(out).toContain("https://en.wikipedia.org/wiki/Foo_\\(bar\\)");
+    expect(out).toContain("[the docs]");
   });
 
   test("renders a fenced code block as a code block", () => {

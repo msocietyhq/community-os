@@ -7,7 +7,7 @@ import {
 } from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
 import { truncate } from "../../../lib/text";
-import { htmlToMarkdown } from "../../lib/html-to-markdown";
+import { htmlToMarkdown, pageToMarkdown } from "../../lib/html-to-markdown";
 import { env } from "../../../env";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
@@ -327,7 +327,9 @@ export function createResearchTools(_ctx: ToolContext) {
           }
 
           const body = await res.text();
-          const text = contentType.includes("html") ? htmlToMarkdown(body) : body.trim();
+          const text = contentType.includes("html")
+            ? pageToMarkdown(body, res.url)
+            : body.trim();
 
           return {
             url: res.url,

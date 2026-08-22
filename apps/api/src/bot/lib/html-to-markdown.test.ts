@@ -1,5 +1,56 @@
 import { describe, expect, test } from "bun:test";
-import { htmlToMarkdown } from "./html-to-markdown";
+import { htmlToMarkdown, pageToMarkdown } from "./html-to-markdown";
+
+describe("pageToMarkdown", () => {
+  /** A page shaped like a real one: chrome around a single article. */
+  const page = `<!doctype html><html><head><title>Why Postgres</title></head><body>
+    <header><nav><a href="/">Home</a><a href="/docs">Docs</a><a href="/blog">Blog</a>
+      <a href="/pricing">Pricing</a><a href="/login">Log in</a></nav></header>
+    <article>
+      <h1>Why Postgres</h1>
+      <p>Postgres handles the overwhelming majority of workloads teams reach for
+         specialised databases to solve, and it does so with one operational story
+         instead of several. That matters more than raw benchmark numbers.</p>
+      <p>The extension ecosystem covers full-text search, vector similarity and
+         time-series partitioning, so a team can defer the second datastore for
+         a very long time — often permanently.</p>
+    </article>
+    <footer><a href="/tos">Terms</a><a href="/privacy">Privacy</a></footer></body></html>`;
+
+  test("keeps the article and drops the site furniture", () => {
+    const out = pageToMarkdown(page, "https://example.com/why-postgres");
+
+    expect(out).toContain("Postgres handles the overwhelming majority");
+    expect(out).toContain("extension ecosystem");
+    // Nav and footer links are what otherwise eat the page budget.
+    expect(out).not.toContain("/pricing");
+    expect(out).not.toContain("Privacy");
+  });
+
+  test("leads with the title so the model knows what it is reading", () => {
+    expect(pageToMarkdown(page)).toStartWith("# Why Postgres");
+  });
+
+  test("falls back to a full conversion when there is no article", () => {
+    // An index page has no prose body for Readability to score.
+    const out = pageToMarkdown("<html><body><a href='/a'>One</a></body></html>");
+    expect(out).toContain("One");
+  });
+
+  test("empty input yields an empty string", () => {
+    expect(pageToMarkdown("")).toBe("");
+    expect(pageToMarkdown("   ")).toBe("");
+  });
+
+  test("never executes or emits script contents", () => {
+    const out = pageToMarkdown(
+      `<html><body><script>const key='SECRET'</script><article><h1>T</h1>
+       <p>${"Real prose that is long enough to be scored as content. ".repeat(6)}</p>
+       </article></body></html>`,
+    );
+    expect(out).not.toContain("SECRET");
+  });
+});
 
 describe("htmlToMarkdown", () => {
   test("keeps document structure the model can use", () => {
