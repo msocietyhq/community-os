@@ -12,7 +12,8 @@
  */
 
 import type { Tool } from "ai";
-import { truncate } from "../../lib/text";
+import { FormattedString } from "@grammyjs/parse-mode";
+import { clip } from "../../lib/text";
 import type { EventsToolName } from "../ai/agents/events";
 import type { MembersToolName } from "../ai/agents/members";
 import type { VenuesToolName } from "../ai/agents/venues";
@@ -57,8 +58,8 @@ export type SubagentBatch = SubagentEntry[];
 
 export interface ProgressSink {
   /** Posts the status message; returns its id, or null if posting failed. */
-  send(text: string): Promise<number | null>;
-  edit(messageId: number, text: string): Promise<void>;
+  send(message: FormattedString): Promise<number | null>;
+  edit(messageId: number, message: FormattedString): Promise<void>;
 }
 
 export interface Scheduler {
@@ -124,17 +125,9 @@ const realScheduler: Scheduler = {
   },
 };
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
+/** Collapses to a single line and clips. No escaping: styling is entities. */
 function oneLine(text: string, max: number): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  const clipped = flat.length > max ? `${flat.slice(0, max)}…` : flat;
-  return escapeHtml(clipped);
+  return clip(text.replace(/\s+/g, " ").trim(), max);
 }
 
 function plural(count: number): string {
@@ -335,33 +328,39 @@ export function describeToolCall(name: string, args?: unknown): string {
  * A sub-agent's own answer is deliberately not shown — the main agent's reply
  * covers that, and repeating it here reads as noise.
  */
-function renderEntry(entry: SubagentEntry, depth: number): string[] {
+function renderEntry(entry: SubagentEntry, depth: number): FormattedString[] {
   const pad = INDENT.repeat(depth);
-  const name = `<b>${escapeHtml(entry.name)}</b>`;
+  const name = FormattedString.b(entry.name);
   const task = oneLine(entry.query, QUERY_MAX);
 
-  const lines: string[] = [];
+  const lines: FormattedString[] = [];
 
   if (entry.state === "running") {
-    lines.push(`${pad}⏳ ${name} — ${task}`);
+    lines.push(new FormattedString(`${pad}⏳ `).concat(name).plain(` — ${task}`));
 
     // Newest last, oldest folded away — the recent calls are what matter.
     const shown = entry.toolLog.slice(-MAX_TOOL_LINES);
     const hidden = entry.toolLog.length - shown.length;
 
     if (hidden > 0) {
-      lines.push(`${pad}${INDENT}↳ …${hidden} earlier`);
+      lines.push(new FormattedString(`${pad}${INDENT}↳ …${hidden} earlier`));
     }
     for (const call of shown) {
       const times = call.count > 1 ? ` ×${call.count}` : "";
-      lines.push(`${pad}${INDENT}↳ <i>${escapeHtml(call.phrase)}</i>${times}`);
+      lines.push(
+        new FormattedString(`${pad}${INDENT}↳ `).i(call.phrase).plain(times),
+      );
     }
   } else if (entry.state === "failed") {
     // The reason is kept: it explains a gap the reply can't.
     const why = oneLine(entry.detail ?? "unknown error", FAILURE_MAX);
-    lines.push(`${pad}❌ ${name} — ${task} (failed: ${why})`);
+    lines.push(
+      new FormattedString(`${pad}❌ `)
+        .concat(name)
+        .plain(` — ${task} (failed: ${why})`),
+    );
   } else {
-    lines.push(`${pad}✅ ${name} — ${task}`);
+    lines.push(new FormattedString(`${pad}✅ `).concat(name).plain(` — ${task}`));
   }
 
   for (const child of entry.children) {
@@ -371,13 +370,18 @@ function renderEntry(entry: SubagentEntry, depth: number): string[] {
   return lines;
 }
 
-function renderBatch(batch: SubagentBatch): string {
+function renderBatch(batch: SubagentBatch): FormattedString {
   const settled = batch.every((e) => e.state !== "running");
-  const heading = settled
-    ? `<b>Done — ${batch.length} ${plural(batch.length)}</b>`
-    : `<b>Running ${batch.length} ${plural(batch.length)}</b>`;
+  const heading = FormattedString.b(
+    settled
+      ? `Done — ${batch.length} ${plural(batch.length)}`
+      : `Running ${batch.length} ${plural(batch.length)}`,
+  );
 
-  return [heading, ...batch.flatMap((e) => renderEntry(e, 0))].join("\n");
+  return FormattedString.join(
+    [heading, ...batch.flatMap((e) => renderEntry(e, 0))],
+    "\n",
+  );
 }
 
 /**
@@ -386,14 +390,15 @@ function renderBatch(batch: SubagentBatch): string {
  *
  * Deep trees can outgrow Telegram's message limit, so the result is clamped.
  */
-export function renderProgress(batches: SubagentBatch[]): string {
-  const text = batches
-    .filter((b) => b.length > 0)
-    .map(renderBatch)
-    .join("\n\n");
+export function renderProgress(batches: SubagentBatch[]): FormattedString {
+  const rendered = FormattedString.join(
+    batches.filter((b) => b.length > 0).map(renderBatch),
+    "\n\n",
+  );
 
-  if (text.length <= MAX_MESSAGE_CHARS) return text;
-  return `${truncate(text, MAX_MESSAGE_CHARS)}\n…`;
+  if (rendered.text.length <= MAX_MESSAGE_CHARS) return rendered;
+  // `slice` carries the entities and trims any that straddle the cut.
+  return rendered.slice(0, MAX_MESSAGE_CHARS).plain("\n…");
 }
 
 export interface SubagentProgressOptions {
@@ -587,18 +592,19 @@ export class SubagentProgress implements ProgressHost {
       do {
         this.renderPending = false;
 
-        const text = renderProgress(this.batches);
+        const message = renderProgress(this.batches);
+        const text = message.text;
         if (text === "" || text === this.lastText) break;
 
         if (this.messageId === null) {
-          this.messageId = await this.sink.send(text);
+          this.messageId = await this.sink.send(message);
           // Couldn't post at all — give up rather than retrying per update.
           if (this.messageId === null) {
             this.sendFailed = true;
             break;
           }
         } else {
-          await this.sink.edit(this.messageId, text);
+          await this.sink.edit(this.messageId, message);
         }
 
         this.lastEditAt = this.now();

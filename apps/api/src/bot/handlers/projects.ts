@@ -1,6 +1,8 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import { Composer, InlineKeyboard } from "grammy";
 import { createConversation } from "@grammyjs/conversations";
 import type { BotContext, BotConversation } from "../types";
+import { replyWith } from "../lib/reply";
 import { resolveUser } from "../lib/auth";
 import { projectsService } from "../../services/projects.service";
 import {
@@ -12,10 +14,6 @@ import type { CreateProjectInput } from "@community-os/shared/validators";
 export const projectsHandler = new Composer<BotContext>();
 
 const PAGE_SIZE = 5;
-
-function escapeMarkdown(text: string): string {
-  return text.replace(/[_*`[\]]/g, "\\$&");
-}
 
 const natureLabels: Record<string, string> = {
   startup: "🚀 startup",
@@ -38,12 +36,17 @@ async function buildProjectsMessage(page: number) {
 
   if (projects.length === 0 && page === 1) {
     return {
-      text: "🚀 *Community Projects*\n\nNo projects yet. Be the first to add one!",
+      message: FormattedString.b("🚀 Community Projects").plain(
+        "\n\nNo projects yet. Be the first to add one!",
+      ),
       keyboard: undefined,
     };
   }
 
-  const lines = [`🚀 *Community Projects* (page ${page}/${totalPages})\n`];
+  const lines: (FormattedString | string)[] = [
+    FormattedString.b(`🚀 Community Projects (page ${page}/${totalPages})`),
+    "",
+  ];
 
   for (const [i, p] of projects.entries()) {
     const num = (page - 1) * PAGE_SIZE + i + 1;
@@ -52,7 +55,7 @@ async function buildProjectsMessage(page: number) {
     const status = statusLabels[p.status ?? "active"] ?? p.status;
 
     lines.push(
-      `*${num}. ${escapeMarkdown(p.name)}*${endorsed}`,
+      FormattedString.b(`${num}. ${p.name}`).plain(endorsed),
       `${nature} · ${status}`,
       `👥 ${p.memberCount} member${p.memberCount === 1 ? "" : "s"}`,
       "",
@@ -64,7 +67,7 @@ async function buildProjectsMessage(page: number) {
   if (page < totalPages) keyboard.text("Next »", `projects_page:${page + 1}`);
 
   return {
-    text: lines.join("\n"),
+    message: FormattedString.join(lines, "\n"),
     keyboard: keyboard.inline_keyboard.length > 0 ? keyboard : undefined,
   };
 }
@@ -238,12 +241,13 @@ async function createProjectConversation(
     projectsService.create(input, userId),
   );
 
-  const lines = [
-    `✅ Project created!\n`,
-    `*${escapeMarkdown(project.name)}*`,
+  const lines: (FormattedString | string)[] = [
+    "✅ Project created!",
+    "",
+    FormattedString.b(project.name),
     `${natureEmojis[project.nature] ?? ""} ${project.nature.replace("_", " ")}`,
   ];
-  if (project.description) lines.push(`\n${escapeMarkdown(project.description)}`);
+  if (project.description) lines.push(`\n${project.description}`);
   if (project.platforms?.length) {
     lines.push(
       `\nPlatforms: ${project.platforms.map((p) => platformLabels[p] ?? p).join(", ")}`,
@@ -251,7 +255,7 @@ async function createProjectConversation(
   }
   if (project.url) lines.push(`\nURL: ${project.url}`);
 
-  await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
+  await replyWith(ctx, FormattedString.join(lines, "\n"));
 }
 
 projectsHandler.use(createConversation(createProjectConversation));
@@ -265,18 +269,15 @@ projectsHandler.command("create_project", async (ctx) => {
 });
 
 projectsHandler.command("projects", async (ctx) => {
-  const { text, keyboard } = await buildProjectsMessage(1);
-  await ctx.reply(text, {
-    parse_mode: "Markdown",
-    reply_markup: keyboard,
-  });
+  const { message, keyboard } = await buildProjectsMessage(1);
+  await replyWith(ctx, message, keyboard);
 });
 
 projectsHandler.callbackQuery(/^projects_page:(\d+)$/, async (ctx) => {
   const page = Number(ctx.match[1]);
-  const { text, keyboard } = await buildProjectsMessage(page);
-  await ctx.editMessageText(text, {
-    parse_mode: "Markdown",
+  const { message, keyboard } = await buildProjectsMessage(page);
+  await ctx.editMessageText(message.text, {
+    entities: message.entities,
     reply_markup: keyboard,
   });
   await ctx.answerCallbackQuery();

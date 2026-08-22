@@ -6,7 +6,7 @@ import {
   type SubagentActivity,
 } from "../../lib/subagent-progress";
 import { aiService } from "../../../services/ai.service";
-import { truncate } from "../../../lib/text";
+import { clip } from "../../../lib/text";
 import { htmlToMarkdown, pageToMarkdown } from "../../lib/html-to-markdown";
 import { env } from "../../../env";
 
@@ -29,10 +29,6 @@ interface ExaResult {
   text?: string;
 }
 
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${truncate(text, max)}…` : text;
-}
 
 export function createResearchTools(_ctx: ToolContext) {
   return {

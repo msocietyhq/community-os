@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { aiService } from "./ai.service";
 import { env } from "../env";
+import { clip } from "../lib/text";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const GITHUB_API = "https://api.github.com";
@@ -136,10 +137,6 @@ const curationSchema = z.object({
 
 /** Exported for testing — the omitted-section case is easy to regress. */
 export const curationSchemaForTest = curationSchema;
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
 
 /** ISO date `days` ago, the granularity Exa filters on. */
 function daysAgo(days: number): string {

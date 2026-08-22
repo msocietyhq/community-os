@@ -14,29 +14,18 @@ import telegramify from "telegramify-markdown";
  * constructs Telegram has no syntax for (tables, headings) instead of leaking
  * them raw.
  *
- * Output is MarkdownV2, so callers must send it with that parse mode. Pair it
- * with `sendFormatted` so a rejected message degrades to plain text rather than
- * vanishing.
+ * Returns MarkdownV2 to be sent with that parse mode, or `null` when the text
+ * can't be converted. Callers send the original as plain text on `null` — with
+ * no parse mode there is nothing to escape, so there is no reason to keep a
+ * hand-written escaper around for the fallback.
  */
-export function toTelegramMarkdown(text: string): string {
+export function toTelegramMarkdown(text: string): string | null {
   try {
     // "escape" keeps unsupported constructs visible as literal text rather than
     // silently dropping content the model meant to convey.
     return telegramify(text, "escape");
   } catch (err) {
-    // Never lose a reply over formatting. Escaping every reserved character by
-    // hand is the one safe fallback: it renders as plain prose.
     console.error("[markdown] telegramify failed, falling back to plain:", err);
-    return escapeMarkdownV2(text);
+    return null;
   }
-}
-
-/**
- * Escape every character MarkdownV2 reserves, per the Telegram Bot API spec.
- *
- * Only for the fallback path and for injecting untrusted literals — anything
- * with real Markdown in it should go through `toTelegramMarkdown`.
- */
-export function escapeMarkdownV2(text: string): string {
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, "\\$&");
 }

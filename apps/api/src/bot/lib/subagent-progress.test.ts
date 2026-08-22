@@ -13,18 +13,21 @@ import {
   type SubagentBatch,
 } from "./subagent-progress";
 
+/** Progress renders to entities now; these assertions read the plain text. */
+const render = (batches: SubagentBatch[]) => renderProgress(batches).text;
+
 /** Captures every send/edit so the message's whole lifecycle can be asserted. */
 function makeSink(options: { failSend?: boolean } = {}) {
   const sent: string[] = [];
   const edits: { messageId: number; text: string }[] = [];
 
   const sink: ProgressSink = {
-    async send(text) {
-      sent.push(text);
+    async send(message) {
+      sent.push(message.text);
       return options.failSend ? null : 100;
     },
-    async edit(messageId, text) {
-      edits.push({ messageId, text });
+    async edit(messageId, message) {
+      edits.push({ messageId, text: message.text });
     },
   };
 
@@ -72,10 +75,10 @@ describe("renderProgress", () => {
         { name: "Projects", query: "active projects", state: "running", activeTools: [], toolLog: [], children: [] },
       ],
     ];
-    expect(renderProgress(batches)).toBe(
-      "<b>Running 2 subagents</b>\n" +
-        "⏳ <b>Events</b> — upcoming meetups\n" +
-        "⏳ <b>Projects</b> — active projects",
+    expect(render(batches)).toBe(
+      "Running 2 subagents\n" +
+        "⏳ Events — upcoming meetups\n" +
+        "⏳ Projects — active projects",
     );
   });
 
@@ -83,8 +86,8 @@ describe("renderProgress", () => {
     const batches: SubagentBatch[] = [
       [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] }],
     ];
-    expect(renderProgress(batches)).toBe(
-      "<b>Done — 1 subagent</b>\n✅ <b>Events</b> — upcoming meetups",
+    expect(render(batches)).toBe(
+      "Done — 1 subagent\n✅ Events — upcoming meetups",
     );
   });
 
@@ -92,7 +95,7 @@ describe("renderProgress", () => {
     const batches: SubagentBatch[] = [
       [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups on 24 Aug", activeTools: [], toolLog: [], children: [] }],
     ];
-    expect(renderProgress(batches)).not.toContain("24 Aug");
+    expect(render(batches)).not.toContain("24 Aug");
   });
 
   test("a batch is still running while any member is", () => {
@@ -102,15 +105,15 @@ describe("renderProgress", () => {
         { name: "Projects", query: "projects", state: "running", activeTools: [], toolLog: [], children: [] },
       ],
     ];
-    expect(renderProgress(batches)).toContain("<b>Running 2 subagents</b>");
+    expect(render(batches)).toContain("Running 2 subagents");
   });
 
   test("failures keep their reason, since the reply cannot explain the gap", () => {
     const batches: SubagentBatch[] = [
       [{ name: "GitHub", query: "list repos", state: "failed", detail: "rate limited", activeTools: [], toolLog: [], children: [] }],
     ];
-    expect(renderProgress(batches)).toBe(
-      "<b>Done — 1 subagent</b>\n❌ <b>GitHub</b> — list repos (failed: rate limited)",
+    expect(render(batches)).toBe(
+      "Done — 1 subagent\n❌ GitHub — list repos (failed: rate limited)",
     );
   });
 
@@ -119,12 +122,12 @@ describe("renderProgress", () => {
       [{ name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] }],
       [{ name: "Members", query: "who is going", state: "running", activeTools: [], toolLog: [], children: [] }],
     ];
-    expect(renderProgress(batches)).toBe(
-      "<b>Done — 1 subagent</b>\n" +
-        "✅ <b>Events</b> — meetups\n" +
+    expect(render(batches)).toBe(
+      "Done — 1 subagent\n" +
+        "✅ Events — meetups\n" +
         "\n" +
-        "<b>Running 1 subagent</b>\n" +
-        "⏳ <b>Members</b> — who is going",
+        "Running 1 subagent\n" +
+        "⏳ Members — who is going",
     );
   });
 
@@ -132,38 +135,50 @@ describe("renderProgress", () => {
     const batches: SubagentBatch[] = [
       [{ name: "Events", query: "line one\n\nline two", state: "running", activeTools: [], toolLog: [], children: [] }],
     ];
-    expect(renderProgress(batches)).toContain("⏳ <b>Events</b> — line one line two");
+    expect(render(batches)).toContain("⏳ Events — line one line two");
   });
 
   test("long tasks are truncated", () => {
     const batches: SubagentBatch[] = [
       [{ name: "Events", query: "A".repeat(400), state: "running", activeTools: [], toolLog: [], children: [] }],
     ];
-    const line = renderProgress(batches).split("\n")[1] ?? "";
+    const line = render(batches).split("\n")[1] ?? "";
     expect(line).toContain("…");
     expect(line.length).toBeLessThan(100);
   });
 
-  test("HTML in a running query is escaped", () => {
-    const out = renderProgress([
+  // Styling is carried by entities now, so the text is never rewritten —
+  // markup a member or model typed stays exactly as typed.
+  test("markup in a running query is left verbatim", () => {
+    const out = render([
       [{ name: "Events", query: "<b>hi</b> & bye", state: "running", activeTools: [], toolLog: [], children: [] }],
     ]);
-    expect(out).toContain("&lt;b&gt;hi&lt;/b&gt; &amp; bye");
-    // Only the structural bold tags survive unescaped.
-    expect(out.match(/<b>/g)).toHaveLength(2);
+    expect(out).toContain("<b>hi</b> & bye");
+    expect(out).not.toContain("&amp;");
   });
 
-  test("HTML in a failure reason is escaped", () => {
-    const out = renderProgress([
+  test("markup in a failure reason is left verbatim", () => {
+    const out = render([
       [{ name: "Events", query: "q", state: "failed", detail: "a & b <script>", activeTools: [], toolLog: [], children: [] }],
     ]);
-    expect(out).toContain("a &amp; b &lt;script&gt;");
-    expect(out).not.toContain("<script>");
+    expect(out).toContain("a & b <script>");
+    expect(out).not.toContain("&lt;");
+  });
+
+  test("the sub-agent name is bold, as an entity rather than markup", () => {
+    const [batch] = [
+      [{ name: "Events", query: "q", state: "running" as const, activeTools: [], toolLog: [], children: [] }],
+    ];
+    const rendered = renderProgress(batch ? [batch] : []);
+    const bold = (rendered.entities ?? [])
+      .filter((e) => e.type === "bold")
+      .map((e) => rendered.text.slice(e.offset, e.offset + e.length));
+    expect(bold).toContain("Events");
   });
 
   test("empty batches render nothing", () => {
-    expect(renderProgress([])).toBe("");
-    expect(renderProgress([[]])).toBe("");
+    expect(render([])).toBe("");
+    expect(render([[]])).toBe("");
   });
 });
 
@@ -202,8 +217,8 @@ describe("SubagentProgress", () => {
     await settle();
 
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toContain("<b>Running 1 subagent</b>");
-    expect(sent[0]).toContain("⏳ <b>Events</b> — upcoming meetups");
+    expect(sent[0]).toContain("Running 1 subagent");
+    expect(sent[0]).toContain("⏳ Events — upcoming meetups");
   });
 
   test("sub-agents started together share one round", async () => {
@@ -214,7 +229,7 @@ describe("SubagentProgress", () => {
     fire();
     await settle();
 
-    expect(sent[0]).toContain("<b>Running 2 subagents</b>");
+    expect(sent[0]).toContain("Running 2 subagents");
   });
 
   test("the message is edited as each sub-agent settles", async () => {
@@ -227,13 +242,13 @@ describe("SubagentProgress", () => {
 
     events.done("3 meetups");
     await settle();
-    expect(current()).toContain("✅ <b>Events</b> — meetups");
-    expect(current()).toContain("<b>Running 2 subagents</b>");
+    expect(current()).toContain("✅ Events — meetups");
+    expect(current()).toContain("Running 2 subagents");
 
     projects.done("12 projects");
     await settle();
-    expect(current()).toContain("<b>Done — 2 subagents</b>");
-    expect(current()).toContain("✅ <b>Projects</b> — projects");
+    expect(current()).toContain("Done — 2 subagents");
+    expect(current()).toContain("✅ Projects — projects");
     expect(edits.every((e) => e.messageId === 100)).toBe(true);
   });
 
@@ -254,11 +269,11 @@ describe("SubagentProgress", () => {
 
     const text = current() ?? "";
     expect(text).toBe(
-      "<b>Done — 1 subagent</b>\n" +
-        "✅ <b>Events</b> — meetups\n" +
+      "Done — 1 subagent\n" +
+        "✅ Events — meetups\n" +
         "\n" +
-        "<b>Done — 1 subagent</b>\n" +
-        "✅ <b>Members</b> — who is going",
+        "Done — 1 subagent\n" +
+        "✅ Members — who is going",
     );
   });
 
@@ -272,7 +287,7 @@ describe("SubagentProgress", () => {
     progress.start("Projects", "projects");
     await settle();
 
-    expect(current()).toContain("<b>Running 2 subagents</b>");
+    expect(current()).toContain("Running 2 subagents");
   });
 
   test("an earlier fast round still appears once a later round reveals", async () => {
@@ -287,8 +302,8 @@ describe("SubagentProgress", () => {
     await settle();
 
     const text = current() ?? "";
-    expect(text).toContain("✅ <b>Events</b> — meetups");
-    expect(text).toContain("<b>Running 1 subagent</b>");
+    expect(text).toContain("✅ Events — meetups");
+    expect(text).toContain("Running 1 subagent");
   });
 
   test("failures show in the final state", async () => {
@@ -300,7 +315,7 @@ describe("SubagentProgress", () => {
     handle.failed("rate limited");
     await progress.finish();
 
-    expect(current()).toContain("❌ <b>GitHub</b> — list repos (failed: rate limited)");
+    expect(current()).toContain("❌ GitHub — list repos (failed: rate limited)");
   });
 
   test("settling twice is ignored", async () => {
@@ -314,7 +329,7 @@ describe("SubagentProgress", () => {
     handle.failed("should not overwrite");
     await settle();
 
-    expect(current()).toContain("✅ <b>Events</b> — meetups");
+    expect(current()).toContain("✅ Events — meetups");
     expect(current()).not.toContain("failed");
   });
 
@@ -394,7 +409,7 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("graphql_query");
     await settle();
 
-    expect(current()).toContain("⏳ <b>Events</b> — meetups\n    ↳ <i>looking up data</i>");
+    expect(current()).toContain("⏳ Events — meetups\n    ↳ looking up data");
   });
 
   test("the last tool stays on screen after it finishes", async () => {
@@ -410,8 +425,8 @@ describe("SubagentProgress", () => {
     await settle();
 
     // Deliberate: tool calls are far shorter than the sub-agents running them.
-    expect(current()).toContain("↳ <i>looking up data</i>");
-    expect(current()).toContain("⏳ <b>Events</b> — meetups");
+    expect(current()).toContain("↳ looking up data");
+    expect(current()).toContain("⏳ Events — meetups");
   });
 
   test("parallel tool calls are listed together", async () => {
@@ -425,7 +440,7 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("rsvp_event");
     await settle();
 
-    expect(current()).toContain("↳ <i>looking up data</i>\n    ↳ <i>RSVPing</i>");
+    expect(current()).toContain("↳ looking up data\n    ↳ RSVPing");
   });
 
   test("ending one of two parallel tools leaves the other", async () => {
@@ -442,8 +457,8 @@ describe("SubagentProgress", () => {
     await settle();
 
     // Both stay: the stack is a history, not a live view.
-    expect(current()).toContain("↳ <i>looking up data</i>");
-    expect(current()).toContain("↳ <i>RSVPing</i>");
+    expect(current()).toContain("↳ looking up data");
+    expect(current()).toContain("↳ RSVPing");
   });
 
   test("consecutive calls to the same tool collapse into a count", async () => {
@@ -459,7 +474,7 @@ describe("SubagentProgress", () => {
     endA();
     await settle();
 
-    expect(current()).toContain("↳ <i>looking up data</i> ×2");
+    expect(current()).toContain("↳ looking up data ×2");
   });
 
   test("the stack grows in call order", async () => {
@@ -475,9 +490,9 @@ describe("SubagentProgress", () => {
 
     const lines = (current() ?? "").split("\n").filter((l) => l.includes("↳"));
     expect(lines).toEqual([
-      "    ↳ <i>looking up data</i>",
-      "    ↳ <i>creating the event</i>",
-      "    ↳ <i>RSVPing</i>",
+      "    ↳ looking up data",
+      "    ↳ creating the event",
+      "    ↳ RSVPing",
     ]);
   });
 
@@ -497,7 +512,7 @@ describe("SubagentProgress", () => {
 
     const text = current() ?? "";
     expect(text).toContain("↳ …2 earlier");
-    expect(text).toContain("↳ <i>reading the leaderboard</i>");
+    expect(text).toContain("↳ reading the leaderboard");
     expect(text).not.toContain("looking up data");
   });
 
@@ -516,7 +531,7 @@ describe("SubagentProgress", () => {
     await progress.finish();
 
     expect(current()).toBe(
-      "<b>Done — 1 subagent</b>\n✅ <b>Events</b> — plan it",
+      "Done — 1 subagent\n✅ Events — plan it",
     );
   });
 
@@ -532,7 +547,7 @@ describe("SubagentProgress", () => {
     handle.done("3 meetups");
     await progress.finish();
 
-    expect(current()).toContain("✅ <b>Events</b> — meetups");
+    expect(current()).toContain("✅ Events — meetups");
     expect(current()).not.toContain("↳");
   });
 
@@ -550,10 +565,10 @@ describe("SubagentProgress", () => {
     end();
     await settle();
 
-    expect(current()).toContain("↳ <i>RSVPing</i>");
+    expect(current()).toContain("↳ RSVPing");
   });
 
-  test("tool names are HTML-escaped", async () => {
+  test("tool names go out verbatim, with no markup to neutralise", async () => {
     const { progress, current, fire } = setup();
 
     const handle = progress.start("Events", "meetups");
@@ -562,8 +577,10 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("<script>");
     await settle();
 
-    expect(current()).toContain("&lt;script&gt;");
-    expect(current()).not.toContain("<script>");
+    // Nothing is escaped because nothing is parsed — the text is sent as-is and
+    // the styling travels as entities, so markup here is inert either way.
+    expect(current()).toContain("<script>");
+    expect(current()).not.toContain("&lt;");
   });
 
   test("started reflects whether any sub-agent ran", () => {
@@ -599,9 +616,9 @@ describe("nested sub-agents", () => {
     await settle();
 
     expect(current()).toBe(
-      "<b>Running 1 subagent</b>\n" +
-        "⏳ <b>Events</b> — plan the meetup\n" +
-        "    ⏳ <b>Venues</b> — find a room",
+      "Running 1 subagent\n" +
+        "⏳ Events — plan the meetup\n" +
+        "    ⏳ Venues — find a room",
     );
   });
 
@@ -617,10 +634,10 @@ describe("nested sub-agents", () => {
     await settle();
 
     const lines = (current() ?? "").split("\n");
-    expect(lines[1]).toBe("⏳ <b>Events</b> — plan the meetup");
-    expect(lines[2]).toBe("    ⏳ <b>Venues</b> — find a room");
-    expect(lines[3]).toBe("        ⏳ <b>Members</b> — who can host");
-    expect(lines[4]).toBe("            ⏳ <b>GitHub</b> — check the rota repo");
+    expect(lines[1]).toBe("⏳ Events — plan the meetup");
+    expect(lines[2]).toBe("    ⏳ Venues — find a room");
+    expect(lines[3]).toBe("        ⏳ Members — who can host");
+    expect(lines[4]).toBe("            ⏳ GitHub — check the rota repo");
   });
 
   test("a child's tools indent under the child", async () => {
@@ -633,7 +650,7 @@ describe("nested sub-agents", () => {
     child.activity.toolStart("graphql_query");
     await settle();
 
-    expect(current()).toContain("    ⏳ <b>Venues</b> — find a room\n        ↳ <i>looking up data</i>");
+    expect(current()).toContain("    ⏳ Venues — find a room\n        ↳ looking up data");
   });
 
   test("children settle independently of their parent", async () => {
@@ -648,9 +665,9 @@ describe("nested sub-agents", () => {
     child.done("Room 3 is free");
     await settle();
 
-    expect(current()).toContain("⏳ <b>Events</b> — plan the meetup");
-    expect(current()).toContain("    ✅ <b>Venues</b> — find a room");
-    expect(current()).toContain("<b>Running 1 subagent</b>");
+    expect(current()).toContain("⏳ Events — plan the meetup");
+    expect(current()).toContain("    ✅ Venues — find a room");
+    expect(current()).toContain("Running 1 subagent");
   });
 
   test("a settled parent keeps showing its children", async () => {
@@ -665,9 +682,9 @@ describe("nested sub-agents", () => {
     await progress.finish();
 
     expect(current()).toBe(
-      "<b>Done — 1 subagent</b>\n" +
-        "✅ <b>Events</b> — plan the meetup\n" +
-        "    ✅ <b>Venues</b> — find a room",
+      "Done — 1 subagent\n" +
+        "✅ Events — plan the meetup\n" +
+        "    ✅ Venues — find a room",
     );
   });
 
@@ -681,7 +698,7 @@ describe("nested sub-agents", () => {
     parent.activity.start("Members", "who can host");
     await settle();
 
-    expect(current()).toContain("<b>Running 1 subagent</b>");
+    expect(current()).toContain("Running 1 subagent");
   });
 
   test("completedResults collects successes from every depth", async () => {
@@ -708,7 +725,7 @@ describe("nested sub-agents", () => {
       handle = handle.activity.start(`Agent${i}`, "y".repeat(50));
     }
     // Rendered via the same path the sink would receive.
-    const text = renderProgress([[]]);
+    const text = render([[]]);
     expect(text.length).toBeLessThanOrEqual(MAX_MESSAGE_CHARS + 2);
   });
 });
@@ -754,7 +771,7 @@ describe("edit throttling", () => {
     await settle();
 
     expect(edits).toHaveLength(1);
-    expect(current()).toContain("<i>looking up data</i>");
+    expect(current()).toContain("looking up data");
   });
 
   test("only the latest state is sent when several updates are coalesced", async () => {
@@ -776,8 +793,8 @@ describe("edit throttling", () => {
 
     // One edit for two updates, carrying the state as of the flush.
     expect(edits).toHaveLength(1);
-    expect(current()).toContain("<i>looking up data</i>");
-    expect(current()).toContain("<i>RSVPing</i>");
+    expect(current()).toContain("looking up data");
+    expect(current()).toContain("RSVPing");
   });
 
   test("an edit past the interval goes straight out", async () => {
@@ -804,7 +821,7 @@ describe("edit throttling", () => {
     handle.done("3 meetups");
     await progress.finish();
 
-    expect(current()).toContain("✅ <b>Events</b> — meetups");
+    expect(current()).toContain("✅ Events — meetups");
   });
 });
 
@@ -898,8 +915,8 @@ describe("tool line visibility", () => {
     handle.activity.toolStart("rsvp_event");
     await settle();
 
-    expect(sink.current()).toContain("<i>looking up data</i>");
-    expect(sink.current()).toContain("<i>RSVPing</i>");
+    expect(sink.current()).toContain("looking up data");
+    expect(sink.current()).toContain("RSVPing");
   });
 });
 
@@ -1082,8 +1099,8 @@ describe("stacking by phrase", () => {
     await settleTick();
 
     const text = sink.current() ?? "";
-    expect(text).toContain("↳ <i>looking up members</i>");
-    expect(text).toContain("↳ <i>looking up events</i>");
+    expect(text).toContain("↳ looking up members");
+    expect(text).toContain("↳ looking up events");
   });
 
   test("repeating the same lookup collapses into a count", async () => {
@@ -1103,6 +1120,6 @@ describe("stacking by phrase", () => {
     handle.activity.toolStart("graphql_query", q)();
     await settleTick();
 
-    expect(sink.current()).toContain("↳ <i>looking up members</i> ×2");
+    expect(sink.current()).toContain("↳ looking up members ×2");
   });
 });

@@ -1,10 +1,30 @@
 import { describe, expect, test } from "bun:test";
+import type { FormattedString } from "@grammyjs/parse-mode";
 import { formatTechNews } from "./tech-news-formatter";
 import type { TechNews } from "../../services/tech-news.service";
 
 /** Most assertions care about the content, not where the split lands. */
 function render(news: TechNews): string {
-  return formatTechNews(news).join("\n");
+  return formatTechNews(news)
+    .map((p) => p.text)
+    .join("\n");
+}
+
+/** Substrings styled with a given entity type, so styling can be asserted. */
+function styled(parts: FormattedString[], type: string): string[] {
+  return parts.flatMap((p) =>
+    (p.entities ?? [])
+      .filter((e) => e.type === type)
+      .map((e) => p.text.slice(e.offset, e.offset + e.length)),
+  );
+}
+
+function links(parts: FormattedString[]): { text: string; url: string }[] {
+  return parts.flatMap((p) =>
+    (p.entities ?? [])
+      .filter((e): e is typeof e & { url: string } => e.type === "text_link")
+      .map((e) => ({ text: p.text.slice(e.offset, e.offset + e.length), url: e.url })),
+  );
 }
 
 const empty: TechNews = { stories: [], repos: [], local: [], islamic: [] };
@@ -15,7 +35,7 @@ function story(n: number, why = "Why it matters.") {
 
 describe("formatTechNews", () => {
   test("renders each section with its heading", () => {
-    const out = render({
+    const parts = formatTechNews({
       stories: [story(1)],
       repos: [
         { name: "acme/thing", url: "https://github.com/acme/thing", stars: 1500, why: "Useful." },
@@ -24,40 +44,61 @@ describe("formatTechNews", () => {
       islamic: [story(3)],
     });
 
-    expect(out).toContain("🔍 <b>The Stack Trace</b>");
-    expect(out).toContain("<b>Rising on GitHub</b>");
-    expect(out).toContain("<b>Singapore &amp; SEA</b>");
-    expect(out).toContain("<b>Muslim Tech &amp; Fintech</b>");
-    expect(out).toContain("1.5k stars");
+    expect(styled(parts, "bold")).toEqual([
+      "🔍 The Stack Trace",
+      "Rising on GitHub",
+      "Singapore & SEA",
+      "Muslim Tech & Fintech",
+    ]);
+    expect(parts[0]!.text).toContain("1.5K stars");
   });
 
   test("omits headings for sections with no items", () => {
-    const out = render({ ...empty, stories: [story(1)] });
-    expect(out).not.toContain("Rising on GitHub");
-    expect(out).not.toContain("Singapore");
-    expect(out).not.toContain("Muslim Tech");
+    const parts = formatTechNews({ ...empty, stories: [story(1)] });
+    expect(styled(parts, "bold")).toEqual(["🔍 The Stack Trace"]);
   });
 
-  test("escapes HTML in titles and blurbs", () => {
-    const out = render({
-      ...empty,
-      stories: [{ title: "Rust <script> & you", url: "https://e.com/a", why: "A & B" }],
-    });
-    expect(out).toContain("Rust &lt;script&gt; &amp; you");
-    expect(out).toContain("A &amp; B");
-    expect(out).not.toContain("<script>");
+  test("carries reasons as italic entities", () => {
+    const parts = formatTechNews({ ...empty, stories: [story(1, "Because reasons.")] });
+    expect(styled(parts, "italic")).toEqual(["Because reasons."]);
   });
 
-  test("keeps query strings valid inside the href", () => {
-    const out = render({
+  // The whole point of entities: text is never transformed, so nothing can
+  // corrupt it. The HTML version had to escape all of this.
+  test("leaves markup characters in titles completely untouched", () => {
+    const parts = formatTechNews({
       ...empty,
-      stories: [{ title: "T", url: "https://e.com/a?x=1&y=2", why: "w" }],
+      stories: [
+        { title: "Rust <script> & you", url: "https://e.com/a", why: "A & B < C" },
+      ],
     });
-    expect(out).toContain('href="https://e.com/a?x=1&amp;y=2"');
+
+    expect(parts[0]!.text).toContain("Rust <script> & you");
+    expect(parts[0]!.text).toContain("A & B < C");
+    expect(parts[0]!.text).not.toContain("&amp;");
+    expect(parts[0]!.text).not.toContain("&lt;");
+  });
+
+  test("leaves markdown characters in titles untouched", () => {
+    const parts = formatTechNews({
+      ...empty,
+      stories: [{ title: "Use max_output_tokens *now*", url: "https://e.com/a", why: "w" }],
+    });
+    expect(parts[0]!.text).toContain("Use max_output_tokens *now*");
+  });
+
+  test("stores link targets verbatim, however awkward the URL", () => {
+    const parts = formatTechNews({
+      ...empty,
+      stories: [
+        { title: "T", url: "https://e.com/a?x=1&y=2#frag_(v)", why: "w" },
+      ],
+    });
+    expect(links(parts)).toEqual([{ text: "T", url: "https://e.com/a?x=1&y=2#frag_(v)" }]);
   });
 
   test("strips an aggregator suffix but keeps real title tails", () => {
-    const out = render({
+    const parts = formatTechNews({
       ...empty,
       stories: [
         { title: "Model runs locally | VentureBeat", url: "https://e.com/1", why: "w" },
@@ -66,10 +107,12 @@ describe("formatTechNews", () => {
       ],
     });
 
-    expect(out).toContain(">Model runs locally<");
-    expect(out).toContain(">Agents found bugs<");
-    // A trailing clause that ends in punctuation is part of the headline.
-    expect(out).toContain(">Self-hosting - is it worth it?<");
+    expect(links(parts).map((l) => l.text)).toEqual([
+      "Model runs locally",
+      "Agents found bugs",
+      // A trailing clause that ends in punctuation is part of the headline.
+      "Self-hosting - is it worth it?",
+    ]);
   });
 
   describe("length budget", () => {
@@ -92,7 +135,7 @@ describe("formatTechNews", () => {
 
     test("every message fits Telegram's limit", () => {
       for (const part of formatTechNews(crowded)) {
-        expect(part.length).toBeLessThanOrEqual(4096);
+        expect(part.text.length).toBeLessThanOrEqual(4096);
       }
     });
 
@@ -100,53 +143,39 @@ describe("formatTechNews", () => {
       const parts = formatTechNews(crowded);
       expect(parts.length).toBeGreaterThan(1);
       expect(parts.length).toBeLessThanOrEqual(2);
-      expect(parts[0]).toContain("Story 0");
+      expect(parts[0]!.text).toContain("Story 0");
     });
 
     test("only the first message carries the title header", () => {
       const parts = formatTechNews(crowded);
-      expect(parts[0]).toContain("The Stack Trace");
+      expect(parts[0]!.text).toContain("The Stack Trace");
       for (const part of parts.slice(1)) {
-        expect(part).not.toContain("The Stack Trace");
+        expect(part.text).not.toContain("The Stack Trace");
       }
     });
 
     test("no message is blank", () => {
       for (const part of formatTechNews(crowded)) {
-        expect(part.trim().length).toBeGreaterThan(0);
+        expect(part.text.trim().length).toBeGreaterThan(0);
       }
     });
 
-    test("a section split across messages repeats its heading", () => {
-      // Sized so the GitHub section straddles the boundary.
-      const parts = formatTechNews({
-        ...empty,
-        stories: Array.from({ length: 6 }, (_, i) => story(i, "y".repeat(500))),
-        repos: Array.from({ length: 3 }, (_, i) => ({
-          name: `o/r${i}`,
-          url: `https://github.com/o/r${i}`,
-          stars: 900,
-          why: "y".repeat(500),
-        })),
-      });
-
-      for (const part of parts) {
-        // Any bullet must be preceded by a heading somewhere above it, except
-        // in the story section which intentionally has none.
-        const firstBullet = part.indexOf("•");
-        if (firstBullet === -1) continue;
-        const before = part.slice(0, firstBullet);
-        const opensSection = /<b>/.test(before);
-        const isStorySection = part.includes("The Stack Trace");
-        expect(opensSection || isStorySection).toBe(true);
+    test("entity offsets stay inside the text of their own message", () => {
+      // A split that miscounts would point an entity past the end, and
+      // Telegram rejects the whole message for that.
+      for (const part of formatTechNews(crowded)) {
+        for (const e of part.entities ?? []) {
+          expect(e.offset).toBeGreaterThanOrEqual(0);
+          expect(e.offset + e.length).toBeLessThanOrEqual(part.text.length);
+        }
       }
     });
 
     test("never leaves a heading with nothing under it", () => {
       const out = render(crowded);
-      for (const heading of ["Rising on GitHub", "Singapore &amp; SEA", "Muslim Tech &amp; Fintech"]) {
-        if (!out.includes(`<b>${heading}</b>`)) continue;
-        const after = out.slice(out.indexOf(`<b>${heading}</b>`) + heading.length + 7);
+      for (const heading of ["Rising on GitHub", "Singapore & SEA", "Muslim Tech & Fintech"]) {
+        if (!out.includes(heading)) continue;
+        const after = out.slice(out.indexOf(heading) + heading.length);
         expect(after.trimStart().startsWith("•")).toBe(true);
       }
     });

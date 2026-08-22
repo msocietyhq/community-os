@@ -1,4 +1,6 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import type { MonthlyDigest } from "../../services/digest.service";
+import { formatCompact } from "../../lib/text";
 
 const SG_DATE = new Intl.DateTimeFormat("en-SG", {
   day: "numeric",
@@ -22,39 +24,34 @@ const SG_TIME = new Intl.DateTimeFormat("en-SG", {
   timeZone: "Asia/Singapore",
 });
 
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
-  return String(tokens);
-}
-
-function escapeMarkdown(text: string): string {
-  return text.replace(/[_*`[\]]/g, "\\$&");
-}
-
+/**
+ * No escaping: names go into the text verbatim and any styling is carried by
+ * entities. A member called `*Ali*` or `a_b` used to need escaping here, and a
+ * missed one broke the whole message.
+ */
 function displayName(
   telegramUsername: string | null | undefined,
   name: string | null | undefined,
   firstName?: string | null,
 ): string {
-  if (telegramUsername) return `@${escapeMarkdown(telegramUsername)}`;
-  if (name) return escapeMarkdown(name);
-  if (firstName) return escapeMarkdown(firstName);
-  return "Anonymous";
+  if (telegramUsername) return `@${telegramUsername}`;
+  return name || firstName || "Anonymous";
 }
 
-export function formatMonthlyDigest(digest: MonthlyDigest): string {
-  const lines: string[] = [];
+export function formatMonthlyDigest(digest: MonthlyDigest): FormattedString {
+  const lines: (FormattedString | string)[] = [];
 
   // Header
-  lines.push("*MSOCIETY Monthly Digest*");
+  lines.push(FormattedString.b("MSOCIETY Monthly Digest"));
   lines.push(
-    `_${SG_DATE.format(digest.periodStart)} — ${SG_DATE.format(digest.periodEnd)}_`,
+    FormattedString.i(
+      `${SG_DATE.format(digest.periodStart)} — ${SG_DATE.format(digest.periodEnd)}`,
+    ),
   );
   lines.push("");
 
   // Chat Activity
-  lines.push("*Chat Activity*");
+  lines.push(FormattedString.b("Chat Activity"));
   lines.push(`Messages: ${digest.totalMessages}`);
   lines.push(`Active members: ${digest.uniqueActiveMembers}`);
 
@@ -70,40 +67,43 @@ export function formatMonthlyDigest(digest: MonthlyDigest): string {
   // New Members
   if (digest.newMembers.length > 0) {
     lines.push("");
-    lines.push("*Welcome New Members*");
-    const names = digest.newMembers
-      .slice(0, 5)
-      .map((m) => displayName(m.telegramUsername, m.name));
-    lines.push(names.join(", "));
+    lines.push(FormattedString.b("Welcome New Members"));
+    lines.push(
+      digest.newMembers
+        .slice(0, 5)
+        .map((m) => displayName(m.telegramUsername, m.name))
+        .join(", "),
+    );
   }
 
   // Upcoming Events
   lines.push("");
-  lines.push("*Upcoming Events*");
+  lines.push(FormattedString.b("Upcoming Events"));
   if (digest.upcomingEvents.length === 0) {
     lines.push("No upcoming events");
   } else {
     for (const [i, e] of digest.upcomingEvents.entries()) {
-      const dateStr = `${SG_EVENT_DATE.format(e.startsAt)} · ${SG_TIME.format(e.startsAt)}`;
-      lines.push(` ${i + 1}. ${escapeMarkdown(e.title)}`);
-      lines.push(`    ${dateStr} — ${e.attendeeCount} going`);
+      lines.push(` ${i + 1}. ${e.title}`);
+      lines.push(
+        `    ${SG_EVENT_DATE.format(e.startsAt)} · ${SG_TIME.format(e.startsAt)} — ${e.attendeeCount} going`,
+      );
     }
   }
 
   // New Projects
   if (digest.newProjects.length > 0) {
     lines.push("");
-    lines.push("*New Projects*");
+    lines.push(FormattedString.b("New Projects"));
     for (const p of digest.newProjects.slice(0, 5)) {
       const owner = displayName(p.ownerTelegramUsername, p.ownerName);
-      lines.push(` - ${escapeMarkdown(p.name)} by ${owner}`);
+      lines.push(` - ${p.name} by ${owner}`);
     }
   }
 
   // Reputation Leaders
   if (digest.reputationLeaders.length > 0) {
     lines.push("");
-    lines.push("*Reputation*");
+    lines.push(FormattedString.b("Reputation"));
     for (const [i, r] of digest.reputationLeaders.entries()) {
       const name = displayName(r.telegramUsername, r.userName);
       lines.push(` ${i + 1}. ${name} (+${r.score} pts)`);
@@ -113,12 +113,12 @@ export function formatMonthlyDigest(digest: MonthlyDigest): string {
   // AI Usage
   if (digest.aiUsage.length > 0) {
     lines.push("");
-    lines.push("*AI Usage*");
+    lines.push(FormattedString.b("AI Usage"));
     for (const [i, u] of digest.aiUsage.entries()) {
       const name = displayName(u.telegramUsername, u.firstName);
-      lines.push(` ${i + 1}. ${name} (${formatTokenCount(u.totalTokens)} tokens)`);
+      lines.push(` ${i + 1}. ${name} (${formatCompact(u.totalTokens)} tokens)`);
     }
   }
 
-  return lines.join("\n");
+  return FormattedString.join(lines, "\n");
 }

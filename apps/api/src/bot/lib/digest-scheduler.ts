@@ -1,3 +1,4 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import { Cron } from "croner";
 import { bot } from "../bot";
 import {
@@ -27,8 +28,7 @@ const SGT = { timezone: "Asia/Singapore" } as const;
  */
 async function broadcast(
   label: string,
-  message: string | string[],
-  parseMode: "Markdown" | "HTML",
+  message: FormattedString | FormattedString[],
 ): Promise<boolean> {
   const groupId = env.TELEGRAM_GROUP_ID;
   if (!groupId) {
@@ -40,8 +40,10 @@ async function broadcast(
   // concurrent sends, and a roundup split mid-section would read backwards.
   const parts = Array.isArray(message) ? message : [message];
   for (const part of parts) {
-    await bot.api.sendMessage(groupId, part, {
-      parse_mode: parseMode,
+    // Entities instead of a parse mode — nothing in the text needs escaping,
+    // so no member's name or headline can break a broadcast.
+    await bot.api.sendMessage(groupId, part.text, {
+      entities: part.entities,
       link_preview_options: { is_disabled: true },
     });
   }
@@ -62,7 +64,7 @@ export function startDigestScheduler(): void {
         const digest = await digestService.generateMonthlyDigest(
           previousCalendarMonth(),
         );
-        await broadcast("Monthly digest", formatMonthlyDigest(digest), "Markdown");
+        await broadcast("Monthly digest", formatMonthlyDigest(digest));
       } catch (err) {
         console.error("Failed to send monthly digest:", err);
       }
@@ -83,7 +85,7 @@ export function startDigestScheduler(): void {
           return;
         }
 
-        await broadcast("History digest", formatHistoryDigest(history), "HTML");
+        await broadcast("History digest", formatHistoryDigest(history));
       } catch (err) {
         console.error("Failed to send history digest:", err);
       }
@@ -104,7 +106,7 @@ export function startDigestScheduler(): void {
           return;
         }
 
-        await broadcast("Tech news", formatTechNews(news), "HTML");
+        await broadcast("Tech news", formatTechNews(news));
       } catch (err) {
         console.error("Failed to send tech news:", err);
       }

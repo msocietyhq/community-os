@@ -1,3 +1,5 @@
+import { encodeXML } from "entities";
+import { clip } from "../../lib/text";
 import type { ModelMessage } from "ai";
 import type { TelegramMeta } from "../types";
 import type { telegramMessages } from "../../db/schema/bot";
@@ -170,16 +172,7 @@ function parentFromRaw(raw: unknown): ReplyParent | null {
  */
 function sanitizeSnippet(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  const escaped = escapeAttribute(flat);
-  return escaped.length > max ? `${escaped.slice(0, max)}…` : escaped;
-}
-
-function escapeAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return clip(encodeXML(flat), max);
 }
 
 /**
@@ -223,7 +216,7 @@ function buildReplyAttrs(
   if (inWindow) {
     const at = formatTelegramDate(Math.floor(inWindow.date.getTime() / 1000));
     return {
-      attrs: ` replying-to="${escapeAttribute(rowDisplayName(inWindow))}" replying-to-at="${at}"`,
+      attrs: ` replying-to="${encodeXML(rowDisplayName(inWindow))}" replying-to-at="${at}"`,
       quoted: null,
     };
   }
@@ -244,7 +237,7 @@ function buildReplyAttrs(
     : ` reply-id="${parentId}"`;
 
   return {
-    attrs: ` replying-to="${escapeAttribute(parent.name)}"${when}${ref}`,
+    attrs: ` replying-to="${encodeXML(parent.name)}"${when}${ref}`,
     quoted: sanitizeSnippet(parent.snippet, HISTORY_REPLY_TEXT_MAX),
   };
 }
@@ -332,7 +325,7 @@ export function buildMessagesFromHistory(
       // Human message — sender, timestamp and reply link as envelope
       // attributes, so multi-line or adversarial content can't impersonate
       // the structure around it.
-      const name = escapeAttribute(rowDisplayName(row));
+      const name = encodeXML(rowDisplayName(row));
       const time = formatTelegramDate(Math.floor(row.date.getTime() / 1000));
       const dateStr = getDateString(row.date);
       const datePart = dateStr !== lastDateStr ? `${dateStr} ` : "";

@@ -1,4 +1,6 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import type { NewsItem, TechNews } from "../../services/tech-news.service";
+import { formatCompact } from "../../lib/text";
 
 /**
  * Telegram rejects a message over 4096 characters outright, so a busy week
@@ -11,15 +13,7 @@ const MAX_MESSAGE_CHARS = 4000;
 const MAX_MESSAGES = 2;
 
 /** Only the first message carries it, so a spill doesn't read as a new post. */
-const TITLE = "🔍 <b>The Stack Trace</b>";
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function formatStars(stars: number): string {
-  return stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : String(stars);
-}
+const TITLE = "🔍 The Stack Trace";
 
 /**
  * Aggregators tack their own name onto headlines. Drops a short trailing
@@ -37,55 +31,59 @@ function stripSiteSuffix(title: string): string {
   return head;
 }
 
-function link(url: string, label: string): string {
-  // encodeURI leaves `&` alone; escaping after it keeps query strings valid
-  // inside an HTML attribute without double-encoding existing `%` sequences.
-  return `<a href="${escapeHtml(encodeURI(url))}">${escapeHtml(stripSiteSuffix(label))}</a>`;
-}
-
-/** One rendered entry: its heading (when it opens a section) and its lines. */
+/** One rendered entry: its heading (when it opens a section) and its body. */
 interface Block {
   heading?: string;
-  lines: string[];
+  body: FormattedString;
+}
+
+/** `• <link>` then an indented italic reason, as one two-line block. */
+function entry(label: FormattedString, why: string): FormattedString {
+  return new FormattedString("• ")
+    .concat(label)
+    .plain("\n  ")
+    .i(why);
 }
 
 function newsBlocks(heading: string | null, items: NewsItem[]): Block[] {
   return items.map((item, i) => ({
     heading: i === 0 && heading ? heading : undefined,
-    lines: [`• ${link(item.url, item.title)}`, `  <i>${escapeHtml(item.why)}</i>`],
+    body: entry(FormattedString.link(stripSiteSuffix(item.title), item.url), item.why),
   }));
 }
 
 /**
  * Renders the roundup as one or more Telegram messages, in order.
  *
+ * Returns `FormattedString`s rather than markup: the text stays exactly as
+ * written and the styling travels beside it as entities, so a headline
+ * containing `<`, `&`, `_` or `*` can never break the message — there is no
+ * parse mode left to break. Send with `{ entities: part.entities }`.
+ *
  * A section split across the boundary repeats its heading in the follow-up, so
  * the second message doesn't open with bullets belonging to nothing.
  */
-export function formatTechNews(news: TechNews): string[] {
+export function formatTechNews(news: TechNews): FormattedString[] {
   const blocks: Block[] = [
     ...newsBlocks(null, news.stories),
     ...news.repos.map((r, i) => ({
       heading: i === 0 ? "Rising on GitHub" : undefined,
-      lines: [
-        `• ${link(r.url, r.name)} — ${formatStars(r.stars)} stars`,
-        `  <i>${escapeHtml(r.why)}</i>`,
-      ],
+      body: entry(
+        FormattedString.link(r.name, r.url).plain(` — ${formatCompact(r.stars)} stars`),
+        r.why,
+      ),
     })),
-    ...newsBlocks("Singapore &amp; SEA", news.local),
-    ...newsBlocks("Muslim Tech &amp; Fintech", news.islamic),
+    ...newsBlocks("Singapore & SEA", news.local),
+    ...newsBlocks("Muslim Tech & Fintech", news.islamic),
   ];
 
-  const messages: string[] = [];
-  let lines: string[] = [TITLE];
-  let length = lines[0]!.length;
+  const messages: FormattedString[] = [];
+  let parts: FormattedString[] = [FormattedString.b(TITLE)];
+  let length = TITLE.length;
   /** Heading whose section is still open, so a spill can repeat it. */
   let openHeading: string | null = null;
   /** Heading of a section whose items were skipped, not yet placed. */
   let pendingHeading: string | null = null;
-
-  const cost = (candidate: string[]) =>
-    candidate.reduce((sum, l) => sum + l.length + 1, 0);
 
   for (const block of blocks) {
     if (block.heading) {
@@ -94,11 +92,16 @@ export function formatTechNews(news: TechNews): string[] {
     }
 
     const heading = pendingHeading;
-    const candidate = ["", ...(heading ? [`<b>${heading}</b>`] : []), ...block.lines];
+    const candidate = heading
+      ? [FormattedString.b(heading), block.body]
+      : [block.body];
+    // +1 per join separator, +1 for the blank line before the group.
+    const cost =
+      candidate.reduce((sum, p) => sum + p.text.length + 1, 0) + 1;
 
-    if (length + cost(candidate) <= MAX_MESSAGE_CHARS) {
-      lines.push(...candidate);
-      length += cost(candidate);
+    if (length + cost <= MAX_MESSAGE_CHARS) {
+      parts.push(new FormattedString(""), ...candidate);
+      length += cost;
       pendingHeading = null;
       continue;
     }
@@ -110,17 +113,15 @@ export function formatTechNews(news: TechNews): string[] {
     }
 
     // Spill into a follow-up, repeating the heading of a section left open.
-    messages.push(lines.join("\n"));
+    messages.push(FormattedString.join(parts, "\n"));
     const carried = heading ?? openHeading;
-    const continuation = [
-      ...(carried ? [`<b>${carried}</b>`] : []),
-      ...block.lines,
-    ];
-    lines = continuation;
-    length = cost(continuation);
+    parts = carried
+      ? [FormattedString.b(carried), block.body]
+      : [block.body];
+    length = parts.reduce((sum, p) => sum + p.text.length + 1, 0);
     pendingHeading = null;
   }
 
-  messages.push(lines.join("\n"));
+  messages.push(FormattedString.join(parts, "\n"));
   return messages;
 }

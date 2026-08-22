@@ -1,5 +1,7 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import { Composer, InlineKeyboard } from "grammy";
 import type { BotContext } from "../types";
+import { replyWith } from "../lib/reply";
 import { resolveUser } from "../lib/auth";
 import { eventsService } from "../../services/events.service";
 import { isAppError } from "../../lib/errors";
@@ -26,13 +28,9 @@ function formatEventDate(date: Date): string {
   return `${SG_DATE.format(date)} · ${SG_TIME.format(date)}`;
 }
 
-function escapeMarkdown(text: string): string {
-  return text.replace(/[_*`[\]]/g, "\\$&");
-}
-
 function formatVenue(event: { isOnline: boolean | null; venueName?: string | null }): string {
   if (event.isOnline) return "🌐 Online";
-  if (event.venueName) return `📍 ${escapeMarkdown(event.venueName)}`;
+  if (event.venueName) return `📍 ${event.venueName}`;
   return "📍 TBD";
 }
 
@@ -47,19 +45,24 @@ eventsHandler.command("events", async (ctx) => {
   const upcoming = await eventsService.listUpcoming(5);
 
   if (upcoming.length === 0) {
-    await ctx.reply(
-      "📅 *Upcoming Events*\n\nNo upcoming events right now. Check back soon!",
-      { parse_mode: "Markdown" },
+    await replyWith(
+      ctx,
+      FormattedString.b("📅 Upcoming Events").plain(
+        "\n\nNo upcoming events right now. Check back soon!",
+      ),
     );
     return;
   }
 
-  const lines = ["📅 *Upcoming Events*\n"];
+  const lines: (FormattedString | string)[] = [
+    FormattedString.b("📅 Upcoming Events"),
+    "",
+  ];
   const keyboard = new InlineKeyboard();
 
   for (const [i, e] of upcoming.entries()) {
     lines.push(
-      `*${i + 1}. ${escapeMarkdown(e.title)}*`,
+      FormattedString.b(`${i + 1}. ${e.title}`),
       `🗓 ${formatEventDate(e.startsAt)}`,
       formatVenue(e),
       `👥 ${formatCapacity(e.attendeeCount, e.maxAttendees, e.maybeCount)}`,
@@ -69,10 +72,7 @@ eventsHandler.command("events", async (ctx) => {
     if (i < upcoming.length - 1) keyboard.row();
   }
 
-  await ctx.reply(lines.join("\n"), {
-    parse_mode: "Markdown",
-    reply_markup: keyboard,
-  });
+  await replyWith(ctx, FormattedString.join(lines, "\n"), keyboard);
 });
 
 // Callback: Back button — restore original RSVP buttons
@@ -155,9 +155,15 @@ eventsHandler.callbackQuery(/^rsvp_status:(.+):(going|maybe|not_going)$/, async 
     };
 
     await ctx.answerCallbackQuery({ text: `You're ${statusLabels[status]} ${fresh.title}!` });
-    await ctx.reply(
-      `${statusEmojis[status]} *${escapeMarkdown(resolved.user.name ?? "You")}* is ${statusLabels[status]} *${escapeMarkdown(fresh.title)}*\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
-      { parse_mode: "Markdown" },
+    await replyWith(
+      ctx,
+      new FormattedString(`${statusEmojis[status]} `)
+        .b(resolved.user.name ?? "You")
+        .plain(` is ${statusLabels[status]} `)
+        .b(fresh.title)
+        .plain(
+          `\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
+        ),
     );
   } catch (err) {
     if (isAppError(err)) {

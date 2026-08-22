@@ -1,4 +1,5 @@
 import { Composer } from "grammy";
+import type { FormattedString } from "@grammyjs/parse-mode";
 import type { BotContext } from "../types";
 import { digestService } from "../../services/digest.service";
 import { getWeeklyTechNews } from "../../services/tech-news.service";
@@ -8,13 +9,19 @@ import { formatTechNews } from "../lib/tech-news-formatter";
 
 export const digestHandler = new Composer<BotContext>();
 
+/** Entities instead of a parse mode, so nothing in the text needs escaping. */
+function replyWith(ctx: BotContext, message: FormattedString) {
+  return ctx.reply(message.text, {
+    entities: message.entities,
+    link_preview_options: { is_disabled: true },
+  });
+}
+
 digestHandler.command("digest", async (ctx) => {
   // No period argument: the on-demand view is the month so far, not the closed
   // month the scheduled post reports.
   const digest = await digestService.generateMonthlyDigest();
-  const message = formatMonthlyDigest(digest);
-
-  await ctx.reply(message, { parse_mode: "Markdown" });
+  await replyWith(ctx, formatMonthlyDigest(digest));
 });
 
 digestHandler.command("digest_history", async (ctx) => {
@@ -24,9 +31,7 @@ digestHandler.command("digest_history", async (ctx) => {
     return;
   }
 
-  const message = formatHistoryDigest(history);
-
-  await ctx.reply(message, { parse_mode: "HTML" });
+  await replyWith(ctx, formatHistoryDigest(history));
 });
 
 digestHandler.command("technews", async (ctx) => {
@@ -41,9 +46,6 @@ digestHandler.command("technews", async (ctx) => {
 
   // Sent in order — a roundup split mid-section reads backwards otherwise.
   for (const part of formatTechNews(news)) {
-    await ctx.reply(part, {
-      parse_mode: "HTML",
-      link_preview_options: { is_disabled: true },
-    });
+    await replyWith(ctx, part);
   }
 });

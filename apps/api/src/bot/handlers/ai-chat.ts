@@ -38,15 +38,18 @@ async function replyFormatted(
   text: string,
   options: Parameters<BotContext["reply"]>[1] = {},
 ) {
-  try {
-    return await ctx.reply(toTelegramMarkdown(text), {
-      ...options,
-      parse_mode: "MarkdownV2",
-    });
-  } catch (err) {
-    console.error("[ai-chat] MarkdownV2 rejected, sending plain:", err);
-    return await ctx.reply(text, options);
+  const markdown = toTelegramMarkdown(text);
+
+  if (markdown !== null) {
+    try {
+      return await ctx.reply(markdown, { ...options, parse_mode: "MarkdownV2" });
+    } catch (err) {
+      console.error("[ai-chat] MarkdownV2 rejected, sending plain:", err);
+    }
   }
+
+  // No parse mode, so the original text needs no escaping of any kind.
+  return await ctx.reply(text, options);
 }
 
 aiChatHandler.on("message:text", async (ctx) => {
@@ -151,19 +154,19 @@ aiChatHandler.on("message:text", async (ctx) => {
   // worth reporting, then edits it in place as each one settles. Failures here
   // must never take down the reply, so every call is swallowed.
   const progressSink: ProgressSink = {
-    async send(text) {
+    async send(message) {
       try {
-        const msg = await ctx.reply(text, { parse_mode: "HTML" });
+        const msg = await ctx.reply(message.text, { entities: message.entities });
         return msg.message_id;
       } catch (err) {
         console.error("[subagent-progress] send failed:", err);
         return null;
       }
     },
-    async edit(messageId, text) {
+    async edit(messageId, message) {
       try {
-        await ctx.api.editMessageText(ctx.chat.id, messageId, text, {
-          parse_mode: "HTML",
+        await ctx.api.editMessageText(ctx.chat.id, messageId, message.text, {
+          entities: message.entities,
         });
       } catch (err) {
         console.error("[subagent-progress] edit failed:", err);
