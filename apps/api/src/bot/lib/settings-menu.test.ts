@@ -12,7 +12,6 @@ import {
   renderDraftCard,
   renderIndexPage,
   renderSettingPage,
-  INDEX_TABLE_WIDTH,
 } from "./settings-menu";
 import type { SettingsDraft } from "./settings-draft";
 
@@ -41,20 +40,19 @@ describe("renderIndexPage", () => {
   });
 
   // Buttons carry no formatting at all, and a long welcome-text preview on a
-  // label made every button a different width. Values live in the body's
-  // monospace table instead, where they can be aligned.
-  test("current values live in the body table, not on buttons", () => {
+  // label made every button a different width. Values live in the body
+  // instead, where they can be italicised.
+  test("current values appear italicised in the body, not on buttons", () => {
     const page = renderIndexPage("behaviour", snapshot);
-    expect(page.text).toContain("Chime-ins");
-    expect(page.text).toMatch(/Chime-ins\s+on/);
+    expect(page.text).toContain("Chime-ins — <i>on</i>");
     expect(labels(page)).not.toContain("Chime-ins · on");
   });
 
-  // A welcome template is 52 characters — far past the width budget — so text
-  // settings collapse to a one-word state here. The content is one tap away.
+  // A welcome template runs to 52 characters and swamped the line, so text
+  // settings collapse to a one-word state. The content is one tap away.
   test("text settings show a state word, not their content", () => {
     const page = renderIndexPage("welcome", snapshot);
-    expect(page.text).toMatch(/New member welcome\s+default/);
+    expect(page.text).toContain("New member welcome — <i>default</i>");
     expect(page.text).not.toContain("MSOCIETY");
   });
 
@@ -71,31 +69,6 @@ describe("renderIndexPage", () => {
     for (const group of SETTING_GROUPS) {
       expect(() => renderIndexPage(group, snapshot)).not.toThrow();
     }
-  });
-
-  // Telegram wraps a <pre> block past roughly 30 monospace characters on a
-  // narrow phone, which would destroy the alignment. A future long label or a
-  // long formatted value must fail here rather than in production.
-  test("no table row exceeds the monospace width budget", () => {
-    for (const group of SETTING_GROUPS) {
-      const page = renderIndexPage(group, snapshot);
-      const table = page.text.match(/<pre>([\s\S]*)<\/pre>/)?.[1] ?? "";
-      for (const row of table.split("\n")) {
-        expect(
-          Array.from(row).length,
-          `${group}: "${row}" is wider than the budget`,
-        ).toBeLessThanOrEqual(INDEX_TABLE_WIDTH);
-      }
-    }
-  });
-
-  test("values are right-aligned to a common edge", () => {
-    const page = renderIndexPage("behaviour", snapshot);
-    const table = page.text.match(/<pre>([\s\S]*)<\/pre>/)?.[1] ?? "";
-    const widths = new Set(
-      table.split("\n").map((row) => Array.from(row).length),
-    );
-    expect(widths.size, "every row should end at the same column").toBe(1);
   });
 
   // Telegram rejects a lone surrogate with "button text must be encoded in

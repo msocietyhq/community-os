@@ -35,12 +35,12 @@ function display(key: SettingKey, snapshot: SettingsSnapshot): string {
 }
 
 /**
- * The value as it appears in the aligned index table.
+ * The value as it appears on the index page.
  *
  * Text settings collapse to default/custom/silent rather than a content
- * preview: a welcome template runs to 52 characters, which would wrap the
- * monospace block on a narrow phone. The full text is one tap away on the
- * setting's own page.
+ * preview: a welcome template runs to 52 characters, which swamped the line
+ * and made the list ragged. The full text is one tap away on the setting's
+ * own page.
  */
 function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   const def = BOT_SETTINGS[key];
@@ -51,18 +51,6 @@ function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   return value === def.default ? "default" : "custom";
 }
 
-/**
- * Widest a monospace row may be before Telegram wraps it on a narrow phone.
- * Asserted for every page by settings-menu.test.ts, so a future long label
- * fails a test rather than silently wrapping in production.
- */
-export const INDEX_TABLE_WIDTH = 28;
-
-/** Pads label and value apart to a fixed width — the space-between effect. */
-function tableRow(label: string, value: string, width: number): string {
-  const gap = Math.max(1, width - label.length - value.length);
-  return `${label}${" ".repeat(gap)}${value}`;
-}
 
 // ── Index ───────────────────────────────────────────────────
 
@@ -93,25 +81,20 @@ export function renderIndexPage(
     .row()
     .text("Recent changes", "set:hist::0");
 
-  // A <pre> block is the only place Telegram gives fixed-width characters, so
-  // it is the only way to align a value to the right. The trade is that
-  // entities aren't parsed inside it — no italics in here, by design.
+  // Italic values in ordinary text rather than an aligned <pre> table:
+  // Telegram doesn't parse entities inside <pre>, so alignment and italics are
+  // mutually exclusive, and the italics read better.
   const rows = keys
-    .map((key) =>
-      escapeHtml(
-        tableRow(
-          BOT_SETTINGS[key].label,
-          indexValue(key, snapshot),
-          INDEX_TABLE_WIDTH,
-        ),
-      ),
+    .map(
+      (key) =>
+        `${escapeHtml(BOT_SETTINGS[key].label)} — <i>${escapeHtml(indexValue(key, snapshot))}</i>`,
     )
     .join("\n");
 
   const text =
     `⚙️ <b>Bot Settings · ${SETTING_GROUP_LABELS[group]}</b>  ` +
     `<i>${index + 1}/${SETTING_GROUPS.length}</i>\n\n` +
-    `<pre>${rows}</pre>`;
+    `${rows}`;
 
   return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
 }
