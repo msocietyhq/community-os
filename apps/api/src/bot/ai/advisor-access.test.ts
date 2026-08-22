@@ -119,3 +119,51 @@ describe("time windows", () => {
     expect(days).toBe(ACTIVE_WINDOW_DAYS);
   });
 });
+
+describe("configurable tier limit", () => {
+  const base = {
+    telegramId: 1,
+    isRecentlyActive: true,
+    spentTodayUsd: 0,
+  };
+
+  test("maxTier off denies every tier", () => {
+    const result = decideAccess({ ...base, tier: "big", maxTier: "off" });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.reason).toBe("tier_disabled");
+  });
+
+  test("maxTier big denies the deeper tier but allows the cheaper one", () => {
+    expect(
+      decideAccess({ ...base, tier: "bigger", maxTier: "big" }).allowed,
+    ).toBe(false);
+    expect(decideAccess({ ...base, tier: "big", maxTier: "big" }).allowed).toBe(
+      true,
+    );
+  });
+
+  test("tier_disabled is reported before the budget, so the message is honest", () => {
+    const result = decideAccess({
+      ...base,
+      tier: "big",
+      maxTier: "off",
+      spentTodayUsd: 999,
+    });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.reason).toBe("tier_disabled");
+  });
+
+  test("a configured budget overrides the default", () => {
+    expect(
+      decideAccess({ ...base, tier: "big", spentTodayUsd: 0.6 }).allowed,
+    ).toBe(false);
+    expect(
+      decideAccess({
+        ...base,
+        tier: "big",
+        spentTodayUsd: 0.6,
+        dailyBudgetUsd: 2,
+      }).allowed,
+    ).toBe(true);
+  });
+});

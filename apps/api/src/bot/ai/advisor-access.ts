@@ -1,3 +1,4 @@
+import type { AdvisorTierLimit } from "@community-os/shared/bot-settings";
 import { ADVISOR_TOOL_NAMES, type AdvisorTier } from "./advisor";
 
 /**
@@ -29,7 +30,7 @@ export const ADVISOR_CALLERS = [
 
 export interface AdvisorDenied {
   allowed: false;
-  reason: "unknown_sender" | "inactive" | "budget";
+  reason: "unknown_sender" | "inactive" | "budget" | "tier_disabled";
   /** Verbatim text for the agent to relay to the member. */
   tellUser: string;
 }
@@ -50,8 +51,19 @@ export function decideAccess(input: {
   telegramId: number | null;
   isRecentlyActive: boolean;
   spentTodayUsd: number;
+  /** From cost.advisorDailyBudgetUsd. */
+  dailyBudgetUsd?: number;
+  /** From cost.advisorMaxTier. */
+  maxTier?: AdvisorTierLimit;
 }): AdvisorAccess {
-  const { tier, telegramId, isRecentlyActive, spentTodayUsd } = input;
+  const {
+    tier,
+    telegramId,
+    isRecentlyActive,
+    spentTodayUsd,
+    dailyBudgetUsd = ADVISOR_DAILY_BUDGET_USD,
+    maxTier = "bigger",
+  } = input;
 
   if (telegramId === null) {
     return {
@@ -62,7 +74,18 @@ export function decideAccess(input: {
     };
   }
 
-  if (spentTodayUsd >= ADVISOR_DAILY_BUDGET_USD) {
+  // Checked before the budget: when escalation is off entirely, "you've used
+  // up today's allowance" would be a misleading thing to tell a member.
+  if (maxTier === "off" || (maxTier === "big" && tier === "bigger")) {
+    return {
+      allowed: false,
+      reason: "tier_disabled",
+      tellUser:
+        "Deeper reasoning is switched off at the moment. I'll answer with what I can work out myself.",
+    };
+  }
+
+  if (spentTodayUsd >= dailyBudgetUsd) {
     return {
       allowed: false,
       reason: "budget",

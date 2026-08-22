@@ -614,7 +614,7 @@ ${renderCandidates(bySection("local"))}
 MUSLIM / ISLAMIC TECH CANDIDATES:
 ${renderCandidates(bySection("islamic"))}`,
       },
-      { caller: "tech-news" },
+      { caller: "tech-news", class: "background" },
     );
 
     // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.

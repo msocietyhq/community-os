@@ -10,6 +10,7 @@ import {
   resetChimeHistory,
   CHIME_IN_COOLDOWN_MS,
   CHIME_IN_MIN_CONFIDENCE,
+  inQuietHours,
 } from "./chime-in";
 
 describe("preFilter", () => {
@@ -138,5 +139,39 @@ describe("chimeDecisionSchema", () => {
 
   test("accepts a well-formed decision", () => {
     expect(chimeDecisionSchema.safeParse({ respond: true, confidence: 0.9, reason: "ok" }).success).toBe(true);
+  });
+});
+
+describe("inQuietHours", () => {
+  const at = (hhmm: string) => new Date(`2026-08-22T${hhmm}:00+08:00`);
+
+  test("null window is never quiet", () => {
+    expect(inQuietHours(null, at("03:00"))).toBe(false);
+  });
+
+  test("inside a same-day window", () => {
+    expect(inQuietHours({ start: "13:00", end: "15:00" }, at("14:00"))).toBe(true);
+  });
+
+  test("outside a same-day window", () => {
+    expect(inQuietHours({ start: "13:00", end: "15:00" }, at("16:00"))).toBe(false);
+  });
+
+  test("a window wrapping midnight covers the late evening", () => {
+    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("23:30"))).toBe(true);
+  });
+
+  test("a window wrapping midnight covers the early morning", () => {
+    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("02:00"))).toBe(true);
+  });
+
+  test("a window wrapping midnight excludes the afternoon", () => {
+    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("14:00"))).toBe(false);
+  });
+
+  test("the start minute is inside, the end minute is outside", () => {
+    const w = { start: "23:00", end: "07:00" };
+    expect(inQuietHours(w, at("23:00"))).toBe(true);
+    expect(inQuietHours(w, at("07:00"))).toBe(false);
   });
 });

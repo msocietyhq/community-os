@@ -376,7 +376,7 @@ export const aiProfileService = {
         messages: [{ role: "user", content: evidence }],
         maxRetries: MODEL_MAX_RETRIES,
       },
-      { caller: "ai-profile-generation" },
+      { caller: "ai-profile-generation", class: "background" },
     );
 
     // `aiService.generateObject` widens its result to `unknown` (its return type

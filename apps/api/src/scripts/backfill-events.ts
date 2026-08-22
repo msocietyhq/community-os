@@ -141,7 +141,7 @@ Instructions:
 - Assess your confidence: "high" = clear event with date/time, "medium" = likely event but some details inferred, "low" = uncertain
 - If no events are found in the messages, return an empty events array`,
       prompt: `Extract structured event data from these Telegram messages:\n\n${formattedMessages}`,
-    }, { caller: "backfill-events" });
+    }, { caller: "backfill-events", class: "background" });
 
     const object = result.object as z.infer<typeof extractedEventSchema>;
     allEvents.push(...object.events);

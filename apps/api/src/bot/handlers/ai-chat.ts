@@ -23,6 +23,11 @@ import {
 import { judgeChimeIn } from "../lib/chime-in-judge";
 import { toTelegramMarkdown } from "../lib/markdown";
 import { renderDraftCard } from "../lib/settings-menu";
+import { isPaused } from "@community-os/shared/bot-settings";
+import { getSettings } from "../../services/bot-settings.service";
+import { inQuietHours } from "../lib/chime-in";
+import { shouldSendDenial } from "../lib/dm-access";
+import { resolveUser } from "../lib/auth";
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -69,6 +74,32 @@ aiChatHandler.on("message:text", async (ctx) => {
       },
     );
     return;
+  }
+
+  const settings = await getSettings();
+
+  if (isPaused(settings["ai.replies"], new Date())) {
+    // Admins keep talking to the AI in DMs — otherwise pausing would remove
+    // the very channel used to unpause.
+    const resolved =
+      isPrivate && ctx.from ? await resolveUser(String(ctx.from.id)) : null;
+    const role = resolved?.user.role;
+    const isAdmin = role === "admin" || role === "superadmin";
+
+    if (!isAdmin) {
+      // Group: silent drop, so the bot simply looks offline. DM: a reply,
+      // because silence in a one-to-one chat reads as a fault.
+      const reply = settings["dm.maintenanceReply"];
+      if (
+        isPrivate &&
+        reply !== null &&
+        ctx.from &&
+        shouldSendDenial(ctx.from.id)
+      ) {
+        await ctx.reply(reply);
+      }
+      return;
+    }
   }
 
   let query: string;
@@ -282,11 +313,21 @@ async function shouldChimeIn(
   now: number,
 ): Promise<boolean> {
   const chatId = String(ctx.chat!.id);
+  const settings = await getSettings();
+
+  if (!settings["chimeIn.enabled"]) return false;
+
+  // Quiet hours suppress only uninvited replies — a direct question at 1am
+  // still gets an answer, it just doesn't get volunteered.
+  if (inQuietHours(settings["availability.quietHours"], new Date(now))) {
+    return false;
+  }
 
   const skip = preFilter({ text, isBot: ctx.from?.is_bot ?? false });
   if (skip) return false;
 
-  if (!offCooldown(lastChimeAt(chatId), now)) return false;
+  const cooldownMs = settings["chimeIn.cooldownMinutes"] * 60_000;
+  if (!offCooldown(lastChimeAt(chatId), now, cooldownMs)) return false;
 
   // Judged with surrounding conversation — "yeah probably" is unjudgeable alone.
   const context = await getRecentChatMessages(
@@ -302,6 +343,7 @@ async function shouldChimeIn(
     transcript: formatGroupHistory(context),
     chatId,
     telegramUserId: ctx.from?.id ?? null,
+    minConfidence: settings["chimeIn.minConfidence"],
   });
 
   console.log(

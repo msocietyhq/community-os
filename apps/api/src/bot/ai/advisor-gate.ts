@@ -1,5 +1,6 @@
 import { aiService } from "../../services/ai.service";
 import { hasRecentMessages } from "../../services/messages.service";
+import { getSettings } from "../../services/bot-settings.service";
 import type { AdvisorTier } from "./advisor";
 import {
   ADVISOR_CALLERS,
@@ -15,8 +16,19 @@ export async function checkAdvisorAccess(
   telegramId: number | null,
   now: Date = new Date(),
 ): Promise<AdvisorAccess> {
+  const settings = await getSettings();
+  const dailyBudgetUsd = settings["cost.advisorDailyBudgetUsd"];
+  const maxTier = settings["cost.advisorMaxTier"];
+
   if (telegramId === null) {
-    return decideAccess({ tier, telegramId, isRecentlyActive: false, spentTodayUsd: 0 });
+    return decideAccess({
+      tier,
+      telegramId,
+      isRecentlyActive: false,
+      spentTodayUsd: 0,
+      dailyBudgetUsd,
+      maxTier,
+    });
   }
 
   const [isRecentlyActive, spentTodayUsd] = await Promise.all([
@@ -29,5 +41,12 @@ export async function checkAdvisorAccess(
       .catch(() => 0),
   ]);
 
-  return decideAccess({ tier, telegramId, isRecentlyActive, spentTodayUsd });
+  return decideAccess({
+    tier,
+    telegramId,
+    isRecentlyActive,
+    spentTodayUsd,
+    dailyBudgetUsd,
+    maxTier,
+  });
 }

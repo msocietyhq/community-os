@@ -169,7 +169,12 @@ export async function extractMemories(
       ],
       maxOutputTokens: 512,
     },
-    { caller: "memory-extractor", telegramUserId: senderTelegramId, chatId },
+    {
+      caller: "memory-extractor",
+      telegramUserId: senderTelegramId,
+      chatId,
+      class: "background",
+    },
   );
 
   // `aiService.generateObject` widens its result to `unknown` (its return type

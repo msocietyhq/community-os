@@ -66,7 +66,7 @@ async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
       messages: [{ role: "user", content: transcript }],
       maxOutputTokens: 1024,
     },
-    { caller: "memory-backfill" },
+    { caller: "memory-backfill", class: "background" },
   );
 
   // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.

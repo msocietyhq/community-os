@@ -34,7 +34,10 @@ export async function judgeChimeIn(input: ChimeInInput): Promise<ChimeDecision> 
     );
 
     // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.
-    return applyConfidenceGate(chimeDecisionSchema.parse(result.object));
+    return applyConfidenceGate(
+      chimeDecisionSchema.parse(result.object),
+      input.minConfidence,
+    );
   } catch (err) {
     console.error("[chime-in] judge failed:", err);
     return { respond: false, confidence: 0, reason: "judge error" };

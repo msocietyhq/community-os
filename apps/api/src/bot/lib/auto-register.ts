@@ -11,6 +11,8 @@ import { db } from "../../db";
 import { account } from "../../db/schema/auth";
 import { members } from "../../db/schema/members";
 import { env } from "../../env";
+import { getSettings } from "../../services/bot-settings.service";
+import { renderWelcome } from "./welcome-template";
 
 /**
  * In-memory cache of Telegram IDs that are known to have
@@ -92,25 +94,27 @@ async function sendWelcome(
   from: User,
   userId: string,
 ): Promise<void> {
+  // Claimed regardless of whether greetings are enabled, so a member who joins
+  // while they're off is not greeted later when they're switched back on.
   if (!(await membersService.claimWelcome(userId))) return;
 
-  const mention = `<a href="tg://user?id=${from.id}">${from.first_name}</a>`;
-  const keyboard = new InlineKeyboard().url(
-    "Set up profile",
-    `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=profile`,
-  );
+  const settings = await getSettings();
+  if (!settings["welcome.enabled"]) return;
 
-  await ctx.reply(
-    `Welcome to MSOCIETY, ${mention}! 👋\n\n` +
-      `Would you mind doing a short intro?\n` +
-      `1. Some background of your academics\n` +
-      `2. Your current job/situation\n` +
-      `3. Your tech interests/aspirations`,
-    {
-      parse_mode: "HTML",
-      reply_markup: keyboard,
-    },
-  );
+  const text = renderWelcome(settings["welcome.newMemberText"], {
+    telegramId: from.id,
+    firstName: from.first_name,
+    username: from.username,
+  });
+
+  const keyboard = settings["welcome.showProfileButton"]
+    ? new InlineKeyboard().url(
+        "Set up profile",
+        `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=profile`,
+      )
+    : undefined;
+
+  await ctx.reply(text, { parse_mode: "HTML", reply_markup: keyboard });
 }
 
 /**
@@ -203,11 +207,17 @@ export async function membershipMiddleware(
           `Membership: reactivated @${telegramUser.username ?? telegramUser.first_name} (rejoined group)`,
         );
 
-        const name = telegramUser.first_name;
-        await ctx.reply(
-          `Welcome back, <a href="tg://user?id=${telegramUser.id}">${name}</a>! 👋`,
-          { parse_mode: "HTML" },
-        );
+        const settings = await getSettings();
+        if (settings["welcome.enabled"]) {
+          await ctx.reply(
+            renderWelcome(settings["welcome.returningText"], {
+              telegramId: telegramUser.id,
+              firstName: telegramUser.first_name,
+              username: telegramUser.username,
+            }),
+            { parse_mode: "HTML" },
+          );
+        }
 
         return next();
       }

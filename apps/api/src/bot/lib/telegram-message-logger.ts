@@ -10,6 +10,7 @@ import {
   shouldExtractMemory,
   extractMemories,
 } from "./memory-extractor";
+import { getSettings } from "../../services/bot-settings.service";
 
 type MediaType =
   | "photo"
@@ -168,18 +169,25 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
           console.error("[message-logger] embedding failed:", err);
         });
 
-      // Memory extraction is fire-and-forget
+      // Memory extraction is fire-and-forget.
+      //
+      // The setting is read AFTER the pure pre-filter, which rejects most
+      // messages for free — checking it first would mean a settings read on
+      // every single group message.
       if (shouldExtractMemory(content, from?.is_bot ?? false)) {
-        extractMemories(
-          content,
-          from?.first_name ?? "Unknown",
-          from?.username ?? null,
-          from?.id ?? null,
-          row.chatId,
-          row.messageId,
-        ).catch((err) => {
-          console.error("[memory-extractor] failed:", err);
-        });
+        const settings = await getSettings();
+        if (settings["memory.extractionEnabled"]) {
+          extractMemories(
+            content,
+            from?.first_name ?? "Unknown",
+            from?.username ?? null,
+            from?.id ?? null,
+            row.chatId,
+            row.messageId,
+          ).catch((err) => {
+            console.error("[memory-extractor] failed:", err);
+          });
+        }
       }
     }
   }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { QuietHours } from "@community-os/shared/bot-settings";
 
 /**
  * Decides whether the bot should answer a message that wasn't addressed to it.
@@ -180,6 +181,12 @@ export interface ChimeInInput {
   transcript: string;
   chatId: string;
   telegramUserId: number | null;
+  /**
+   * Confidence floor, from chimeIn.minConfidence. Applied by judgeChimeIn and
+   * nowhere else — gating twice would silently use whichever is stricter, so
+   * lowering the setting below the default would appear to do nothing.
+   */
+  minConfidence?: number;
 }
 
 /**
@@ -200,4 +207,44 @@ export function lastChimeAt(chatId: string): number | undefined {
 /** Test seam — the map is module state. */
 export function resetChimeHistory(): void {
   lastChimeByChat.clear();
+}
+
+// ── Quiet hours ─────────────────────────────────────────────
+
+/** Minutes past midnight in Singapore, which is what the window is defined in. */
+function sgtMinutes(now: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Singapore",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+/**
+ * Whether `now` falls inside the quiet window.
+ *
+ * Windows wrap midnight — 23:00–07:00 is the common case — so a start after
+ * the end means "outside the daytime gap" rather than an empty range. Start is
+ * inclusive, end exclusive, so back-to-back windows wouldn't double-count.
+ */
+export function inQuietHours(window: QuietHours, now: Date): boolean {
+  if (window === null) return false;
+
+  const current = sgtMinutes(now);
+  const start = toMinutes(window.start);
+  const end = toMinutes(window.end);
+
+  return start <= end
+    ? current >= start && current < end
+    : current >= start || current < end;
 }

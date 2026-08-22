@@ -441,7 +441,7 @@ If worthPosting is true:
 - summary: a 2-3 sentence flashback starting with "This month in ${best.year},". Witty or nostalgic, respectful if the topics were serious. No emojis, no markdown, under 280 characters. Do NOT include or paraphrase the quoted message — the quote is displayed separately.
 - quoteMessageId: the ID of the ONE message that stands alone best — insightful, funny, or true to the community's character. Null if none is quote-worthy.`,
           },
-          { caller: "digest" },
+          { caller: "digest", class: "background" },
         );
 
         // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.

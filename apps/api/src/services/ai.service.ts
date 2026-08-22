@@ -5,6 +5,14 @@ import { aiUsage } from "../db/schema/bot";
 import { user } from "../db/schema/auth";
 import { sql, eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { env } from "../env";
+import { isPaused } from "@community-os/shared/bot-settings";
+import {
+  AiBudgetError,
+  decideBudget,
+  type CallClass,
+} from "../bot/lib/ai-budget";
+import { getSettings } from "./bot-settings.service";
+import { addSpend, getSpend, shouldAlert } from "./ai-spend-counter";
 
 // ── Model constants ─────────────────────────────────────────
 
@@ -62,6 +70,13 @@ export interface TrackingContext {
   caller: string;
   telegramUserId?: number | null;
   chatId?: string | null;
+  /**
+   * Interactive calls answer a member who is waiting; background calls are
+   * crons and extraction jobs. The background pause only stops the latter.
+   * Defaults to "interactive" — the safer assumption, since wrongly treating a
+   * member's question as background would silently drop their answer.
+   */
+  class?: CallClass;
 }
 
 interface TrackUsageInput {
@@ -122,16 +137,69 @@ function withPromptCaching<
   };
 }
 
+/**
+ * The single choke point for the background pause and every cost cap.
+ *
+ * Every AI call in the codebase already funnels through this module, so gating
+ * here covers the crons, the memory extractor, the profile sweep and the chat
+ * agent at once — instead of a check in each, which would rot.
+ */
+async function assertWithinBudget(ctx: TrackingContext): Promise<void> {
+  const now = new Date();
+  const settings = await getSettings();
+  const spend = await getSpend(now, estimateCost);
+
+  const verdict = decideBudget({
+    callClass: ctx.class ?? "interactive",
+    backgroundPaused: isPaused(settings["ai.background"], now),
+    spentTodayUsd: spend.todayUsd,
+    spentMonthUsd: spend.monthUsd,
+    dailyCapUsd: settings["cost.dailyCapUsd"],
+    monthlyCapUsd: settings["cost.monthlyCapUsd"],
+  });
+
+  if (!verdict.allowed) {
+    console.warn(`[ai-budget] blocked ${ctx.caller}: ${verdict.reason}`);
+    throw new AiBudgetError(verdict.reason);
+  }
+
+  const threshold = settings["cost.alertThresholdUsd"];
+  if (shouldAlert(now, threshold, spend.todayUsd)) {
+    // Dynamic import keeps the service layer free of a static bot dependency.
+    // Fire-and-forget: a failed alert must never block a member's answer.
+    import("../bot/lib/spend-alert")
+      .then((m) => m.notifyAdminsOfSpend(spend.todayUsd, threshold ?? 0))
+      .catch((err) => console.error("[ai-budget] spend alert failed:", err));
+  }
+}
+
+/** Records a completed call against the in-process running total. */
+function recordSpend(
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+): void {
+  addSpend(estimateCost(modelId, inputTokens, outputTokens));
+}
+
 async function trackedGenerateText(
   params: Parameters<typeof generateText>[0],
   ctx: TrackingContext,
 ): Promise<Awaited<ReturnType<typeof generateText>>> {
+  await assertWithinBudget(ctx);
+
   const modelId = resolveModelId(params.model);
   const start = performance.now();
 
   try {
     const result = await generateText(withPromptCaching(params));
     const durationMs = Math.round(performance.now() - start);
+
+    recordSpend(
+      modelId,
+      result.usage.inputTokens ?? 0,
+      result.usage.outputTokens ?? 0,
+    );
 
     trackUsage({
       model: modelId,
@@ -168,12 +236,20 @@ async function trackedGenerateObject<T extends Parameters<typeof generateObject>
   params: T,
   ctx: TrackingContext,
 ): Promise<Awaited<ReturnType<typeof generateObject>>> {
+  await assertWithinBudget(ctx);
+
   const modelId = resolveModelId(params.model);
   const start = performance.now();
 
   try {
     const result = await generateObject(withPromptCaching(params));
     const durationMs = Math.round(performance.now() - start);
+
+    recordSpend(
+      modelId,
+      result.usage.inputTokens ?? 0,
+      result.usage.outputTokens ?? 0,
+    );
 
     trackUsage({
       model: modelId,
