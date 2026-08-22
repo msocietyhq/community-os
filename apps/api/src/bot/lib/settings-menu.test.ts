@@ -10,6 +10,7 @@ import {
   PAUSE_PRESETS,
   renderConfirmation,
   renderDraftCard,
+  renderApplied,
   renderIndexPage,
   renderSettingPage,
 } from "./settings-menu";
@@ -140,6 +141,32 @@ describe("renderSettingPage", () => {
           ).toBeLessThanOrEqual(64);
         }
       }
+    }
+  });
+});
+
+// The draft card shipped once rendering HTML but sent as Markdown, showing an
+// admin raw <b> tags. The mode now travels on the page so no call site can
+// contradict it — this pins that every renderer supplies it.
+describe("parse mode", () => {
+  test("every renderer declares HTML", () => {
+    const pages = [
+      renderIndexPage("cost", snapshot),
+      renderSettingPage("cost.dailyCapUsd", snapshot, null),
+      renderConfirmation({ key: "chimeIn.enabled", from: true, to: false }),
+      renderDraftCard(
+        {
+          changes: [{ key: "chimeIn.enabled", from: true, to: false }],
+          createdAt: 0,
+          messageId: 0,
+        },
+        [],
+      ),
+      renderApplied([{ key: "chimeIn.enabled", from: true, to: false }]),
+    ];
+
+    for (const page of pages) {
+      expect(page.parseMode).toBe("HTML");
     }
   });
 });

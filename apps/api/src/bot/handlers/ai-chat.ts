@@ -242,8 +242,10 @@ aiChatHandler.on("message:text", async (ctx) => {
       messageId: 0,
     };
     const page = renderDraftCard(draft, []);
+    // The page carries its own parse mode, so this can't drift from the
+    // renderer again — it once sent HTML as Markdown and showed raw <b> tags.
     const sent = await ctx.reply(page.text, {
-      parse_mode: "Markdown",
+      parse_mode: page.parseMode,
       reply_markup: page.keyboard,
     });
     ctx.session.settingsDraft = { ...draft, messageId: sent.message_id };

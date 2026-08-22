@@ -394,6 +394,8 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
 
         const snapshot = await getSettings();
         const resolved: { key: string; from: unknown; to: unknown }[] = [];
+        /** Keys already at the requested value — reported, not proposed. */
+        const skipped: string[] = [];
 
         for (const change of changes) {
           if (!isSettingKey(change.key)) {
@@ -415,15 +417,34 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             };
           }
 
-          resolved.push({ key, from: snapshot[key], to: parsed.data });
+          // A change to the value it already holds is noise on the card, and
+          // reads as though something will happen when nothing will.
+          const from = snapshot[key];
+          if (Bun.deepEquals(from, parsed.data)) {
+            skipped.push(BOT_SETTINGS[key].label);
+            continue;
+          }
+
+          resolved.push({ key, from, to: parsed.data });
+        }
+
+        if (resolved.length === 0) {
+          return {
+            status: "no_change",
+            message:
+              skipped.length > 0
+                ? `Already set to those values: ${skipped.join(", ")}. Nothing to change.`
+                : "Nothing to change.",
+          };
         }
 
         await ctx.proposeSettings({ changes: resolved, rationale });
 
         return {
           status: "proposed",
+          alreadyCorrect: skipped,
           message:
-            "The change card is on screen with Confirm and Cancel buttons. Tell the admin to review it — do not claim anything has changed yet.",
+            "The card is on screen with Confirm and Cancel buttons. Reply with ONE short sentence pointing at it — do not restate the changes, they are already listed on the card, and do not claim anything has been applied yet.",
         };
       },
     }),

@@ -105,7 +105,7 @@ async function showPage(
 ): Promise<void> {
   await ctx.answerCallbackQuery(toast ? { text: toast } : undefined);
   await ctx.editMessageText(page.text, {
-    parse_mode: "HTML",
+    parse_mode: page.parseMode,
     reply_markup: page.keyboard,
   });
 }
@@ -127,7 +127,7 @@ settingsHandler.command("settings", async (ctx) => {
   const snapshot = await getSettings();
   const page = renderIndexPage("availability", snapshot);
   await ctx.reply(page.text, {
-    parse_mode: "HTML",
+    parse_mode: page.parseMode,
     reply_markup: page.keyboard,
   });
 });
@@ -474,7 +474,7 @@ async function settingsTextConversation(
 
   const page = renderConfirmation(change);
   await ctx.reply(page.text, {
-    parse_mode: "HTML",
+    parse_mode: page.parseMode,
     reply_markup: page.keyboard,
   });
 }

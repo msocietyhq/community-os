@@ -18,6 +18,22 @@ import { escapeHtml } from "./telegram-html";
 export interface RenderedPage {
   text: string;
   keyboard: InlineKeyboardMarkup;
+  /**
+   * Carried on the page so a call site cannot send it with the wrong mode.
+   * These renderers emit HTML; a draft card once shipped with `Markdown` and
+   * showed an admin raw `<b>` tags, because the sender lived in a different
+   * file from the renderer and drifted.
+   */
+  parseMode: "HTML";
+}
+
+/** Every renderer returns through here, so the parse mode is never forgotten. */
+function page(text: string, keyboard: InlineKeyboard): RenderedPage {
+  return {
+    text,
+    keyboard: { inline_keyboard: keyboard.inline_keyboard },
+    parseMode: "HTML",
+  };
 }
 
 /**
@@ -96,7 +112,7 @@ export function renderIndexPage(
     `<i>${index + 1}/${SETTING_GROUPS.length}</i>\n\n` +
     `${rows}`;
 
-  return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
+  return page(text, keyboard);
 }
 
 // ── Setting page ────────────────────────────────────────────
@@ -243,7 +259,7 @@ export function renderSettingPage(
     `Default:  <i>${escapeHtml(formatValue(key, def.default))}</i>\n` +
     `Changed:  <i>${escapeHtml(changedLine)}</i>`;
 
-  return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
+  return page(text, keyboard);
 }
 
 // ── Confirmation ────────────────────────────────────────────
@@ -264,7 +280,7 @@ export function renderConfirmation(change: {
     `  →  ` +
     `<i>${escapeHtml(formatValue(change.key, change.to))}</i>`;
 
-  return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
+  return page(text, keyboard);
 }
 
 // ── Draft card ──────────────────────────────────────────────
@@ -319,7 +335,7 @@ export function renderDraftCard(
 
   const text = `${header}\n\n${rows.join("\n")}${rationale}${warning}`;
 
-  return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
+  return page(text, keyboard);
 }
 
 export function renderApplied(
@@ -334,5 +350,5 @@ export function renderApplied(
     `✓ <b>Applied ${changes.length} change${changes.length === 1 ? "" : "s"}</b>\n\n` +
     rows.join("\n");
 
-  return { text, keyboard: { inline_keyboard: keyboard.inline_keyboard } };
+  return page(text, keyboard);
 }
