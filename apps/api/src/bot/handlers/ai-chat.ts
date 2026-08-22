@@ -204,6 +204,13 @@ aiChatHandler.on("message:text", async (ctx) => {
         console.error("[subagent-progress] edit failed:", err);
       }
     },
+    async delete(messageId) {
+      try {
+        await ctx.api.deleteMessage(ctx.chat.id, messageId);
+      } catch (err) {
+        console.error("[subagent-progress] delete failed:", err);
+      }
+    },
   };
 
   // force_reply pops the reply composer on the asked member's client, so their

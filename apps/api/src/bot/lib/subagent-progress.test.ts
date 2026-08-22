@@ -1133,7 +1133,8 @@ describe("main-agent root entry", () => {
       revealDelayMs: 0,
       minEditIntervalMs: 0,
     });
-    return { sink, progress, root: progress.rootActivity() };
+    // Verb pinned: it rotates per turn, and assertions shouldn't be a lottery.
+    return { sink, progress, root: progress.rootActivity("Thinking") };
   }
 
   test("logs the main agent's own tool calls", async () => {
@@ -1148,8 +1149,8 @@ describe("main-agent root entry", () => {
     const { sink, root } = withRoot();
     root.toolStart("chat_history", {})();
     await settle();
-    expect(sink.current()).toContain("⏳ Answering\n");
-    expect(sink.current()).not.toContain("Answering —");
+    expect(sink.current()).toContain("⏳ Thinking\n");
+    expect(sink.current()).not.toContain("Thinking —");
   });
 
   // The heading counts sub-agents, and the root isn't one.
@@ -1168,7 +1169,7 @@ describe("main-agent root entry", () => {
     await settle();
 
     const lines = (sink.current() ?? "").split("\n");
-    const rootLine = lines.findIndex((l) => l.includes("Answering"));
+    const rootLine = lines.findIndex((l) => l.includes("Thinking"));
     const subLine = lines.findIndex((l) => l.includes("Research"));
     expect(rootLine).toBeGreaterThanOrEqual(0);
     expect(subLine).toBeGreaterThan(rootLine);
@@ -1178,14 +1179,47 @@ describe("main-agent root entry", () => {
 
   // The root has no natural completion point — the turn ending is its
   // completion, so finish() must settle it or it renders as still running.
-  test("settles the root on finish", async () => {
+  // The label is only interesting while it's happening; once settled what
+  // matters is what it produced.
+  test("drops the root line on settle, promoting its sub-agents", async () => {
     const { sink, root, progress } = withRoot();
-    root.toolStart("chat_history", {})();
-    // Let the reveal land first — finish() posts nothing if it never revealed.
+    const sub = root.start("Research", "rate limits");
     await settle();
+    sub.done("ok");
     await progress.finish();
-    expect(sink.current()).toContain("✅ Answering");
-    expect(sink.current()).not.toContain("⏳ Answering");
+
+    expect(sink.current()).not.toContain("Thinking");
+    expect(sink.current()).toContain("✅ Research — rate limits");
+    // Promoted to the top level rather than left indented under nothing.
+    expect(sink.current()!.startsWith("✅")).toBe(true);
+  });
+
+  // Nothing survives the settle, and render() skips an empty text — which
+  // would strand the last in-flight frame on screen.
+  test("deletes the message when the root produced no sub-agents", async () => {
+    const sink = makeSink();
+    const deleted: number[] = [];
+    const progress = new SubagentProgress({
+      sink: { ...sink.sink, delete: async (id) => void deleted.push(id) },
+      revealDelayMs: 0,
+      minEditIntervalMs: 0,
+    });
+    const root = progress.rootActivity("Thinking");
+
+    root.toolStart("chat_history", {})();
+    await settle();
+    expect(sink.current()).toContain("Thinking");
+
+    await progress.finish();
+    expect(deleted).toHaveLength(1);
+  });
+
+  test("a sink that cannot delete simply leaves the message", async () => {
+    const { root, progress } = withRoot();
+    root.toolStart("chat_history", {})();
+    await settle();
+    // makeSink has no delete — this must not throw.
+    await progress.finish();
   });
 
   // Group behaviour must be untouched: no root, heading intact.

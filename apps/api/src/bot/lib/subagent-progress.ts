@@ -68,6 +68,15 @@ export interface ProgressSink {
   /** Posts the status message; returns its id, or null if posting failed. */
   send(message: FormattedString): Promise<number | null>;
   edit(messageId: number, message: FormattedString): Promise<void>;
+  /**
+   * Removes the status message.
+   *
+   * Called when the final state has nothing left to report — a DM turn that
+   * used only the main agent's own tools settles to an empty message, and
+   * Telegram rejects an empty edit. Optional: a sink that can't delete simply
+   * leaves the last frame on screen.
+   */
+  delete?(messageId: number): Promise<void>;
 }
 
 export interface Scheduler {
@@ -104,6 +113,33 @@ export interface SubagentHandle {
  * How long work must run before the status message appears. Fast lookups
  * finish silently rather than flashing a message for half a second.
  */
+/**
+ * What the main agent's own line is called while it works.
+ *
+ * Rotated per turn purely for texture — the label carries no information, and
+ * a fixed one gets stale when you see it several times an hour. Only ever
+ * visible mid-flight: the line is dropped once the turn settles.
+ */
+export const THINKING_VERBS = [
+  "Thinking",
+  "Pondering",
+  "Mulling",
+  "Noodling",
+  "Percolating",
+  "Ruminating",
+  "Deliberating",
+  "Puzzling",
+  "Musing",
+  "Cogitating",
+] as const;
+
+export function pickThinkingVerb(
+  random: () => number = Math.random,
+): string {
+  const index = Math.floor(random() * THINKING_VERBS.length);
+  return THINKING_VERBS[index] ?? THINKING_VERBS[0];
+}
+
 export const REVEAL_DELAY_MS = 1500;
 
 /** Telegram rejects messages over 4096 characters; stay well clear. */
@@ -382,12 +418,23 @@ function renderEntry(entry: SubagentEntry, depth: number): FormattedString[] {
 }
 
 function renderBatch(batch: SubagentBatch): FormattedString {
+  const root = batch.find((e) => e.isRoot);
+  if (root) {
+    // No heading: it counts sub-agents, and the root isn't one.
+    //
+    // Once settled the root line itself is dropped — "Thinking" is only
+    // interesting while it's happening. What survives is what it actually
+    // produced, promoted to the top level. A root that produced nothing
+    // renders empty, and finish() deletes the message.
+    const entries =
+      root.state === "running"
+        ? renderEntry(root, 0)
+        : root.children.flatMap((child) => renderEntry(child, 0));
+
+    return FormattedString.join(entries, "\n");
+  }
+
   const entries = batch.flatMap((e) => renderEntry(e, 0));
-
-  // A main-agent batch needs no heading: it counts sub-agents, and the root
-  // isn't one. Its own line already says what's happening.
-  if (batch.some((e) => e.isRoot)) return FormattedString.join(entries, "\n");
-
   const settled = batch.every((e) => e.state !== "running");
   const heading = FormattedString.b(
     settled
@@ -406,7 +453,12 @@ function renderBatch(batch: SubagentBatch): FormattedString {
  */
 export function renderProgress(batches: SubagentBatch[]): FormattedString {
   const rendered = FormattedString.join(
-    batches.filter((b) => b.length > 0).map(renderBatch),
+    batches
+      .filter((b) => b.length > 0)
+      .map(renderBatch)
+      // A settled root with no sub-agents renders to nothing; without this it
+      // would contribute a blank line between the batches around it.
+      .filter((b) => b.text.length > 0),
     "\n\n",
   );
 
@@ -486,7 +538,7 @@ export class SubagentProgress implements ProgressHost {
    * Not settled explicitly: `finish()` renders the final state, and a root
    * left running reads correctly as "this is what it did".
    */
-  rootActivity(name = "Answering"): SubagentActivity {
+  rootActivity(name: string = pickThinkingVerb()): SubagentActivity {
     const entry: SubagentEntry = { ...newEntry(name, ""), isRoot: true };
     this.batches.push([entry]);
     this.armReveal();
@@ -529,6 +581,17 @@ export class SubagentProgress implements ProgressHost {
     }
 
     this.revealed = true;
+
+    // Nothing left to report — a DM turn whose main agent used only its own
+    // tools. render() skips an empty text, which would strand the last
+    // in-flight frame on screen, so remove the message instead.
+    if (renderProgress(this.batches).text === "" && this.messageId !== null) {
+      const messageId = this.messageId;
+      this.messageId = null;
+      await this.sink.delete?.(messageId).catch(() => {});
+      return;
+    }
+
     // The end state should land immediately, not wait out the throttle.
     await this.render(true);
   }
