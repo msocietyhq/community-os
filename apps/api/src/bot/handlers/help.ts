@@ -12,6 +12,13 @@ helpHandler.command("start", async (ctx) => {
     return;
   }
 
+  // Where the group-chat /settings reply deep-links to. The menu itself is
+  // admin-gated, so this only points the way rather than opening it.
+  if (ctx.match === "settings") {
+    await ctx.reply("Send /settings here to configure the bot.");
+    return;
+  }
+
   const rsvpMatch = ctx.match?.match(/^rsvp_(.+)$/);
   if (rsvpMatch) {
     const eventId = rsvpMatch[1]!;
@@ -59,6 +66,7 @@ helpHandler.command("start", async (ctx) => {
       `/leaderboard — Top reputation scores\n` +
       `/usage — View your AI usage stats\n` +
       `/profile — View or edit your community profile\n` +
+      `/settings — Configure the bot (admins only, DM)\n` +
       `/help — Show this help message\n\n` +
       `You can also mention @msocietybot with any question about the community!`,
   );
@@ -74,6 +82,7 @@ helpHandler.command("help", async (ctx) => {
       `🏆 /leaderboard — Top reputation scores\n` +
       `📊 /usage — View your AI usage stats\n` +
       `👤 /profile — View or edit your community profile\n` +
+      `⚙️ /settings — Configure the bot (admins only, DM)\n` +
       `❓ /help — Show this help message\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
     { parse_mode: "HTML" },

@@ -314,6 +314,9 @@ settingsHandler.callbackQuery(/^set:draft:drop:(\d+)$/, async (ctx) => {
 });
 
 settingsHandler.callbackQuery("set:draft:cancel", async (ctx) => {
+  const actor = await requireAdmin(ctx);
+  if (!actor) return denied(ctx);
+
   ctx.session.settingsDraft = undefined;
   await ctx.answerCallbackQuery({ text: "Discarded." });
   await ctx.editMessageText("Draft discarded. Nothing was changed.");
