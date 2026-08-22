@@ -484,6 +484,64 @@ function renderCandidates(items: Candidate[]): string {
     .join("\n\n");
 }
 
+const SGT_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Singapore",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** `YYYY-MM-DD` as it reads in Singapore — the cache rolls over at midnight SGT. */
+export function sgtDayKey(at: Date = new Date()): string {
+  return SGT_DAY.format(at);
+}
+
+/**
+ * Memoises one value per Singapore calendar day.
+ *
+ * A roundup costs several searches, up to 14 GitHub calls and a Sonnet call, so
+ * `/technews` run twice in a row should not pay for it twice — and shouldn't
+ * return a *different* answer either, since the model reranks on every run.
+ *
+ * In-memory on purpose: a deploy dropping the cache costs one regeneration,
+ * which is cheaper than the table and migration persisting it would need.
+ *
+ * Concurrent callers share one in-flight load, so spamming the command while
+ * the first is still running doesn't fan out into parallel generations. A
+ * rejected load is never cached, so a transient failure retries next time.
+ */
+export function dailyCache<T>(load: () => Promise<T>) {
+  let cachedDay: string | null = null;
+  let cachedValue: T | undefined;
+  let inFlight: Promise<T> | null = null;
+  let inFlightDay: string | null = null;
+
+  return async function get(
+    opts: { force?: boolean; now?: Date } = {},
+  ): Promise<T> {
+    const today = sgtDayKey(opts.now);
+
+    if (!opts.force) {
+      if (cachedDay === today) return cachedValue as T;
+      if (inFlight && inFlightDay === today) return inFlight;
+    }
+
+    inFlightDay = today;
+    inFlight = load()
+      .then((value) => {
+        cachedDay = today;
+        cachedValue = value;
+        return value;
+      })
+      .finally(() => {
+        inFlight = null;
+        inFlightDay = null;
+      });
+
+    return inFlight;
+  };
+}
+
 export const techNewsService = {
   /**
    * Curates the week in tech for the community group, or returns `null` when
@@ -624,3 +682,17 @@ ${renderCandidates(bySection("islamic"))}`,
     return total > 0 ? picked : null;
   },
 };
+
+/**
+ * The day's roundup, generated at most once per Singapore day.
+ *
+ * Both the Monday broadcast and `/technews` go through this, so the command
+ * echoes exactly what was posted to the group rather than a freshly reranked
+ * variant of it. `force` skips the cache for an on-demand refresh.
+ *
+ * `null` is cached like any other answer — a day with nothing worth posting
+ * shouldn't re-run the whole pipeline on every invocation.
+ */
+export const getWeeklyTechNews = dailyCache(() =>
+  techNewsService.generateWeeklyTechNews(),
+);

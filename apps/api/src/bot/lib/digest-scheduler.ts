@@ -4,7 +4,7 @@ import {
   digestService,
   previousCalendarMonth,
 } from "../../services/digest.service";
-import { techNewsService } from "../../services/tech-news.service";
+import { getWeeklyTechNews } from "../../services/tech-news.service";
 import { formatMonthlyDigest } from "./digest-formatter";
 import { formatHistoryDigest } from "./history-digest-formatter";
 import { formatTechNews } from "./tech-news-formatter";
@@ -96,7 +96,9 @@ export function startDigestScheduler(): void {
     // Monday 9am SGT — the slot the weekly digest used to occupy.
     techNewsCron = new Cron("0 9 * * 1", SGT, async () => {
       try {
-        const news = await techNewsService.generateWeeklyTechNews();
+        // Shared with `/technews`: whoever runs the command later that day sees
+        // exactly what was posted here, not a freshly reranked variant.
+        const news = await getWeeklyTechNews();
         if (!news) {
           console.log("Tech news skipped: nothing worth posting");
           return;

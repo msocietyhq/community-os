@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../types";
 import { digestService } from "../../services/digest.service";
-import { techNewsService } from "../../services/tech-news.service";
+import { getWeeklyTechNews } from "../../services/tech-news.service";
 import { formatMonthlyDigest } from "../lib/digest-formatter";
 import { formatHistoryDigest } from "../lib/history-digest-formatter";
 import { formatTechNews } from "../lib/tech-news-formatter";
@@ -30,7 +30,10 @@ digestHandler.command("digest_history", async (ctx) => {
 });
 
 digestHandler.command("technews", async (ctx) => {
-  const news = await techNewsService.generateWeeklyTechNews();
+  // Cached per SGT day, so repeat calls are free and consistent with whatever
+  // was broadcast. `/technews refresh` forces a regeneration.
+  const force = ctx.match?.trim().toLowerCase() === "refresh";
+  const news = await getWeeklyTechNews({ force });
   if (!news) {
     await ctx.reply("Couldn't find anything worth reading this week.");
     return;
