@@ -31,6 +31,16 @@ export const members = pgTable("members", {
   websiteUrl: text("website_url"),
   reputationScore: integer("reputation_score").notNull().default(0),
   joinedAt: timestamp("joined_at").defaultNow(),
+  /**
+   * When the bot greeted them in the group. Null means never greeted.
+   *
+   * A join reaches us as either a `chat_member` update or — when the bot isn't
+   * a group admin and Telegram withholds those — the member's first message.
+   * Both paths call the same greeter, so this is what stops the two from
+   * greeting the same person twice. Persisted, not in-memory: the API restarts
+   * on every deploy and a duplicate welcome is user-visible.
+   */
+  welcomedAt: timestamp("welcomed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 

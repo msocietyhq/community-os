@@ -19,6 +19,7 @@ import { events } from "../db/schema/events";
 import { eventsService } from "./events.service";
 import { reputationService } from "./reputation.service";
 import { aiService } from "./ai.service";
+import { membersService } from "./members.service";
 import { env } from "../env";
 
 /**
@@ -184,15 +185,35 @@ export const digestService = {
       .orderBy(desc(sql`count(*)`))
       .limit(5);
 
-    // New members this month
-    const newMembers = await db
+    // New members this month.
+    //
+    // "New member" means someone who joined the Telegram group, so a member row
+    // alone doesn't qualify — the row is also created for portal sign-ups and
+    // for anyone the bot has transacted with. Each candidate is confirmed
+    // against the group itself; a row is not evidence of presence there.
+    // Candidates per month are single digits, so the calls are cheap.
+    const newMemberCandidates = await db
       .select({
         name: user.name,
         telegramUsername: user.telegramUsername,
+        telegramId: user.telegramId,
       })
       .from(members)
       .innerJoin(user, eq(members.userId, user.id))
-      .where(and(gte(members.joinedAt, start), lte(members.joinedAt, end)));
+      .where(
+        and(
+          gte(members.joinedAt, start),
+          lte(members.joinedAt, end),
+          isNotNull(user.telegramId),
+        ),
+      );
+
+    const membershipChecks = await Promise.all(
+      newMemberCandidates.map((m) => membersService.isInGroup(m.telegramId!)),
+    );
+    const newMembers = newMemberCandidates
+      .filter((_, i) => membershipChecks[i])
+      .map(({ name, telegramUsername }) => ({ name, telegramUsername }));
 
     // Upcoming events (reuse existing service)
     const upcomingEvents = await eventsService.listUpcoming(5);

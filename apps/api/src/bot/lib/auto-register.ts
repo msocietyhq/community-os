@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { InlineKeyboard } from "grammy";
 import type { NextFunction } from "grammy";
+import type { User } from "grammy/types";
 import type { BotContext } from "../types";
 import { createTelegramUser, resolveUser } from "./auth";
 import { telegramUserFromContext } from "./telegram-user";
@@ -47,11 +48,84 @@ function isActiveStatus(
 }
 
 /**
+ * Resolve a Telegram user to a community-os user, creating the user, account
+ * and member row if this is the first we've seen of them.
+ *
+ * @returns the user ID, and whether this call is what created them.
+ */
+async function ensureRegistered(
+  from: User,
+): Promise<{ userId: string; created: boolean }> {
+  const existing = await resolveUser(String(from.id));
+  if (existing) return { userId: existing.user.id, created: false };
+
+  const userId = await createTelegramUser(telegramUserFromContext(from));
+  const { created } = await membersService.createIfNotExists(userId);
+
+  if (created) {
+    await createAuditEntry({
+      entityType: "member",
+      entityId: userId,
+      action: "create",
+      newValue: {
+        source: "auto-register",
+        telegramId: from.id,
+        username: from.username,
+        firstName: from.first_name,
+      },
+    });
+  }
+
+  return { userId, created };
+}
+
+/**
+ * Greet a new member in the group, at most once ever.
+ *
+ * Both join signals funnel through here — the `chat_member` update when the
+ * bot is a group admin, and the member's first message when it isn't — so the
+ * claim in `claimWelcome` is what keeps a member from being greeted twice when
+ * both arrive for the same join.
+ */
+async function sendWelcome(
+  ctx: BotContext,
+  from: User,
+  userId: string,
+): Promise<void> {
+  if (!(await membersService.claimWelcome(userId))) return;
+
+  const mention = `<a href="tg://user?id=${from.id}">${from.first_name}</a>`;
+  const keyboard = new InlineKeyboard().url(
+    "Set up profile",
+    `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=profile`,
+  );
+
+  await ctx.reply(
+    `Welcome to MSOCIETY, ${mention}! 👋\n\n` +
+      `Would you mind doing a short intro?\n` +
+      `1. Some background of your academics\n` +
+      `2. Your current job/situation\n` +
+      `3. Your tech interests/aspirations`,
+    {
+      parse_mode: "HTML",
+      reply_markup: keyboard,
+    },
+  );
+}
+
+/**
  * Unified membership middleware for group chats.
  *
- * - chat_member join  → create user if new + welcome, or unban + "welcome back"
+ * - chat_member join  → register + welcome, or unban + "welcome back"
  * - chat_member leave → ban user
- * - Regular messages   → auto-register on first interaction
+ * - Regular messages  → register on first interaction, and welcome if this is
+ *   the first we've seen of them
+ *
+ * The message path duplicates the join path's greeting on purpose. Telegram
+ * only delivers `chat_member` updates to bots that are administrators of the
+ * chat, so if the bot is ever not an admin the join branch goes silent and a
+ * first message is the only join signal left. `members.welcomedAt` is what
+ * keeps the two paths from greeting the same person twice.
  */
 export async function membershipMiddleware(
   ctx: BotContext,
@@ -104,53 +178,51 @@ export async function membershipMiddleware(
 
     // Join
     if (!wasActive && isActive) {
-      const name = telegramUser.first_name;
-      const mention = `<a href="tg://user?id=${telegramUser.id}">${name}</a>`;
-
       const existing = await resolveUser(String(telegramUser.id));
 
-      if (existing) {
-        if (existing.user.banned) {
-          await membersService.unban(existing.user.id, { skipTelegram: true });
-          knownTelegramIds.add(telegramUser.id);
+      // A rejoin is specifically someone we banned when they left. Anyone else
+      // who already has a record got it from auto-register on an earlier
+      // message, and is not owed a "welcome back".
+      if (existing?.user.banned) {
+        await membersService.unban(existing.user.id, { skipTelegram: true });
+        knownTelegramIds.add(telegramUser.id);
 
-          await createAuditEntry({
-            entityType: "member",
-            entityId: existing.user.id,
-            action: "unban",
-            performedBy: "system",
-            newValue: {
-              source: "telegram-group-rejoin",
-              telegramId: telegramUser.id,
-              username: telegramUser.username,
-            },
-          });
-
-          console.log(
-            `Membership: reactivated @${telegramUser.username ?? telegramUser.first_name} (rejoined group)`,
-          );
-        }
-
-        await ctx.reply(`Welcome back, ${mention}! 👋`, {
-          parse_mode: "HTML",
+        await createAuditEntry({
+          entityType: "member",
+          entityId: existing.user.id,
+          action: "unban",
+          performedBy: "system",
+          newValue: {
+            source: "telegram-group-rejoin",
+            telegramId: telegramUser.id,
+            username: telegramUser.username,
+          },
         });
-      } else {
-        const botUsername = env.TELEGRAM_BOT_USERNAME;
-        const keyboard = new InlineKeyboard().url(
-          "Set up profile",
-          `https://t.me/${botUsername}?start=profile`,
+
+        console.log(
+          `Membership: reactivated @${telegramUser.username ?? telegramUser.first_name} (rejoined group)`,
         );
 
+        const name = telegramUser.first_name;
         await ctx.reply(
-          `Welcome to MSOCIETY, ${mention}! 👋\n\n` +
-            `Would you mind doing a short intro?\n` +
-            `1. Some background of your academics\n` +
-            `2. Your current job/situation\n` +
-            `3. Your tech interests/aspirations`,
-          {
-            parse_mode: "HTML",
-            reply_markup: keyboard,
-          },
+          `Welcome back, <a href="tg://user?id=${telegramUser.id}">${name}</a>! 👋`,
+          { parse_mode: "HTML" },
+        );
+
+        return next();
+      }
+
+      // Register them here rather than waiting for a first message they may
+      // never send — this branch used to greet new joiners without creating
+      // anything, so a silent joiner stayed invisible to every other feature.
+      try {
+        const { userId } = await ensureRegistered(telegramUser);
+        knownTelegramIds.add(telegramUser.id);
+        await sendWelcome(ctx, telegramUser, userId);
+      } catch (error) {
+        console.error(
+          `Membership: join handling failed for telegram ID ${telegramUser.id}:`,
+          error,
         );
       }
     }
@@ -172,38 +244,21 @@ export async function membershipMiddleware(
   }
 
   try {
-    const existing = await resolveUser(String(telegramId));
-    if (existing) {
-      knownTelegramIds.add(telegramId);
-      return next();
-    }
-
-    // Auto-register: create user+account directly in DB
-    const telegramUser = telegramUserFromContext(from);
-    const userId = await createTelegramUser(telegramUser);
-
-    // Create member record (conflict-safe)
-    const { created } = await membersService.createIfNotExists(userId);
+    const { userId, created } = await ensureRegistered(from);
+    knownTelegramIds.add(telegramId);
 
     if (created) {
       console.log(
         `Membership: auto-registered @${from.username ?? from.first_name} (telegram ID ${telegramId})`,
       );
 
-      await createAuditEntry({
-        entityType: "member",
-        entityId: userId,
-        action: "create",
-        newValue: {
-          source: "auto-register",
-          telegramId,
-          username: from.username,
-          firstName: from.first_name,
-        },
-      });
+      // Fallback greeting. Telegram only sends `chat_member` updates to bots
+      // that are group admins, so when the bot isn't one, a member's first
+      // message is the only join signal we ever get. Reaching here means they
+      // have no record at all — including no message anywhere in the imported
+      // history — so this is genuinely the first time we've seen them.
+      await sendWelcome(ctx, from, userId);
     }
-
-    knownTelegramIds.add(telegramId);
   } catch (error) {
     // Don't add to cache on failure — retry on next message
     console.error(

@@ -6,6 +6,7 @@ import { projects, projectMembers } from "../db/schema/projects";
 import { bot } from "../bot/bot";
 import { env } from "../env";
 import { paginatedResult, listOffset } from "../lib/pagination";
+import { isPresentChatMember } from "../lib/telegram-membership";
 import { photoUrlSql } from "./photos.service";
 import type {
   CreateMemberInput,
@@ -154,6 +155,50 @@ export const membersService = {
       .returning();
 
     return { created: !!member };
+  },
+
+  /**
+   * Whether a Telegram user is currently in the community group.
+   *
+   * Asks Telegram rather than inferring from our own tables: someone can be in
+   * the group having never spoken (so no `telegram_messages` row), and someone
+   * can have a long message history yet have left. `getChatMember` is the only
+   * answer that is true at the moment we ask.
+   *
+   * Returns false when the group isn't configured or the call fails — callers
+   * use this to decide who counts as a member, and guessing "yes" is what let
+   * DM-only users be counted as members in the first place.
+   */
+  async isInGroup(telegramId: string | number): Promise<boolean> {
+    if (!env.TELEGRAM_GROUP_ID) return false;
+
+    try {
+      return isPresentChatMember(
+        await bot.api.getChatMember(env.TELEGRAM_GROUP_ID, Number(telegramId)),
+      );
+    } catch {
+      // Unknown user in the chat, or a transient API failure.
+      return false;
+    }
+  },
+
+  /**
+   * Claim the right to greet this member, exactly once.
+   *
+   * The `IS NULL` guard is in the UPDATE rather than a read-then-write so that
+   * the `chat_member` and first-message paths racing on the same join cannot
+   * both see "not yet welcomed" and both send a greeting.
+   *
+   * @returns true if the caller won the claim and should send the welcome.
+   */
+  async claimWelcome(userId: string): Promise<boolean> {
+    const [claimed] = await db
+      .update(members)
+      .set({ welcomedAt: new Date() })
+      .where(and(eq(members.userId, userId), isNull(members.welcomedAt)))
+      .returning({ id: members.id });
+
+    return !!claimed;
   },
 
   async findWithUser(userId: string) {

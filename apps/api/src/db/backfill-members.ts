@@ -1,8 +1,31 @@
-import { and, desc, eq, isNotNull, isNull, notInArray, sql, min } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  sql,
+  min,
+} from "drizzle-orm";
 import { db } from "./index";
 import { user, members, telegramMessages } from "./schema";
 import { createTelegramUser } from "../bot/lib/auth";
 import { membersService } from "../services/members.service";
+import { env } from "../env";
+
+/**
+ * Restricts a `telegram_messages` scan to the community group.
+ *
+ * Membership is about the group, not about having talked to the bot. Without
+ * this, anyone who ever DM'd the bot `/start` was backfilled into a full
+ * member — which is how a private one-message chat ended up announced as a new
+ * member in the monthly digest.
+ */
+const inCommunityGroup = env.TELEGRAM_GROUP_ID
+  ? eq(telegramMessages.chatId, env.TELEGRAM_GROUP_ID)
+  : inArray(telegramMessages.chatType, ["group", "supergroup"]);
 
 // Names that indicate a Telegram bot/service account rather than a real member.
 // These have from_is_bot=false in the message data but are not community members.
@@ -50,6 +73,7 @@ export async function backfillMissingMembers(): Promise<void> {
       and(
         isNotNull(telegramMessages.fromUserId),
         eq(telegramMessages.fromIsBot, false),
+        inCommunityGroup,
         notInArray(telegramMessages.fromUserId, existingTelegramIds),
       ),
     )
@@ -59,7 +83,7 @@ export async function backfillMissingMembers(): Promise<void> {
     console.log("Member backfill: no missing senders found");
   } else {
     console.log(
-      `Member backfill: found ${missingSenders.length} Telegram senders without a user row`,
+      `Member backfill: found ${missingSenders.length} group senders without a user row`,
     );
   }
 
@@ -79,11 +103,15 @@ export async function backfillMissingMembers(): Promise<void> {
     });
     usersCreated++;
 
-    // Find their earliest telegram message date
+    // Their first message in the group is the best proxy we have for when they
+    // joined it. DMs are excluded, or a member who messaged the bot before ever
+    // speaking in the group would carry a joinedAt earlier than their join.
     const [earliest] = await db
       .select({ date: min(telegramMessages.date) })
       .from(telegramMessages)
-      .where(eq(telegramMessages.fromUserId, sender.fromUserId!));
+      .where(
+        and(eq(telegramMessages.fromUserId, sender.fromUserId!), inCommunityGroup),
+      );
 
     const { created } = await membersService.createIfNotExists(userId, {
       joinedAt: earliest?.date ?? undefined,
@@ -130,7 +158,12 @@ export async function backfillMissingMembers(): Promise<void> {
     const [earliest] = await db
       .select({ date: min(telegramMessages.date) })
       .from(telegramMessages)
-      .where(eq(telegramMessages.fromUserId, sql`${m.telegramId}::bigint`));
+      .where(
+        and(
+          eq(telegramMessages.fromUserId, sql`${m.telegramId}::bigint`),
+          inCommunityGroup,
+        ),
+      );
 
     if (earliest?.date) {
       await db
