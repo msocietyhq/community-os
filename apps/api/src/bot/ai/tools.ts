@@ -370,7 +370,15 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
         changes: z
           .array(
             z.object({
-              key: z.string().describe("Setting key, e.g. 'chimeIn.enabled'"),
+              // An enum, not a free string: this puts every valid key in the
+              // schema the model sees, so it can neither invent one nor need a
+              // lookup just to learn what exists. Call get_settings for what
+              // each key actually controls.
+              key: z
+                .enum(SETTING_KEYS)
+                .describe(
+                  "Which setting to change. Use get_settings if you're unsure what one controls.",
+                ),
               value: z
                 .string()
                 .describe(
@@ -398,10 +406,12 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
         const skipped: string[] = [];
 
         for (const change of changes) {
-          if (!isSettingKey(change.key)) {
-            return { error: `There's no setting called '${change.key}'.` };
-          }
+          // No key check: the enum on `key` means an unknown one can't reach
+          // here — the SDK rejects it and the model retries with a real key.
+          const key: SettingKey = change.key;
 
+          // A bare word like `members` isn't valid JSON, so fall back to the
+          // raw string — that's what enum-valued settings send.
           let candidate: unknown;
           try {
             candidate = JSON.parse(change.value);
@@ -409,7 +419,6 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             candidate = change.value;
           }
 
-          const key: SettingKey = change.key;
           const parsed = BOT_SETTINGS[key].schema.safeParse(candidate);
           if (!parsed.success) {
             return {

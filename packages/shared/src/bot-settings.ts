@@ -363,7 +363,16 @@ export type SettingValue<K extends SettingKey> = z.infer<
 >;
 export type SettingsSnapshot = { [K in SettingKey]: SettingValue<K> };
 
-export const SETTING_KEYS = Object.keys(BOT_SETTINGS) as SettingKey[];
+/**
+ * Typed as a non-empty tuple so it can seed a `z.enum` directly — that's what
+ * lets the AI tool constrain `key` to real settings instead of a free string,
+ * putting the whole vocabulary in the schema the model sees. The registry is
+ * a literal and is never empty, so the assertion is safe by construction.
+ */
+export const SETTING_KEYS = Object.keys(BOT_SETTINGS) as [
+  SettingKey,
+  ...SettingKey[],
+];
 
 export function keysInGroup(group: SettingGroup): SettingKey[] {
   return SETTING_KEYS.filter((k) => BOT_SETTINGS[k].group === group);
