@@ -38,6 +38,11 @@ interface AgentParams {
   progressSink?: ProgressSink;
   /** Puts a clarifying question to the member. Omit to disable ask_user. */
   askUser?: (question: string) => Promise<void>;
+  /** Renders an AI-proposed settings change card. Omit to disable the tool. */
+  proposeSettings?: (input: {
+    changes: { key: string; from: unknown; to: unknown }[];
+    rationale?: string;
+  }) => Promise<void>;
 }
 
 interface AgentResult {
@@ -55,6 +60,7 @@ export async function runAgent({
   senderTelegramId,
   progressSink,
   askUser,
+  proposeSettings,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
@@ -102,7 +108,15 @@ export async function runAgent({
     ? new SubagentProgress({ sink: progressSink })
     : undefined;
 
-  const tools = createTools({ api, graphql, chatId, senderTelegramId, progress, askUser });
+  const tools = createTools({
+    api,
+    graphql,
+    chatId,
+    senderTelegramId,
+    progress,
+    askUser,
+    proposeSettings,
+  });
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 

@@ -12,6 +12,8 @@ import { tokenHandler } from "./handlers/token";
 import { profileHandler } from "./handlers/profile";
 import { loginHandler } from "./handlers/login";
 import { usageHandler } from "./handlers/usage";
+import { settingsHandler } from "./handlers/settings";
+import { dmAccessMiddleware } from "./lib/dm-gate";
 import { PostgresSessionStorage } from "./session-storage";
 import { membershipMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
@@ -57,6 +59,10 @@ export async function initBot(): Promise<void> {
     await next();
   });
 
+  // Gate DMs before anything else touches them — a blocked stranger should not
+  // cause a photo fetch, a logged message, or a session write.
+  bot.use(dmAccessMiddleware);
+
   // Auto-reply to the triggering message in group chats
   bot.use(async (ctx, next) => {
     if (
@@ -98,6 +104,7 @@ export async function initBot(): Promise<void> {
   bot.use(reputationHandler);
   bot.use(digestHandler);
   bot.use(usageHandler);
+  bot.use(settingsHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);
 

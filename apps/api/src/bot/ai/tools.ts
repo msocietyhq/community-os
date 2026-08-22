@@ -8,7 +8,17 @@ import {
   type Actions,
   type Subjects,
 } from "@community-os/shared/abilities";
-import { isRole } from "@community-os/shared/constants";
+import { isRole, type Role } from "@community-os/shared/constants";
+import {
+  BOT_SETTINGS,
+  SETTING_KEYS,
+  isSettingKey,
+  type SettingKey,
+} from "@community-os/shared/bot-settings";
+import {
+  getHistory,
+  getSettings,
+} from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
@@ -63,6 +73,46 @@ export interface ToolContext {
    * a running sub-agent's activity deeper in. Absent outside the chat handler.
    */
   progress?: ProgressHost;
+  /**
+   * Stores an AI-proposed change set and renders its confirmation card.
+   * Absent outside the chat handler, which is what makes the settings tools
+   * decline politely rather than throwing when there's no chat to render into.
+   */
+  proposeSettings?: (input: {
+    changes: { key: string; from: unknown; to: unknown }[];
+    rationale?: string;
+  }) => Promise<void>;
+}
+
+/**
+ * Resolves the calling member's CASL ability.
+ *
+ * Shared by check_permissions and the settings tools so there is exactly one
+ * place that decides what a caller may do. Returns null when the member can't
+ * be resolved at all, which every caller treats as "not allowed".
+ */
+async function resolveAbility(ctx: ToolContext): Promise<{
+  ability: ReturnType<typeof defineAbilityFor>;
+  id: string;
+  role: Role;
+} | null> {
+  const { data, error } = await ctx.api.api.v1.members.me.get();
+  if (error) return null;
+
+  const { id, role } = data.user;
+  if (!isRole(role)) return null;
+
+  return { ability: defineAbilityFor({ id, role }), id, role };
+}
+
+/** Convenience wrapper for the simple "may they?" checks. */
+async function can(
+  ctx: ToolContext,
+  action: Actions,
+  subject: Subjects,
+): Promise<boolean> {
+  const resolved = await resolveAbility(ctx);
+  return resolved ? resolved.ability.can(action, subject) : false;
 }
 
 /**
@@ -270,6 +320,11 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
         query: z.string().describe("What to research"),
       }),
       execute: async ({ query }) => {
+        const settings = await getSettings();
+        if (!settings["research.webEnabled"]) {
+          return "Web research is currently turned off for this community. Answer from what you know or from community data.";
+        }
+
         console.log("[main-agent] → research sub-agent, query:", query);
         const result = await withProgress(ctx, "Research", query, (activity) =>
           runResearchAgent(query, activity),
@@ -279,6 +334,116 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           result.slice(0, 120),
         );
         return result;
+      },
+    }),
+
+    get_settings: tool({
+      description:
+        "Read the bot's current operational settings — pauses, cost caps, chime-in behaviour, welcome messages. Only available to admins. Use this before proposing any change so you know the current values.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const allowed = await can(ctx, "update", "Settings");
+        if (!allowed) return { error: "Only admins can view bot settings." };
+
+        const snapshot = await getSettings();
+        return {
+          settings: SETTING_KEYS.map((key) => {
+            const def = BOT_SETTINGS[key];
+            const format = def.format as (v: unknown) => string;
+            return {
+              key,
+              label: def.label,
+              description: def.description,
+              group: def.group,
+              current: format(snapshot[key]),
+              raw: snapshot[key],
+            };
+          }),
+        };
+      },
+    }),
+
+    propose_settings_change: tool({
+      description:
+        "Propose one or more settings changes for the admin to confirm. This does NOT change anything — it shows a card with Confirm and Cancel buttons. Always include the complete set of changes you want: calling this again replaces the previous proposal rather than adding to it. Only available to admins.",
+      inputSchema: z.object({
+        changes: z
+          .array(
+            z.object({
+              key: z.string().describe("Setting key, e.g. 'chimeIn.enabled'"),
+              value: z
+                .string()
+                .describe(
+                  "New value as a JSON literal: true, false, 30, 0.9, null, or a quoted string",
+                ),
+            }),
+          )
+          .describe("Every change to propose, together"),
+        rationale: z
+          .string()
+          .optional()
+          .describe("One short sentence on why, shown on the card"),
+      }),
+      execute: async ({ changes, rationale }) => {
+        const allowed = await can(ctx, "update", "Settings");
+        if (!allowed) return { error: "Only admins can change bot settings." };
+
+        if (!ctx.proposeSettings) {
+          return { error: "Settings can only be changed from a chat with me." };
+        }
+
+        const snapshot = await getSettings();
+        const resolved: { key: string; from: unknown; to: unknown }[] = [];
+
+        for (const change of changes) {
+          if (!isSettingKey(change.key)) {
+            return { error: `There's no setting called '${change.key}'.` };
+          }
+
+          let candidate: unknown;
+          try {
+            candidate = JSON.parse(change.value);
+          } catch {
+            candidate = change.value;
+          }
+
+          const key: SettingKey = change.key;
+          const parsed = BOT_SETTINGS[key].schema.safeParse(candidate);
+          if (!parsed.success) {
+            return {
+              error: `'${change.value}' isn't a valid value for ${BOT_SETTINGS[key].label}.`,
+            };
+          }
+
+          resolved.push({ key, from: snapshot[key], to: parsed.data });
+        }
+
+        await ctx.proposeSettings({ changes: resolved, rationale });
+
+        return {
+          status: "proposed",
+          message:
+            "The change card is on screen with Confirm and Cancel buttons. Tell the admin to review it — do not claim anything has changed yet.",
+        };
+      },
+    }),
+
+    get_settings_history: tool({
+      description:
+        "Read who changed which bot setting, when, and via the menu or AI. Only available to admins.",
+      inputSchema: z.object({
+        key: z
+          .string()
+          .optional()
+          .describe("Limit to one setting key; omit for all"),
+        limit: z.number().optional().describe("How many entries, default 20"),
+      }),
+      execute: async ({ key, limit }) => {
+        const allowed = await can(ctx, "update", "Settings");
+        if (!allowed) return { error: "Only admins can view settings history." };
+
+        const scoped = key && isSettingKey(key) ? key : null;
+        return { history: await getHistory(scoped, limit ?? 20) };
       },
     }),
 
@@ -755,17 +920,16 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           "Reputation",
           "Infra",
           "Audit",
+          "Settings",
         ]),
       }),
       execute: async ({ action, subject }) => {
-        const { data, error } = await ctx.api.api.v1.members.me.get();
-        if (error)
+        const resolved = await resolveAbility(ctx);
+        if (!resolved) {
           return { allowed: false, reason: "Could not retrieve user profile" };
+        }
 
-        const { id, role } = data.user;
-        if (!isRole(role))
-          return { allowed: false, reason: "Unrecognized user role" };
-        const ability = defineAbilityFor({ id, role });
+        const { ability, id, role } = resolved;
 
         let subjectArg: Subjects;
         if (subject === "Member") {

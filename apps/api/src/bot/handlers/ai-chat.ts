@@ -22,6 +22,7 @@ import {
 } from "../lib/chime-in";
 import { judgeChimeIn } from "../lib/chime-in-judge";
 import { toTelegramMarkdown } from "../lib/markdown";
+import { renderDraftCard } from "../lib/settings-menu";
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -194,6 +195,29 @@ aiChatHandler.on("message:text", async (ctx) => {
     logBotMessage(sent, ctx.me, chatType, question);
   };
 
+  /**
+   * Renders an AI-proposed change set as a confirmation card and parks it in
+   * the session. Nothing is written until the admin presses Confirm — the
+   * card's callbacks are handled by handlers/settings.ts.
+   */
+  const proposeSettings = async (input: {
+    changes: { key: string; from: unknown; to: unknown }[];
+    rationale?: string;
+  }) => {
+    const draft = {
+      changes: input.changes,
+      rationale: input.rationale,
+      createdAt: Date.now(),
+      messageId: 0,
+    };
+    const page = renderDraftCard(draft, []);
+    const sent = await ctx.reply(page.text, {
+      parse_mode: "Markdown",
+      reply_markup: page.keyboard,
+    });
+    ctx.session.settingsDraft = { ...draft, messageId: sent.message_id };
+  };
+
   /** Keys this turn's AI context to the bot message it produced, then prunes. */
   const rememberTurn = (botMessageId: number, turn: typeof aiResponses[number]) => {
     aiResponses[botMessageId] = turn;
@@ -222,6 +246,7 @@ aiChatHandler.on("message:text", async (ctx) => {
       senderTelegramId: ctx.from?.id ?? null,
       progressSink,
       askUser,
+      proposeSettings,
     });
 
     // The question is already on screen; a second message would just repeat
