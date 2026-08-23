@@ -13,14 +13,12 @@ import {
 } from "../bot/lib/ai-budget";
 import { getSettings } from "./bot-settings.service";
 import { addSpend, getSpend, shouldAlert } from "./ai-spend-counter";
+import { AI_MODEL_IDS, estimateCost } from "./ai-pricing";
+import { cacheSplit, withPromptCaching } from "./ai-cache";
 
 // ── Model constants ─────────────────────────────────────────
 
-export const AI_MODEL_IDS = {
-  fast: "claude-haiku-4-5",
-  smart: "claude-sonnet-5",
-  deep: "claude-opus-5",
-} as const;
+export { AI_MODEL_IDS };
 
 // ── Provider (single instance) ──────────────────────────────
 
@@ -31,38 +29,6 @@ const AI_MODELS: { fast: LanguageModel; smart: LanguageModel; deep: LanguageMode
   smart: anthropic(AI_MODEL_IDS.smart),
   deep: anthropic(AI_MODEL_IDS.deep),
 };
-
-// ── Pricing ─────────────────────────────────────────────────
-
-/**
- * Price per 1M tokens, in USD. Update when pricing changes.
- *
- * A model missing from this map is costed at $0, which would silently defeat
- * the advisor spend cap — add an entry whenever a model is added above.
- * Sonnet 5 has promotional pricing ($2/$10) through 2026-08-31; standard rates
- * are used here so budgets don't under-count once it ends.
- */
-const AI_MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  [AI_MODEL_IDS.fast]: { input: 1.0, output: 5.0 },
-  [AI_MODEL_IDS.smart]: { input: 3.0, output: 15.0 },
-  [AI_MODEL_IDS.deep]: { input: 5.0, output: 25.0 },
-
-  // Retired ids that ai_usage rows still reference. Without these, historical
-  // spend silently reports as $0 — renaming a model must not rewrite the past.
-  "claude-haiku-4-5-20251001": { input: 1.0, output: 5.0 },
-  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-5-20250929": { input: 3.0, output: 15.0 },
-};
-
-function estimateCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-): number {
-  const pricing = AI_MODEL_PRICING[model];
-  if (!pricing) return 0;
-  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
-}
 
 // ── Usage tracking ──────────────────────────────────────────
 
@@ -82,8 +48,11 @@ export interface TrackingContext {
 interface TrackUsageInput {
   model: string;
   caller: string;
+  /** The whole prompt. The two cache counts below are slices of this. */
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   telegramUserId?: number | null;
   chatId?: string | null;
   success: boolean;
@@ -105,37 +74,6 @@ function resolveModelId(model: Parameters<typeof generateText>[0]["model"]): str
 }
 
 // ── Tracked wrappers ────────────────────────────────────────
-
-/**
- * Anthropic caches the request prefix (tools → system → messages) and serves
- * later reads at ~10% of input price. Every caller here has a stable system
- * prompt and tool list, and an agent loop re-sends that prefix on every step,
- * so this is the single largest cost lever available.
- *
- * Applies to `generateObject` as well as `generateText`: the structured-output
- * callers are the repetitive ones — the profile sweep sends the same long
- * system prompt once per member across the whole community.
- *
- * Prefixes below the model's minimum simply don't cache, and there is no
- * penalty for asking. That minimum is per-model and higher than you'd guess:
- * measured against this provider version, Sonnet 5 cached a 5.2k-token prefix
- * while Haiku 4.5 declined a 2.4k one, reporting zero rather than erroring.
- */
-function withPromptCaching<
-  T extends { providerOptions?: Parameters<typeof generateText>[0]["providerOptions"] },
->(params: T): T {
-  const existing = params.providerOptions?.anthropic;
-  return {
-    ...params,
-    providerOptions: {
-      ...params.providerOptions,
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-        ...existing,
-      },
-    },
-  };
-}
 
 /**
  * The single choke point for the background pause and every cost cap.
@@ -178,8 +116,18 @@ function recordSpend(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
+  cacheReadTokens: number,
+  cacheWriteTokens: number,
 ): void {
-  addSpend(estimateCost(modelId, inputTokens, outputTokens));
+  addSpend(
+    estimateCost(
+      modelId,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+    ),
+  );
 }
 
 async function trackedGenerateText(
@@ -194,11 +142,14 @@ async function trackedGenerateText(
   try {
     const result = await generateText(withPromptCaching(params));
     const durationMs = Math.round(performance.now() - start);
+    const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
 
     recordSpend(
       modelId,
       result.usage.inputTokens ?? 0,
       result.usage.outputTokens ?? 0,
+      cacheReadTokens,
+      cacheWriteTokens,
     );
 
     trackUsage({
@@ -206,6 +157,8 @@ async function trackedGenerateText(
       caller: ctx.caller,
       inputTokens: result.usage.inputTokens ?? 0,
       outputTokens: result.usage.outputTokens ?? 0,
+      cacheReadTokens,
+      cacheWriteTokens,
       telegramUserId: ctx.telegramUserId,
       chatId: ctx.chatId,
       success: true,
@@ -242,13 +195,18 @@ async function trackedGenerateObject<T extends Parameters<typeof generateObject>
   const start = performance.now();
 
   try {
-    const result = await generateObject(withPromptCaching(params));
+    // Deliberately not cached: a structured-output call is one-shot by
+    // construction, so a cache write here could never be read back.
+    const result = await generateObject(params);
     const durationMs = Math.round(performance.now() - start);
+    const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
 
     recordSpend(
       modelId,
       result.usage.inputTokens ?? 0,
       result.usage.outputTokens ?? 0,
+      cacheReadTokens,
+      cacheWriteTokens,
     );
 
     trackUsage({
@@ -256,6 +214,8 @@ async function trackedGenerateObject<T extends Parameters<typeof generateObject>
       caller: ctx.caller,
       inputTokens: result.usage.inputTokens ?? 0,
       outputTokens: result.usage.outputTokens ?? 0,
+      cacheReadTokens,
+      cacheWriteTokens,
       telegramUserId: ctx.telegramUserId,
       chatId: ctx.chatId,
       success: true,
@@ -290,6 +250,8 @@ async function trackUsage(input: TrackUsageInput): Promise<void> {
     caller: input.caller,
     inputTokens: input.inputTokens,
     outputTokens: input.outputTokens,
+    cacheReadTokens: input.cacheReadTokens ?? 0,
+    cacheWriteTokens: input.cacheWriteTokens ?? 0,
     telegramUserId: input.telegramUserId ?? null,
     chatId: input.chatId ?? null,
     success: input.success,
@@ -313,6 +275,8 @@ async function getUsageStats(params: UsageQueryParams) {
         totalCalls: sql<number>`count(*)::int`,
         totalInputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
         totalOutputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+        totalCacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+        totalCacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
         avgDurationMs: sql<number>`coalesce(avg(${aiUsage.durationMs}), 0)::int`,
         errorCount: sql<number>`count(*) filter (where not ${aiUsage.success})::int`,
       })
@@ -324,6 +288,8 @@ async function getUsageStats(params: UsageQueryParams) {
         calls: sql<number>`count(*)::int`,
         inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
         outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+        cacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
       })
       .from(aiUsage)
       .where(where)
@@ -335,6 +301,8 @@ async function getUsageStats(params: UsageQueryParams) {
         calls: sql<number>`count(*)::int`,
         inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
         outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+        cacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
       })
       .from(aiUsage)
       .where(where)
@@ -354,7 +322,13 @@ async function getUsageStats(params: UsageQueryParams) {
 
   const costByModel = byModel.map((row) => ({
     ...row,
-    estimatedCost: estimateCost(row.model, row.inputTokens, row.outputTokens),
+    estimatedCost: estimateCost(
+      row.model,
+      row.inputTokens,
+      row.outputTokens,
+      row.cacheReadTokens,
+      row.cacheWriteTokens,
+    ),
   }));
 
   const totalEstimatedCost = costByModel.reduce(
@@ -366,6 +340,15 @@ async function getUsageStats(params: UsageQueryParams) {
     totals: {
       ...totals!,
       totalTokens: totals!.totalInputTokens + totals!.totalOutputTokens,
+      /**
+       * Share of prompt tokens served from cache. Reads are the only part that
+       * saves money — a high write share with a near-zero hit rate means the
+       * cache is being paid for and never used.
+       */
+      cacheHitRate:
+        totals!.totalInputTokens === 0
+          ? 0
+          : totals!.totalCacheReadTokens / totals!.totalInputTokens,
       estimatedCost: totalEstimatedCost,
     },
     byCaller,
@@ -390,6 +373,8 @@ async function getUsageSummary(since: Date, telegramUserId?: number) {
       model: aiUsage.model,
       inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
       outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+      cacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
     })
     .from(aiUsage)
     .where(where)
@@ -402,7 +387,13 @@ async function getUsageSummary(since: Date, telegramUserId?: number) {
   for (const row of rows) {
     totalInput += row.inputTokens;
     totalOutput += row.outputTokens;
-    totalCost += estimateCost(row.model, row.inputTokens, row.outputTokens);
+    totalCost += estimateCost(
+      row.model,
+      row.inputTokens,
+      row.outputTokens,
+      row.cacheReadTokens,
+      row.cacheWriteTokens,
+    );
   }
 
   return {
@@ -430,6 +421,8 @@ async function getSpendByCaller(
       model: aiUsage.model,
       inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
       outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+      cacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
     })
     .from(aiUsage)
     .where(
@@ -442,7 +435,15 @@ async function getSpendByCaller(
     .groupBy(aiUsage.model);
 
   return rows.reduce(
-    (total, row) => total + estimateCost(row.model, row.inputTokens, row.outputTokens),
+    (total, row) =>
+      total +
+      estimateCost(
+        row.model,
+        row.inputTokens,
+        row.outputTokens,
+        row.cacheReadTokens,
+        row.cacheWriteTokens,
+      ),
     0,
   );
 }
@@ -463,6 +464,8 @@ async function getUsageByUser(since: Date, limit: number) {
       model: aiUsage.model,
       inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
       outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+      cacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
     })
     .from(aiUsage)
     .leftJoin(user, eq(sql`${aiUsage.telegramUserId}::text`, user.telegramId))
@@ -485,7 +488,13 @@ async function getUsageByUser(since: Date, limit: number) {
     };
     entry.inputTokens += row.inputTokens;
     entry.outputTokens += row.outputTokens;
-    entry.estimatedCost += estimateCost(row.model, row.inputTokens, row.outputTokens);
+    entry.estimatedCost += estimateCost(
+      row.model,
+      row.inputTokens,
+      row.outputTokens,
+      row.cacheReadTokens,
+      row.cacheWriteTokens,
+    );
     byUser.set(id, entry);
   }
 

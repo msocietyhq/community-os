@@ -15,7 +15,13 @@ import { aiUsage } from "../db/schema";
  */
 const REFRESH_MS = 60_000;
 
-type EstimateCost = (model: string, input: number, output: number) => number;
+type EstimateCost = (
+  model: string,
+  input: number,
+  output: number,
+  cacheRead: number,
+  cacheWrite: number,
+) => number;
 
 let dayKey: string | null = null;
 let monthKey: string | null = null;
@@ -45,6 +51,8 @@ async function sumSince(since: Date, estimate: EstimateCost): Promise<number> {
       model: aiUsage.model,
       inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
       outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`coalesce(sum(${aiUsage.cacheReadTokens}), 0)::int`,
+      cacheWriteTokens: sql<number>`coalesce(sum(${aiUsage.cacheWriteTokens}), 0)::int`,
     })
     .from(aiUsage)
     .where(gte(aiUsage.createdAt, since))
@@ -52,7 +60,14 @@ async function sumSince(since: Date, estimate: EstimateCost): Promise<number> {
 
   return rows.reduce(
     (total, row) =>
-      total + estimate(row.model, row.inputTokens, row.outputTokens),
+      total +
+      estimate(
+        row.model,
+        row.inputTokens,
+        row.outputTokens,
+        row.cacheReadTokens,
+        row.cacheWriteTokens,
+      ),
     0,
   );
 }

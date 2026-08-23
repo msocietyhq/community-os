@@ -125,6 +125,15 @@ export const aiUsage = pgTable(
     caller: text("caller").notNull(),
     inputTokens: integer("input_tokens").notNull(),
     outputTokens: integer("output_tokens").notNull(),
+    /**
+     * Cached slices of `input_tokens`, not additions to it — the provider
+     * reports input as the whole prompt and these two as the parts of it that
+     * were served from, or written to, the prompt cache. Summing all three
+     * double-counts. Anthropic bills a read at 0.1x and a write at 1.25x, so
+     * without these columns a cached call's cost cannot be reconstructed.
+     */
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     telegramUserId: bigint("telegram_user_id", { mode: "number" }),
     chatId: text("chat_id"),
     success: boolean("success").notNull().default(true),
