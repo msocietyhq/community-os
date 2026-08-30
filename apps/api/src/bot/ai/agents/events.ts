@@ -157,7 +157,6 @@ export function createEventsAgent(ctx: ToolContext) {
     const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
     const result = await aiService.generateText(
       {
-        model: aiService.models.fast,
         system: `You are an events assistant for the MSOCIETY community. Help with listing, viewing, RSVPing to, and managing events. Today's date is ${today}. Use ISO 8601 for dates. Only perform write operations (create/update/delete) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name/title before attempting updates. Pass the slug, not the UUID, when calling update/delete tools. Use the graphql_query tool for reads. Paginate when hasNext is true.
@@ -170,7 +169,7 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "events-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      { caller: "events-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
     );
 
     console.log("[events-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));

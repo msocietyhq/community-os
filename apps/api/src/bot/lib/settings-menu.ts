@@ -12,6 +12,12 @@ import {
   type SettingKey,
   type SettingsSnapshot,
 } from "@community-os/shared/bot-settings";
+import {
+  AI_CATALOG,
+  AI_TIERS,
+  modelKeysForTier,
+  type AiTier,
+} from "@community-os/shared/ai-catalog";
 import type { DriftedChange, SettingsDraft } from "./settings-draft";
 import { escapeHtml } from "./telegram-html";
 
@@ -150,6 +156,14 @@ function editCallback(key: SettingKey, value: string): string {
   return callbackFor("edit", key, value);
 }
 
+/** `ai.model.fast` → `fast`, or null for any other key. */
+function tierOf(key: SettingKey): AiTier | null {
+  const suffix = key.startsWith("ai.model.")
+    ? key.slice("ai.model.".length)
+    : null;
+  return AI_TIERS.find((t) => t === suffix) ?? null;
+}
+
 export function renderSettingPage(
   key: SettingKey,
   snapshot: SettingsSnapshot,
@@ -184,6 +198,22 @@ export function renderSettingPage(
       break;
     }
     case "choice": {
+      const tier = tierOf(key);
+      if (tier) {
+        // Two per row: model labels are far wider than `everyone` or `off`,
+        // and the catalog only grows.
+        const modelKeys = modelKeysForTier(tier);
+        modelKeys.forEach((modelKey, i) => {
+          keyboard.text(
+            AI_CATALOG[modelKey].label,
+            editCallback(key, modelKey),
+          );
+          if (i % 2 === 1) keyboard.row();
+        });
+        if (modelKeys.length % 2 === 1) keyboard.row();
+        break;
+      }
+
       const options =
         key === "dm.access"
           ? [...DM_ACCESS_LEVELS]

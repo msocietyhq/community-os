@@ -156,7 +156,6 @@ export async function extractMemories(
 
   const result = await aiService.generateObject(
     {
-      model: aiService.models.fast,
       schema: extractionSchema,
       system: EXTRACTION_PROMPT,
       messages: [
@@ -171,6 +170,7 @@ export async function extractMemories(
     },
     {
       caller: "memory-extractor",
+      tier: "micro",
       telegramUserId: senderTelegramId,
       chatId,
       class: "background",

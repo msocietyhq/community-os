@@ -162,14 +162,18 @@ export async function runAgent({
   try {
     const result = await aiService.generateText(
       {
-        model: aiService.models.fast,
         system,
         messages,
         tools: trackedTools,
         stopWhen: stepCountIs(10),
         maxOutputTokens: 1024,
       },
-      { caller: "main-agent", telegramUserId: senderTelegramId, chatId },
+      {
+        caller: "main-agent",
+        tier: "fast",
+        telegramUserId: senderTelegramId,
+        chatId,
+      },
     );
 
     console.log(

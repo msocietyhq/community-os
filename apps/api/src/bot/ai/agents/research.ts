@@ -361,7 +361,6 @@ export function createResearchAgent(ctx: ToolContext) {
 
     const result = await aiService.generateText(
       {
-        model: aiService.models.fast,
         system: `You research questions using the live web for the MSOCIETY community bot. Today's date is ${today}.
 
 Pick the tool that fits the question:
@@ -385,6 +384,7 @@ Format for Telegram Markdown. Be concise: this is a chat reply, not a report.`,
       },
       {
         caller: "research-agent",
+        tier: "fast",
         telegramUserId: ctx.senderTelegramId,
         chatId: ctx.chatId,
       },

@@ -1,5 +1,11 @@
 import { z } from "zod";
 import type { Role } from "./constants";
+import {
+  AI_CATALOG,
+  DEFAULT_TIER_MODELS,
+  modelKeysForTier,
+  type AiModelKey,
+} from "./ai-catalog";
 
 export const SETTING_GROUPS = [
   "availability",
@@ -261,6 +267,46 @@ export const BOT_SETTINGS = {
     control: "money",
     format: (v) => (v === null ? "off" : usd(v)),
   }),
+  "ai.model.micro": def<AiModelKey>({
+    schema: z.enum(modelKeysForTier("micro")),
+    default: DEFAULT_TIER_MODELS.micro,
+    label: "Micro model",
+    description:
+      "One-shot judgement calls with no tools: the chime-in judge, the memory extractor and the backfill. The judge runs on ordinary group traffic, so this is the highest-volume tier and the cheapest place to save money. A weak model here costs nothing worse than a poor chime-in decision.",
+    group: "cost",
+    control: "choice",
+    format: (v) => AI_CATALOG[v].label,
+  }),
+  "ai.model.fast": def<AiModelKey>({
+    schema: z.enum(modelKeysForTier("fast")),
+    default: DEFAULT_TIER_MODELS.fast,
+    label: "Fast model",
+    description:
+      "The main chat agent and every sub-agent, each running up to ten tool-calling steps. Only models vetted for tool loops are offered here. If a change leaves the bot unable to hold a conversation, change it back from this menu — the menu never asks the AI anything.",
+    group: "cost",
+    control: "choice",
+    format: (v) => AI_CATALOG[v].label,
+  }),
+  "ai.model.smart": def<AiModelKey>({
+    schema: z.enum(modelKeysForTier("smart")),
+    default: DEFAULT_TIER_MODELS.smart,
+    label: "Smart model",
+    description:
+      "The first advisor escalation, plus the long-form background jobs — digests, tech news and profile regeneration. Recoverable from this menu if a change goes badly.",
+    group: "cost",
+    control: "choice",
+    format: (v) => AI_CATALOG[v].label,
+  }),
+  "ai.model.deep": def<AiModelKey>({
+    schema: z.enum(modelKeysForTier("deep")),
+    default: DEFAULT_TIER_MODELS.deep,
+    label: "Deep model",
+    description:
+      "The deepest advisor escalation, charged against each member's advisor budget. The most expensive model per call, though far from the largest share of the bill. Recoverable from this menu.",
+    group: "cost",
+    control: "choice",
+    format: (v) => AI_CATALOG[v].label,
+  }),
 
   // ── behaviour ──
   "chimeIn.enabled": def<boolean>({
@@ -380,6 +426,27 @@ export function keysInGroup(group: SettingGroup): SettingKey[] {
 
 export function isSettingKey(value: string): value is SettingKey {
   return value in BOT_SETTINGS;
+}
+
+/**
+ * The allowed values for an enum-valued setting, or undefined for everything
+ * else.
+ *
+ * Read off the schema rather than kept as a second list, so it cannot drift
+ * from what `safeParse` will actually accept. Its job is to stop the AI
+ * guessing: `get_settings` reports a model tier as "Sonnet 5" (the label) while
+ * the stored value is `anthropic/sonnet-5`, so without the real vocabulary a
+ * proposal is pattern-matched off the current value and fails validation on
+ * anything less predictably named.
+ */
+export function optionsFor(key: SettingKey): string[] | undefined {
+  const schema = BOT_SETTINGS[key].schema;
+  if (!(schema instanceof z.ZodEnum)) return undefined;
+
+  // Zod types `.options` as (string | number)[] because numeric enums exist.
+  // Every setting here is a string enum, so this filter removes nothing — it
+  // just narrows the type without a cast.
+  return schema.options.filter((o): o is string => typeof o === "string");
 }
 
 /**

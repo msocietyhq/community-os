@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 // Imported from the pure module, not the service: ai.service pulls in the
 // database and `env`, which validates at import time and throws when the test
 // runner hasn't loaded apps/api/.env.
+import { AI_CATALOG } from "@community-os/shared/ai-catalog";
 import { cacheSplit, withPromptCaching } from "./ai-cache";
+
+const ANTHROPIC = AI_CATALOG["anthropic/haiku-4-5"];
+
+/** A stand-in for a provider that caches implicitly and takes no flag. */
+const IMPLICIT = { ...ANTHROPIC, cacheControl: null };
 
 // The shape the service passes through; only `tools` and `providerOptions`
 // affect the decision, so the rest is stubbed.
@@ -20,19 +26,29 @@ const readCacheControl = (result: { providerOptions?: unknown }) => {
 describe("withPromptCaching", () => {
   test("skips a call with no tools — nothing could ever read the write", () => {
     const input = params({});
-    const result = withPromptCaching(input);
+    const result = withPromptCaching(input, ANTHROPIC);
     expect(result).toBe(input); // untouched, not merely equivalent
     expect(readCacheControl(result)).toBeUndefined();
   });
 
   test("skips a call whose tool set is present but empty", () => {
-    const result = withPromptCaching(params({ tools: {} }));
+    const result = withPromptCaching(params({ tools: {} }), ANTHROPIC);
     expect(readCacheControl(result)).toBeUndefined();
   });
 
   test("caches a call that can loop", () => {
-    const result = withPromptCaching(params({ tools: { search: {} } }));
+    const result = withPromptCaching(
+      params({ tools: { search: {} } }),
+      ANTHROPIC,
+    );
     expect(readCacheControl(result)).toEqual({ type: "ephemeral" });
+  });
+
+  test("adds nothing when the model caches implicitly", () => {
+    const input = params({ tools: { search: {} } });
+    const result = withPromptCaching(input, IMPLICIT);
+    expect(result).toBe(input); // untouched, not merely equivalent
+    expect(readCacheControl(result)).toBeUndefined();
   });
 
   test("keeps other provider options when adding the breakpoint", () => {
@@ -41,6 +57,7 @@ describe("withPromptCaching", () => {
         tools: { search: {} },
         providerOptions: { anthropic: { effort: "high" } },
       }),
+      ANTHROPIC,
     );
     const anthropic = (
       result.providerOptions as { anthropic: Record<string, unknown> }
@@ -57,6 +74,7 @@ describe("withPromptCaching", () => {
           anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } },
         },
       }),
+      ANTHROPIC,
     );
     expect(readCacheControl(result)).toEqual({ type: "ephemeral", ttl: "1h" });
   });
@@ -67,6 +85,7 @@ describe("withPromptCaching", () => {
       params({
         providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
       }),
+      ANTHROPIC,
     );
     expect(readCacheControl(result)).toEqual({ type: "ephemeral" });
   });

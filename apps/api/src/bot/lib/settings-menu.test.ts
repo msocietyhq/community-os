@@ -7,6 +7,10 @@ import {
   type SettingsSnapshot,
 } from "@community-os/shared/bot-settings";
 import {
+  AI_CATALOG,
+  modelKeysForTier,
+} from "@community-os/shared/ai-catalog";
+import {
   PAUSE_PRESETS,
   renderConfirmation,
   renderDraftCard,
@@ -216,5 +220,32 @@ describe("renderDraftCard", () => {
   test("an empty draft offers nothing to confirm", () => {
     const page = renderDraftCard({ ...draft, changes: [] }, []);
     expect(labels(page)).not.toContain("✓ Confirm all");
+  });
+});
+
+describe("model setting page", () => {
+  test("offers every model allowed for the tier, by label", () => {
+    const buttons = labels(renderSettingPage("ai.model.fast", snapshot, null));
+
+    for (const key of modelKeysForTier("fast")) {
+      expect(buttons, key).toContain(AI_CATALOG[key].label);
+    }
+  });
+
+  test("never puts more than two models on a row", () => {
+    const page = renderSettingPage("ai.model.micro", snapshot, null);
+    const modelLabels = new Set(
+      modelKeysForTier("micro").map((k) => AI_CATALOG[k].label),
+    );
+
+    for (const row of page.keyboard.inline_keyboard) {
+      const onRow = row.filter((b) => modelLabels.has(b.text));
+      expect(onRow.length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  test("does not leak the quiet-hours presets onto a model page", () => {
+    const buttons = labels(renderSettingPage("ai.model.deep", snapshot, null));
+    expect(buttons).not.toContain("23:00-07:00");
   });
 });

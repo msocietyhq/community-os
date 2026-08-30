@@ -142,7 +142,6 @@ export async function runGithubAgent(
 ): Promise<string> {
   const result = await aiService.generateText(
     {
-      model: aiService.models.fast,
       system: `You are a GitHub assistant. You can browse any public GitHub repository, org, or user.
 The MSOCIETY community's default org is ${DEFAULT_ORG} — use it when no owner is specified.
 Be concise. Format for Telegram Markdown. Present lists as compact one-liners.`,
@@ -151,7 +150,7 @@ Be concise. Format for Telegram Markdown. Present lists as compact one-liners.`,
       stopWhen: stepCountIs(5),
       maxOutputTokens: 512,
     },
-    { caller: "github-agent", ...trackingCtx },
+    { caller: "github-agent", tier: "fast", ...trackingCtx },
   );
 
   return result.text || "No GitHub information found.";

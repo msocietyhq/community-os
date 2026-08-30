@@ -492,7 +492,6 @@ export const techNewsService = {
 
     const result = await aiService.generateObject(
       {
-        model: aiService.models.smart,
         schema: curationSchema,
         prompt: `You curate a weekly tech roundup for MSOCIETY, a community of Muslim tech professionals in Singapore. They are working engineers, founders and builders — heavy on web, AI, infrastructure and startups. They read Hacker News. Assume they already know the obvious headlines.
 
@@ -523,7 +522,7 @@ ${renderCandidates(bySection("local"))}
 MUSLIM / ISLAMIC TECH CANDIDATES:
 ${renderCandidates(bySection("islamic"))}`,
       },
-      { caller: "tech-news", class: "background" },
+      { caller: "tech-news", tier: "smart", class: "background" },
     );
 
     // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.

@@ -15,7 +15,6 @@ export async function judgeChimeIn(input: ChimeInInput): Promise<ChimeDecision> 
   try {
     const result = await aiService.generateObject(
       {
-        model: aiService.models.fast,
         schema: chimeDecisionSchema,
         system: JUDGE_PROMPT,
         messages: [
@@ -28,6 +27,7 @@ export async function judgeChimeIn(input: ChimeInInput): Promise<ChimeDecision> 
       },
       {
         caller: "chime-in-judge",
+        tier: "micro",
         telegramUserId: input.telegramUserId,
         chatId: input.chatId,
       },

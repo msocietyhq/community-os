@@ -164,7 +164,6 @@ export function createProjectsAgent(ctx: ToolContext) {
     console.log("[projects-agent] query:", query);
     const result = await aiService.generateText(
       {
-        model: aiService.models.fast,
         system: `You are a projects assistant for the MSOCIETY community. Help with listing, viewing, creating, and managing projects and their team members. Only perform write operations (create/update/delete/add member/remove member) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
 
 Always search by name before attempting updates. Pass the slug, not the UUID, when calling update/delete tools. Use the graphql_query tool for reads. Paginate when hasNext is true.
@@ -177,7 +176,7 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "projects-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      { caller: "projects-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
     );
 
     console.log("[projects-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));

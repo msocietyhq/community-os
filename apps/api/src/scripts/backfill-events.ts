@@ -129,7 +129,6 @@ async function extractEvents(messages: MessageSearchResult[]): Promise<Extracted
       .join("\n\n---\n\n");
 
     const result = await aiService.generateObject({
-      model: aiService.models.smart,
       schema: extractedEventSchema,
       system: `You are analyzing Telegram group chat messages from a Muslim tech professionals community (MSOCIETY) to extract information about past events.
 
@@ -141,7 +140,7 @@ Instructions:
 - Assess your confidence: "high" = clear event with date/time, "medium" = likely event but some details inferred, "low" = uncertain
 - If no events are found in the messages, return an empty events array`,
       prompt: `Extract structured event data from these Telegram messages:\n\n${formattedMessages}`,
-    }, { caller: "backfill-events", class: "background" });
+    }, { caller: "backfill-events", tier: "smart", class: "background" });
 
     const object = result.object as z.infer<typeof extractedEventSchema>;
     allEvents.push(...object.events);

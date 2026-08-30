@@ -1,4 +1,5 @@
 import type { generateText } from "ai";
+import type { ModelDef } from "@community-os/shared/ai-catalog";
 
 type GenerateTextParams = Parameters<typeof generateText>[0];
 
@@ -33,22 +34,31 @@ type GenerateTextParams = Parameters<typeof generateText>[0];
  *
  * A caller that knows better can still opt in: an explicit `cacheControl` in
  * its own `providerOptions` is left untouched, on either path.
+ *
+ * Which fragment to merge is the model's business, not this function's: a
+ * provider that caches implicitly declares `cacheControl: null` in the catalog
+ * and gets nothing added.
  */
 export function withPromptCaching(
   params: GenerateTextParams,
+  def: ModelDef,
 ): GenerateTextParams {
+  if (def.cacheControl === null) return params;
   if (Object.keys(params.tools ?? {}).length === 0) return params;
 
-  const existing = params.providerOptions?.anthropic;
+  const merged: Record<string, unknown> = { ...params.providerOptions };
+
+  for (const [provider, fragment] of Object.entries(def.cacheControl)) {
+    const existing = merged[provider];
+    merged[provider] = {
+      ...(fragment as Record<string, unknown>),
+      ...(typeof existing === "object" && existing !== null ? existing : {}),
+    };
+  }
+
   return {
     ...params,
-    providerOptions: {
-      ...params.providerOptions,
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-        ...existing,
-      },
-    },
+    providerOptions: merged as GenerateTextParams["providerOptions"],
   };
 }
 

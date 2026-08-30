@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 // Imported from the pure module, not the service: ai.service pulls in the
 // database and `env`, which validates at import time and throws when the test
 // runner hasn't loaded apps/api/.env.
-import { AI_MODEL_IDS, estimateCost } from "./ai-pricing";
+import { AI_CATALOG } from "@community-os/shared/ai-catalog";
+import { estimateCost } from "./ai-pricing";
 
-const SONNET = AI_MODEL_IDS.smart; // $3 in / $15 out per 1M
+const SONNET = "anthropic/sonnet-5"; // $3 in / $15 out per 1M
 
 describe("estimateCost", () => {
   test("prices an uncached call at the base rate", () => {
@@ -67,5 +68,41 @@ describe("estimateCost", () => {
       3,
       10,
     );
+  });
+});
+
+describe("catalog-keyed pricing", () => {
+  test("prices a catalog key", () => {
+    // Sonnet 5: $3 in / $15 out per 1M.
+    expect(estimateCost("anthropic/sonnet-5", 1_000_000, 0)).toBeCloseTo(3, 10);
+    expect(estimateCost("anthropic/sonnet-5", 0, 1_000_000)).toBeCloseTo(15, 10);
+  });
+
+  test("still prices a retired raw id, so historical rows are not zeroed", () => {
+    expect(estimateCost("claude-sonnet-4-5-20250929", 1_000_000, 0)).toBeCloseTo(
+      3,
+      10,
+    );
+  });
+
+  test("applies the catalog's cache multipliers, not a hardcoded pair", () => {
+    // 1M input of which 1M was a cache read, at 0.1x → $0.30 for Sonnet.
+    expect(
+      estimateCost("anthropic/sonnet-5", 1_000_000, 0, 1_000_000, 0),
+    ).toBeCloseTo(0.3, 10);
+    // 1M input of which 1M was a cache write, at 1.25x → $3.75.
+    expect(
+      estimateCost("anthropic/sonnet-5", 1_000_000, 0, 0, 1_000_000),
+    ).toBeCloseTo(3.75, 10);
+  });
+
+  test("an unknown model is still $0", () => {
+    expect(estimateCost("nonesuch/model", 1_000_000, 1_000_000)).toBe(0);
+  });
+
+  test("every catalog key prices above zero", () => {
+    for (const key of Object.keys(AI_CATALOG)) {
+      expect(estimateCost(key, 1_000_000, 0), key).toBeGreaterThan(0);
+    }
   });
 });

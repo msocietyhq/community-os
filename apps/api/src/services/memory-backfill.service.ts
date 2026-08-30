@@ -60,13 +60,12 @@ async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
 
   const result = await aiService.generateObject(
     {
-      model: aiService.models.fast,
       schema: batchExtractionSchema,
       system: BATCH_EXTRACTION_PROMPT,
       messages: [{ role: "user", content: transcript }],
       maxOutputTokens: 1024,
     },
-    { caller: "memory-backfill", class: "background" },
+    { caller: "memory-backfill", tier: "micro", class: "background" },
   );
 
   // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.

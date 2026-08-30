@@ -126,7 +126,6 @@ export function createVenuesAgent(ctx: ToolContext) {
     console.log("[venues-agent] query:", query);
     const result = await aiService.generateText(
       {
-        model: aiService.models.fast,
         system: `You are a venues assistant for the MSOCIETY community. Help with listing, creating, updating, and deleting community venues. Only perform write operations when explicitly asked. Be concise, format for Telegram Markdown.
 
 Use the graphql_query tool for reads. Paginate when hasNext is true.
@@ -139,7 +138,7 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "venues-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      { caller: "venues-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
     );
 
     console.log("[venues-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));

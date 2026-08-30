@@ -7,7 +7,10 @@ import {
   isPaused,
   previewText,
   type PauseState,
+  type SettingKey,
+  optionsFor,
 } from "./bot-settings";
+import { AI_TIERS, modelKeysForTier } from "./ai-catalog";
 
 describe("registry invariants", () => {
   test("every default parses against its own schema", () => {
@@ -42,6 +45,28 @@ describe("registry invariants", () => {
           `${data} is too long`,
         ).toBeLessThanOrEqual(64);
       }
+    }
+  });
+
+  // An edit callback carries the chosen value, so it is much longer than the
+  // value-free prefixes above. A model key like "anthropic/haiku-4-5" pushes
+  // hardest, and Telegram fails the ENTIRE message if any callback is over 64.
+  test("every model option's edit callback fits in 64 bytes", () => {
+    for (const tier of AI_TIERS) {
+      const key = `ai.model.${tier}` as SettingKey;
+      for (const value of modelKeysForTier(tier)) {
+        const data = callbackFor("edit", key, value);
+        expect(
+          Buffer.byteLength(data, "utf8"),
+          `${data} is too long`,
+        ).toBeLessThanOrEqual(64);
+      }
+    }
+  });
+
+  test("every tier setting is registered", () => {
+    for (const tier of AI_TIERS) {
+      expect(SETTING_KEYS, `ai.model.${tier}`).toContain(`ai.model.${tier}`);
     }
   });
 
@@ -127,5 +152,40 @@ describe("previewText", () => {
     const out = previewText("👋👋👋", 2);
     expect(out).toBe("👋👋…");
     expect(Buffer.from(out, "utf8").toString("utf8")).toBe(out);
+  });
+});
+
+describe("optionsFor", () => {
+  test("lists the models allowed for each tier", () => {
+    for (const tier of AI_TIERS) {
+      const key = `ai.model.${tier}` as SettingKey;
+      expect(optionsFor(key), key).toEqual([...modelKeysForTier(tier)]);
+    }
+  });
+
+  test("covers the other enum settings too", () => {
+    expect(optionsFor("dm.access")).toEqual(["everyone", "members", "admins"]);
+    expect(optionsFor("cost.advisorMaxTier")).toEqual(["off", "big", "bigger"]);
+  });
+
+  // quietHours is a `choice` control but its schema is a nullable object, so
+  // there is no enum to read. Callers must treat options as optional.
+  test("returns undefined when the schema is not an enum", () => {
+    expect(optionsFor("availability.quietHours")).toBeUndefined();
+    expect(optionsFor("cost.dailyCapUsd")).toBeUndefined();
+    expect(optionsFor("welcome.newMemberText")).toBeUndefined();
+  });
+
+  // The whole point: a value the model proposes must be one of these, and
+  // every listed option must actually parse.
+  test("every listed option parses against its own schema", () => {
+    for (const key of SETTING_KEYS) {
+      for (const option of optionsFor(key) ?? []) {
+        expect(
+          BOT_SETTINGS[key].schema.safeParse(option).success,
+          `${key} rejects its own option ${option}`,
+        ).toBe(true);
+      }
+    }
   });
 });

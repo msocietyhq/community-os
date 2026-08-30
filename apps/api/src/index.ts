@@ -7,6 +7,8 @@ import { reputationService } from "./services/reputation.service";
 import { calibrateRecall } from "./services/recall-calibration";
 import { aiProfileService } from "./services/ai-profile.service";
 import { backfillMemories } from "./services/memory-backfill.service";
+import { getSettings } from "./services/bot-settings.service";
+import { unusableTiers } from "./services/ai.service";
 import { env } from "./env";
 
 app.listen(env.PORT);
@@ -59,6 +61,19 @@ if (process.env.NODE_ENV === "production") {
     console.error("Recall calibration failed:", err);
   });
 }
+
+// A tier pointed at a model this deployment has no key for still answers —
+// resolveTier falls back to the tier default — but it does so silently. Say so
+// once at boot, where someone will actually see it.
+getSettings()
+  .then((settings) => {
+    for (const { tier, key, envKey } of unusableTiers(settings)) {
+      console.warn(
+        `[ai] ${tier} is set to ${key} but ${envKey} is not set — that tier will fall back to its default`,
+      );
+    }
+  })
+  .catch((err) => console.error("[ai] tier check failed:", err));
 
 const shutdown = async () => {
   console.log("Shutting down...");

@@ -1,11 +1,17 @@
-import { generateText, generateObject, type LanguageModel } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { generateText, generateObject } from "ai";
 import { db } from "../db";
 import { aiUsage } from "../db/schema/bot";
 import { user } from "../db/schema/auth";
 import { sql, eq, and, gte, lte, desc, inArray } from "drizzle-orm";
-import { env } from "../env";
 import { isPaused } from "@community-os/shared/bot-settings";
+import {
+  AI_CATALOG,
+  AI_TIERS,
+  DEFAULT_TIER_MODELS,
+  type AiModelKey,
+  type AiTier,
+  type ModelDef,
+} from "@community-os/shared/ai-catalog";
 import {
   AiBudgetError,
   decideBudget,
@@ -13,27 +19,87 @@ import {
 } from "../bot/lib/ai-budget";
 import { getSettings } from "./bot-settings.service";
 import { addSpend, getSpend, shouldAlert } from "./ai-spend-counter";
-import { AI_MODEL_IDS, estimateCost } from "./ai-pricing";
+import { estimateCost } from "./ai-pricing";
 import { cacheSplit, withPromptCaching } from "./ai-cache";
+import { hasCredentials, modelFor } from "./ai-provider";
 
-// ── Model constants ─────────────────────────────────────────
+// ── Tier resolution ─────────────────────────────────────────
 
-export { AI_MODEL_IDS };
+/**
+ * The SDK's parameter types are intersections over a union of prompt shapes,
+ * so TypeScript cannot prove that spreading an `Omit<…, "model">` back
+ * together with a model reconstructs the original union member. The two
+ * aliases below name that round trip; the casts at the two call sites are
+ * re-adding exactly the field the signature removed.
+ */
+type TextParams = Parameters<typeof generateText>[0];
+type ObjectParams = Parameters<typeof generateObject>[0];
 
-// ── Provider (single instance) ──────────────────────────────
+interface ResolvedTier {
+  /** The catalog key. This is what gets written to `ai_usage.model`. */
+  key: AiModelKey;
+  def: ModelDef;
+  model: ReturnType<typeof modelFor>;
+}
 
-const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+/**
+ * A tier's model is read per call rather than bound at import, so a settings
+ * change applies to the next message without a redeploy. Reading it here also
+ * pins the model for the whole of one `generateText` — a change can never land
+ * between two steps of the same tool loop.
+ *
+ * `getSettings` is memoised in-process with a 30s TTL and invalidated
+ * synchronously on write, so this is a map lookup, not a query.
+ *
+ * An unusable selection falls back to the tier default with a warning rather
+ * than throwing, matching `buildSnapshot`: a bad row in the settings table
+ * must never be able to take the bot down.
+ */
+async function resolveTier(tier: AiTier): Promise<ResolvedTier> {
+  const settings = await getSettings();
+  const chosen = settings[`ai.model.${tier}`];
 
-const AI_MODELS: { fast: LanguageModel; smart: LanguageModel; deep: LanguageModel } = {
-  fast: anthropic(AI_MODEL_IDS.fast),
-  smart: anthropic(AI_MODEL_IDS.smart),
-  deep: anthropic(AI_MODEL_IDS.deep),
-};
+  if (!hasCredentials(chosen)) {
+    const fallback = DEFAULT_TIER_MODELS[tier];
+    console.warn(
+      `[ai] ${tier} is set to ${chosen} but ${AI_CATALOG[chosen].envKey} is not set — falling back to ${fallback}`,
+    );
+    return {
+      key: fallback,
+      def: AI_CATALOG[fallback],
+      model: modelFor(fallback),
+    };
+  }
+
+  return { key: chosen, def: AI_CATALOG[chosen], model: modelFor(chosen) };
+}
+
+/** Reports which tiers are pointed at a model this deployment cannot run. */
+export function unusableTiers(
+  snapshot: Record<`ai.model.${AiTier}`, AiModelKey>,
+): { tier: AiTier; key: AiModelKey; envKey: string }[] {
+  const out: { tier: AiTier; key: AiModelKey; envKey: string }[] = [];
+  for (const tier of AI_TIERS) {
+    const key = snapshot[`ai.model.${tier}`];
+    if (!hasCredentials(key)) {
+      out.push({ tier, key, envKey: AI_CATALOG[key].envKey });
+    }
+  }
+  return out;
+}
 
 // ── Usage tracking ──────────────────────────────────────────
 
 export interface TrackingContext {
   caller: string;
+  /** Which tier to run on. Resolved to a concrete model once per call. */
+  tier: AiTier;
+  /**
+   * Reasoning effort, translated per model by the catalog. Ignored by a model
+   * with no effort knob — every provider names it differently, so the caller
+   * should not have to know which one it is talking to.
+   */
+  reasoning?: "medium" | "high";
   telegramUserId?: number | null;
   chatId?: string | null;
   /**
@@ -65,12 +131,6 @@ interface UsageQueryParams {
   to?: string;
   caller?: string;
   model?: string;
-}
-
-function resolveModelId(model: Parameters<typeof generateText>[0]["model"]): string {
-  if (typeof model === "string") return model;
-  if ("modelId" in model) return model.modelId;
-  return "unknown";
 }
 
 // ── Tracked wrappers ────────────────────────────────────────
@@ -131,16 +191,31 @@ function recordSpend(
 }
 
 async function trackedGenerateText(
-  params: Parameters<typeof generateText>[0],
+  params: Omit<Parameters<typeof generateText>[0], "model">,
   ctx: TrackingContext,
 ): Promise<Awaited<ReturnType<typeof generateText>>> {
   await assertWithinBudget(ctx);
 
-  const modelId = resolveModelId(params.model);
+  const { key: modelId, def, model } = await resolveTier(ctx.tier);
   const start = performance.now();
 
   try {
-    const result = await generateText(withPromptCaching(params));
+    // The caller's own providerOptions land second, so an explicit setting
+    // still wins over the catalog's default fragment.
+    const withReasoning =
+      ctx.reasoning && def.reasoning
+        ? {
+            ...params,
+            providerOptions: {
+              ...def.reasoning[ctx.reasoning],
+              ...params.providerOptions,
+            },
+          }
+        : params;
+
+    const result = await generateText(
+      withPromptCaching({ ...withReasoning, model } as TextParams, def),
+    );
     const durationMs = Math.round(performance.now() - start);
     const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
 
@@ -185,19 +260,21 @@ async function trackedGenerateText(
   }
 }
 
-async function trackedGenerateObject<T extends Parameters<typeof generateObject>[0]>(
+async function trackedGenerateObject<
+  T extends Omit<Parameters<typeof generateObject>[0], "model">,
+>(
   params: T,
   ctx: TrackingContext,
 ): Promise<Awaited<ReturnType<typeof generateObject>>> {
   await assertWithinBudget(ctx);
 
-  const modelId = resolveModelId(params.model);
+  const { key: modelId, model } = await resolveTier(ctx.tier);
   const start = performance.now();
 
   try {
     // Deliberately not cached: a structured-output call is one-shot by
     // construction, so a cache write here could never be read back.
-    const result = await generateObject(params);
+    const result = await generateObject({ ...params, model } as ObjectParams);
     const durationMs = Math.round(performance.now() - start);
     const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
 
@@ -544,8 +621,6 @@ async function getTopUsersByTokens(since: Date, limit: number, until?: Date) {
 // ── Public service ──────────────────────────────────────────
 
 export const aiService = {
-  models: AI_MODELS,
-  modelIds: AI_MODEL_IDS,
   generateText: trackedGenerateText,
   generateObject: trackedGenerateObject,
   trackUsage,

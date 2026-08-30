@@ -304,13 +304,12 @@ export const aiProfileService = {
 
     const result = await aiService.generateObject(
       {
-        model: aiService.models.smart,
         schema: generationSchema,
         system: GENERATION_PROMPT,
         messages: [{ role: "user", content: evidence }],
         maxRetries: MODEL_MAX_RETRIES,
       },
-      { caller: "ai-profile-generation", class: "background" },
+      { caller: "ai-profile-generation", tier: "smart", class: "background" },
     );
 
     // `aiService.generateObject` widens its result to `unknown` (its return type

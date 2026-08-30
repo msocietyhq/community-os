@@ -12,6 +12,7 @@ import { isRole, type Role } from "@community-os/shared/constants";
 import {
   BOT_SETTINGS,
   SETTING_KEYS,
+  optionsFor,
   isSettingKey,
   type SettingKey,
 } from "@community-os/shared/bot-settings";
@@ -160,18 +161,16 @@ async function runAdvisor(
 
   const result = await aiService.generateText(
     {
-      model: tier === "bigger" ? aiService.models.deep : aiService.models.smart,
       system: advisorSystemPrompt(tier),
       messages: buildAdvisorMessages(conversation, problem),
       tools,
       stopWhen: stepCountIs(10),
       maxOutputTokens: ADVISOR_MAX_OUTPUT_TOKENS,
-      providerOptions: {
-        anthropic: { effort: tier === "bigger" ? "high" : "medium" },
-      },
     },
     {
       caller: ADVISOR_TOOL_NAMES[tier],
+      tier: tier === "bigger" ? "deep" : "smart",
+      reasoning: tier === "bigger" ? "high" : "medium",
       telegramUserId: ctx.senderTelegramId,
       chatId: ctx.chatId,
     },
@@ -357,6 +356,11 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
               group: def.group,
               current: format(snapshot[key]),
               raw: snapshot[key],
+              // The exact vocabulary for enum settings. `current` is a display
+              // label ("Sonnet 5") while the stored value is a key
+              // ("anthropic/sonnet-5"), so without this a change has to be
+              // guessed from the shape of the current value.
+              options: optionsFor(key),
             };
           }),
         };
@@ -421,8 +425,13 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
 
           const parsed = BOT_SETTINGS[key].schema.safeParse(candidate);
           if (!parsed.success) {
+            // Naming the accepted values makes a wrong guess self-correcting;
+            // without them the model retries the same shape and loops.
+            const allowed = optionsFor(key);
             return {
-              error: `'${change.value}' isn't a valid value for ${BOT_SETTINGS[key].label}.`,
+              error:
+                `'${change.value}' isn't a valid value for ${BOT_SETTINGS[key].label}.` +
+                (allowed ? ` Valid values: ${allowed.join(", ")}.` : ""),
             };
           }
 

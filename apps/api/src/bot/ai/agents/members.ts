@@ -134,7 +134,6 @@ export function createMembersAgent(ctx: ToolContext) {
     console.log("[members-agent] query:", query);
     const result = await aiService.generateText(
       {
-        model: aiService.models.fast,
         system: `You are a members assistant for the MSOCIETY community. Help with finding members, viewing profiles, updating the user's own profile, and checking reputation scores. Be concise, format for Telegram Markdown.
 
 Use the graphql_query tool for searching/browsing members. Use get_my_profile for the user's own profile. Paginate when hasNext is true.
@@ -147,7 +146,7 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "members-agent", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      { caller: "members-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
     );
 
     console.log("[members-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
