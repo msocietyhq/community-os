@@ -16,6 +16,7 @@ import { modelsHandler } from "./handlers/models";
 import { telegramCommands } from "./commands";
 import { settingsHandler } from "./handlers/settings";
 import { dmAccessMiddleware } from "./lib/dm-gate";
+import { groupAccessMiddleware } from "./lib/group-gate";
 import { PostgresSessionStorage } from "./session-storage";
 import { membershipMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
@@ -34,32 +35,15 @@ const ALLOWED_UPDATES = [
  * and start long polling.
  */
 export async function initBot(): Promise<void> {
-  // Auto-leave unauthorized groups when bot is added
-  const allowedGroupId = env.TELEGRAM_GROUP_ID;
-  bot.on("my_chat_member", async (ctx) => {
-    const chatId = ctx.myChatMember.chat.id;
-    const chatType = ctx.myChatMember.chat.type;
-    if (
-      allowedGroupId &&
-      (chatType === "group" || chatType === "supergroup") &&
-      String(chatId) !== allowedGroupId
-    ) {
-      await ctx.api.leaveChat(chatId);
-    }
-  });
+  if (!env.TELEGRAM_GROUP_ID) {
+    console.warn(
+      "TELEGRAM_GROUP_ID not set — the bot will stay in, and answer, any group or channel it is added to",
+    );
+  }
 
-  // Group guard: drop updates from unauthorized groups
-  bot.use(async (ctx, next) => {
-    const chatType = ctx.chat?.type;
-    if (
-      allowedGroupId &&
-      (chatType === "group" || chatType === "supergroup") &&
-      String(ctx.chat!.id) !== allowedGroupId
-    ) {
-      return; // silently drop
-    }
-    await next();
-  });
+  // Leave (and ignore) every chat that isn't the community group, before
+  // anything else touches the update.
+  bot.use(groupAccessMiddleware);
 
   // Gate DMs before anything else touches them — a blocked stranger should not
   // cause a photo fetch, a logged message, or a session write.
