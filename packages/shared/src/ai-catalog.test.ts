@@ -4,6 +4,7 @@ import {
   AI_MODEL_KEYS,
   AI_TIERS,
   DEFAULT_TIER_MODELS,
+  TIER_FALLBACK_ORDER,
   modelKeysForTier,
   type AiModelKey,
 } from "./ai-catalog";
@@ -131,6 +132,57 @@ describe("openai entries", () => {
   test("all three read OPENAI_API_KEY", () => {
     for (const key of OPENAI_KEYS) {
       expect(AI_CATALOG[key].envKey, key).toBe("OPENAI_API_KEY");
+    }
+  });
+});
+
+describe("TIER_FALLBACK_ORDER", () => {
+  test("every tier starts with its default model", () => {
+    for (const tier of AI_TIERS) {
+      expect(TIER_FALLBACK_ORDER[tier][0], tier).toBe(
+        DEFAULT_TIER_MODELS[tier],
+      );
+    }
+  });
+
+  test("every entry is a real catalog key", () => {
+    for (const tier of AI_TIERS) {
+      for (const key of TIER_FALLBACK_ORDER[tier]) {
+        expect(AI_MODEL_KEYS, `${tier} → ${key}`).toContain(key);
+      }
+    }
+  });
+
+  test("a tier never lists the same provider twice", () => {
+    for (const tier of AI_TIERS) {
+      const providers = TIER_FALLBACK_ORDER[tier].map(
+        (key) => AI_CATALOG[key].provider,
+      );
+      expect(new Set(providers).size, tier).toBe(providers.length);
+    }
+  });
+
+  test("providers appear in preference order: anthropic, openai, deepseek", () => {
+    const rank = { anthropic: 0, openai: 1, deepseek: 2 } as const;
+    for (const tier of AI_TIERS) {
+      const ranks = TIER_FALLBACK_ORDER[tier].map(
+        (key) => rank[AI_CATALOG[key].provider],
+      );
+      expect([...ranks].sort((a, b) => a - b), tier).toEqual(ranks);
+    }
+  });
+
+  // micro is entirely generateObject, and DeepSeek has no native JSON-schema
+  // mode — the SDK falls back to pasting the schema into the prompt.
+  test("micro never falls back to deepseek", () => {
+    for (const key of TIER_FALLBACK_ORDER.micro) {
+      expect(AI_CATALOG[key].provider).not.toBe("deepseek");
+    }
+  });
+
+  test("the non-micro tiers cover all three providers", () => {
+    for (const tier of ["fast", "smart", "deep"] as const) {
+      expect(TIER_FALLBACK_ORDER[tier].length, tier).toBe(3);
     }
   });
 });

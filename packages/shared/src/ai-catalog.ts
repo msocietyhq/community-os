@@ -225,3 +225,30 @@ export const DEFAULT_TIER_MODELS: Record<AiTier, AiModelKey> = {
   smart: "anthropic/sonnet-5",
   deep: "anthropic/opus-5",
 };
+
+/**
+ * What a tier runs on when its selected model cannot be used — because the
+ * provider has no API key, or has run out of prepaid credit.
+ *
+ * Read in order, first usable entry wins. The first entry is always
+ * `DEFAULT_TIER_MODELS[tier]`, so the ordinary single-outage case is simply
+ * "fall back to the tier default"; the rest of the row only matters when that
+ * provider is down too. Providers appear in the fixed preference order
+ * anthropic -> openai -> deepseek.
+ *
+ * This decides the *interim* only. An admin is asked to choose a deliberate
+ * replacement in the same minute the outage is detected, and their choice is
+ * an ordinary `ai.model.<tier>` setting change.
+ *
+ * `micro` has no DeepSeek entry for the reason documented on CONFIGURABLE_TIERS:
+ * it is entirely `generateObject`, and DeepSeek has no native JSON-schema mode.
+ */
+export const TIER_FALLBACK_ORDER: Record<
+  AiTier,
+  readonly [AiModelKey, ...AiModelKey[]]
+> = {
+  micro: ["anthropic/haiku-4-5", "openai/gpt-5.6-luna"],
+  fast: ["anthropic/haiku-4-5", "openai/gpt-5.6-luna", "deepseek/v4-flash"],
+  smart: ["anthropic/sonnet-5", "openai/gpt-5.6-terra", "deepseek/v4-pro"],
+  deep: ["anthropic/opus-5", "openai/gpt-5.6-sol", "deepseek/v4-pro"],
+};
