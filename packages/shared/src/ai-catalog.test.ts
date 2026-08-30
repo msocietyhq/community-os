@@ -72,3 +72,65 @@ describe("DEFAULT_TIER_MODELS", () => {
     }
   });
 });
+
+describe("openai entries", () => {
+  const OPENAI_KEYS = [
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-sol",
+  ] as const;
+
+  test("all three models are in the catalog", () => {
+    for (const key of OPENAI_KEYS) {
+      expect(AI_MODEL_KEYS).toContain(key);
+      expect(AI_CATALOG[key].provider).toBe("openai");
+    }
+  });
+
+  test("pricing matches OpenAI's published rates", () => {
+    expect(AI_CATALOG["openai/gpt-5.6-luna"].pricing).toEqual({
+      input: 0.2,
+      output: 1.2,
+    });
+    expect(AI_CATALOG["openai/gpt-5.6-terra"].pricing).toEqual({
+      input: 2.0,
+      output: 12.0,
+    });
+    expect(AI_CATALOG["openai/gpt-5.6-sol"].pricing).toEqual({
+      input: 4.0,
+      output: 20.0,
+    });
+  });
+
+  // A write is billed at 1.25x, like Anthropic and unlike DeepSeek. Copying
+  // DeepSeek's `write: 1` would under-count every cache write by 25% and the
+  // spend caps are computed from this number.
+  test("cache multipliers are 0.1x read and 1.25x write", () => {
+    for (const key of OPENAI_KEYS) {
+      expect(AI_CATALOG[key].cache, key).toEqual({ read: 0.1, write: 1.25 });
+    }
+  });
+
+  // GPT-5.6+ caches implicitly and prices both modes identically, so there is
+  // no fragment worth sending.
+  test("declares no cache-control fragment", () => {
+    for (const key of OPENAI_KEYS) {
+      expect(AI_CATALOG[key].cacheControl, key).toBeNull();
+    }
+  });
+
+  test("reasoning maps to the openai effort knob", () => {
+    for (const key of OPENAI_KEYS) {
+      expect(AI_CATALOG[key].reasoning, key).toEqual({
+        medium: { openai: { reasoningEffort: "medium" } },
+        high: { openai: { reasoningEffort: "high" } },
+      });
+    }
+  });
+
+  test("all three read OPENAI_API_KEY", () => {
+    for (const key of OPENAI_KEYS) {
+      expect(AI_CATALOG[key].envKey, key).toBe("OPENAI_API_KEY");
+    }
+  });
+});

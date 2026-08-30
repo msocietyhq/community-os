@@ -10,7 +10,7 @@
  * "is this a legal value" and "can we price this" the same check.
  */
 
-export const AI_PROVIDERS = ["anthropic", "deepseek"] as const;
+export const AI_PROVIDERS = ["anthropic", "deepseek", "openai"] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
 
 export interface ModelDef {
@@ -56,6 +56,18 @@ const ANTHROPIC_CACHE_CONTROL = {
 const ANTHROPIC_REASONING = {
   medium: { anthropic: { effort: "medium" } },
   high: { anthropic: { effort: "high" } },
+};
+
+/**
+ * OpenAI bills a cache read at 0.1x and a write at 1.25x — the Anthropic
+ * shape, not DeepSeek's. GPT-5.6+ prices implicit and explicit caching
+ * identically and places its own breakpoints, so `cacheControl` stays null.
+ */
+const OPENAI_CACHE = { read: 0.1, write: 1.25 };
+
+const OPENAI_REASONING = {
+  medium: { openai: { reasoningEffort: "medium" } },
+  high: { openai: { reasoningEffort: "high" } },
 };
 
 export const AI_CATALOG = {
@@ -118,6 +130,38 @@ export const AI_CATALOG = {
     cacheControl: null,
     reasoning: null,
     envKey: "DEEPSEEK_API_KEY",
+  }),
+  // Verified against @ai-sdk/openai@4.0.52: all three ids are in the
+  // provider's model-id union, and `reasoningEffort` accepts these values.
+  "openai/gpt-5.6-luna": model({
+    provider: "openai",
+    modelId: "gpt-5.6-luna",
+    label: "GPT-5.6 Luna",
+    pricing: { input: 0.2, output: 1.2 },
+    cache: OPENAI_CACHE,
+    cacheControl: null,
+    reasoning: OPENAI_REASONING,
+    envKey: "OPENAI_API_KEY",
+  }),
+  "openai/gpt-5.6-terra": model({
+    provider: "openai",
+    modelId: "gpt-5.6-terra",
+    label: "GPT-5.6 Terra",
+    pricing: { input: 2.0, output: 12.0 },
+    cache: OPENAI_CACHE,
+    cacheControl: null,
+    reasoning: OPENAI_REASONING,
+    envKey: "OPENAI_API_KEY",
+  }),
+  "openai/gpt-5.6-sol": model({
+    provider: "openai",
+    modelId: "gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
+    pricing: { input: 4.0, output: 20.0 },
+    cache: OPENAI_CACHE,
+    cacheControl: null,
+    reasoning: OPENAI_REASONING,
+    envKey: "OPENAI_API_KEY",
   }),
 } satisfies Record<string, ModelDef>;
 
