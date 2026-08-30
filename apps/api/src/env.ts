@@ -15,6 +15,7 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
   // Optional: a deployment running only Anthropic models must still boot.
   DEEPSEEK_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
   VOYAGE_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().optional(),
   EXA_API_KEY: z.string().optional(),

@@ -131,8 +131,10 @@ export const AI_CATALOG = {
     reasoning: null,
     envKey: "DEEPSEEK_API_KEY",
   }),
-  // Verified against @ai-sdk/openai@4.0.52: all three ids are in the
+  // Verified against @ai-sdk/openai@3.0.105: all three ids are in the
   // provider's model-id union, and `reasoningEffort` accepts these values.
+  // The 3.x line is the one that speaks LanguageModelV3, which is what ai@6
+  // consumes — 4.x emits V4 and does not type-check against this stack.
   "openai/gpt-5.6-luna": model({
     provider: "openai",
     modelId: "gpt-5.6-luna",
