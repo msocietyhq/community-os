@@ -165,6 +165,7 @@ export const AUDIT_ENTITY_TYPES = [
   "venue",
   "reputation",
   "bot_setting",
+  "ai_provider",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

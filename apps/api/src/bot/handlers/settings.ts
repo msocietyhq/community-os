@@ -10,6 +10,10 @@ import {
 } from "@community-os/shared/bot-settings";
 import { defineAbilityFor } from "@community-os/shared/abilities";
 import {
+  AI_PROVIDERS,
+  type AiProvider,
+} from "@community-os/shared/ai-catalog";
+import {
   isRole,
   ROLE_HIERARCHY,
   type Role,
@@ -17,6 +21,7 @@ import {
 import type { BotContext, BotConversation } from "../types";
 import { env } from "../../env";
 import { resolveUser } from "../lib/auth";
+import { probeNow } from "../../services/provider-health.service";
 import {
   applyChanges,
   getHistory,
@@ -539,4 +544,22 @@ settingsHandler.callbackQuery(/^set:prev:(.+)$/, async (ctx) => {
     console.error("[settings] preview rejected:", err);
     await ctx.reply("Telegram rejected the current text's formatting.");
   }
+});
+
+/**
+ * "I topped up — retry now": clears the backoff so the next AI call probes the
+ * provider immediately instead of waiting out a window that can reach 24 hours.
+ */
+settingsHandler.callbackQuery(/^prov:probe:(.+)$/, async (ctx) => {
+  const actor = await requireAdmin(ctx);
+  if (!actor) return denied(ctx);
+
+  const provider = ctx.match![1]!;
+  if (!(AI_PROVIDERS as readonly string[]).includes(provider)) {
+    await ctx.answerCallbackQuery({ text: "Unknown provider." });
+    return;
+  }
+
+  await probeNow(provider as AiProvider);
+  await ctx.answerCallbackQuery({ text: "Will retry on the next call." });
 });
