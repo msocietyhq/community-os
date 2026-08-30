@@ -10,7 +10,7 @@
  * "is this a legal value" and "can we price this" the same check.
  */
 
-export const AI_PROVIDERS = ["anthropic"] as const;
+export const AI_PROVIDERS = ["anthropic", "deepseek"] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
 
 export interface ModelDef {
@@ -99,6 +99,38 @@ export const AI_CATALOG = {
     reasoning: ANTHROPIC_REASONING,
     envKey: "ANTHROPIC_API_KEY",
     toolLoop: true,
+  }),
+  // DeepSeek prices by time of day: off-peak (01:00–04:00 and 06:00–10:00 UTC,
+  // Mon–Fri) is half of peak. The catalog holds one number, so it holds the
+  // PEAK rate. Off-peak calls are then over-counted about 2x, which makes the
+  // spend caps bind early — the safe direction. Recording off-peak would let
+  // real spend run to double the cap without it ever tripping.
+  //
+  // Caching is automatic and there is no write surcharge, so `write` is 1 and
+  // `cacheControl` is null — the hit/miss ratio is where the discount lives.
+  "deepseek/v4-flash": model({
+    provider: "deepseek",
+    modelId: "deepseek-v4-flash",
+    label: "DeepSeek V4 Flash",
+    pricing: { input: 0.44, output: 1.32 },
+    cache: { read: 0.032, write: 1 },
+    cacheControl: null,
+    reasoning: null,
+    envKey: "DEEPSEEK_API_KEY",
+    // Not yet vetted against the ten-step agent loop. Keeping this false
+    // confines it to `micro`, where no tool is ever passed.
+    toolLoop: false,
+  }),
+  "deepseek/v4-pro": model({
+    provider: "deepseek",
+    modelId: "deepseek-v4-pro",
+    label: "DeepSeek V4 Pro",
+    pricing: { input: 1.32, output: 3.96 },
+    cache: { read: 0.033, write: 1 },
+    cacheControl: null,
+    reasoning: null,
+    envKey: "DEEPSEEK_API_KEY",
+    toolLoop: false,
   }),
 } satisfies Record<string, ModelDef>;
 

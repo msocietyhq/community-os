@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { LanguageModel } from "ai";
 import {
   AI_CATALOG,
@@ -16,6 +17,14 @@ type ProviderFn = (modelId: string) => LanguageModel;
 const FACTORIES: Record<AiProvider, () => ProviderFn> = {
   anthropic: () => {
     const provider = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    return (modelId) => provider(modelId);
+  },
+  deepseek: () => {
+    const apiKey = env.DEEPSEEK_API_KEY;
+    // A backstop, not the normal path: `hasCredentials` gates this first and
+    // resolveTier falls back to the tier default rather than reaching here.
+    if (!apiKey) throw new Error("[ai-provider] DEEPSEEK_API_KEY is not set");
+    const provider = createDeepSeek({ apiKey });
     return (modelId) => provider(modelId);
   },
 };
