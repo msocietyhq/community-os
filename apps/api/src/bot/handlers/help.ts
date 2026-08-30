@@ -3,6 +3,7 @@ import type { BotContext } from "../types";
 import { resolveUser } from "../lib/auth";
 import { eventsService } from "../../services/events.service";
 import { isAppError } from "../../lib/errors";
+import { helpLines, startLines } from "../commands";
 
 export const helpHandler = new Composer<BotContext>();
 
@@ -59,16 +60,7 @@ helpHandler.command("start", async (ctx) => {
   await ctx.reply(
     `Welcome to the MSOCIETY Bot! 🤖\n\n` +
       `I help manage the MSOCIETY community. Here's what I can do:\n\n` +
-      `/events — View upcoming events\n` +
-      `/projects — Browse community projects\n` +
-      `/create_project — Submit a new project\n` +
-      `/reputation — Check your reputation score\n` +
-      `/leaderboard — Top reputation scores\n` +
-      `/usage — View your AI usage stats\n` +
-      `/models — List available AI models\n` +
-      `/profile — View or edit your community profile\n` +
-      `/settings — Configure the bot (admins only, DM)\n` +
-      `/help — Show this help message\n\n` +
+      `${startLines()}\n\n` +
       `You can also mention @msocietybot with any question about the community!`,
   );
 });
@@ -76,16 +68,7 @@ helpHandler.command("start", async (ctx) => {
 helpHandler.command("help", async (ctx) => {
   await ctx.reply(
     `<b>MSOCIETY Bot Commands</b>\n\n` +
-      `📅 /events — View upcoming events\n` +
-      `🚀 /projects — Browse community projects\n` +
-      `➕ /create_project — Submit a new project\n` +
-      `⭐ /reputation — Check your reputation score\n` +
-      `🏆 /leaderboard — Top reputation scores\n` +
-      `📊 /usage — View your AI usage stats\n` +
-      `🧠 /models — List available AI models\n` +
-      `👤 /profile — View or edit your community profile\n` +
-      `⚙️ /settings — Configure the bot (admins only, DM)\n` +
-      `❓ /help — Show this help message\n\n` +
+      `${helpLines()}\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
     { parse_mode: "HTML" },
   );
