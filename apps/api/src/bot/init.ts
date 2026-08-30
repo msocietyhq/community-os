@@ -12,6 +12,7 @@ import { tokenHandler } from "./handlers/token";
 import { profileHandler } from "./handlers/profile";
 import { loginHandler } from "./handlers/login";
 import { usageHandler } from "./handlers/usage";
+import { modelsHandler } from "./handlers/models";
 import { settingsHandler } from "./handlers/settings";
 import { dmAccessMiddleware } from "./lib/dm-gate";
 import { PostgresSessionStorage } from "./session-storage";
@@ -104,6 +105,7 @@ export async function initBot(): Promise<void> {
   bot.use(reputationHandler);
   bot.use(digestHandler);
   bot.use(usageHandler);
+  bot.use(modelsHandler);
   bot.use(settingsHandler);
   // aiChatHandler MUST be last — it's a catch-all for @mentions
   bot.use(aiChatHandler);

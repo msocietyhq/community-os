@@ -65,6 +65,7 @@ helpHandler.command("start", async (ctx) => {
       `/reputation — Check your reputation score\n` +
       `/leaderboard — Top reputation scores\n` +
       `/usage — View your AI usage stats\n` +
+      `/models — List available AI models\n` +
       `/profile — View or edit your community profile\n` +
       `/settings — Configure the bot (admins only, DM)\n` +
       `/help — Show this help message\n\n` +
@@ -81,6 +82,7 @@ helpHandler.command("help", async (ctx) => {
       `⭐ /reputation — Check your reputation score\n` +
       `🏆 /leaderboard — Top reputation scores\n` +
       `📊 /usage — View your AI usage stats\n` +
+      `🧠 /models — List available AI models\n` +
       `👤 /profile — View or edit your community profile\n` +
       `⚙️ /settings — Configure the bot (admins only, DM)\n` +
       `❓ /help — Show this help message\n\n` +
