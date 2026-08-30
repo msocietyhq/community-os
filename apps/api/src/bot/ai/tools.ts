@@ -119,8 +119,9 @@ async function can(
 /**
  * Runs a sub-agent while reporting its state to the user.
  *
- * Only these top-level sub-agents report — tool calls made *inside* a
- * sub-agent stay invisible, keeping the status message one layer deep.
+ * The sub-agent's own tool calls report too: each `run*Agent` wraps its
+ * toolset with `trackToolCalls(tools, activity)`, so the status message shows
+ * the whole tree rather than just the top level.
  */
 async function withProgress(
   ctx: ToolContext,

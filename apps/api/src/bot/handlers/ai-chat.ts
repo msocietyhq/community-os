@@ -204,13 +204,6 @@ aiChatHandler.on("message:text", async (ctx) => {
         console.error("[subagent-progress] edit failed:", err);
       }
     },
-    async delete(messageId) {
-      try {
-        await ctx.api.deleteMessage(ctx.chat.id, messageId);
-      } catch (err) {
-        console.error("[subagent-progress] delete failed:", err);
-      }
-    },
   };
 
   // force_reply pops the reply composer on the asked member's client, so their
@@ -287,8 +280,8 @@ aiChatHandler.on("message:text", async (ctx) => {
       progressSink,
       askUser,
       proposeSettings,
-      // DM-only: the group gets sub-agent progress as before, without a
-      // running commentary of every lookup the bot makes.
+      // DM-only: the group gets the same sub-agent tree, without a running
+      // commentary of every lookup the bot makes.
       trackAllTools: isPrivate,
     });
 

@@ -11,12 +11,28 @@ import {
   MIN_EDIT_INTERVAL_MS,
   MAX_MESSAGE_CHARS,
   type ProgressSink,
-  type SubagentBatch,
   type SubagentEntry,
+  type SubagentProgressOptions,
 } from "./subagent-progress";
 
 /** Progress renders to entities now; these assertions read the plain text. */
-const render = (batches: SubagentBatch[]) => renderProgress(batches).text;
+const render = (root: SubagentEntry | null) => renderProgress(root).text;
+
+/** A sub-agent entry, with the boilerplate fields defaulted. */
+function entry(
+  partial: Partial<SubagentEntry> & { name: string; query: string },
+): SubagentEntry {
+  return { state: "running", activeTools: [], toolLog: [], children: [], ...partial };
+}
+
+/** The main agent's own entry, which heads every turn. */
+function root(
+  children: SubagentEntry[],
+  state: SubagentEntry["state"] = "running",
+  name = "Thinking",
+): SubagentEntry {
+  return { name, query: "", state, activeTools: [], toolLog: [], children };
+}
 
 /** Captures every send/edit so the message's whole lifecycle can be asserted. */
 function makeSink(options: { failSend?: boolean } = {}) {
@@ -67,120 +83,165 @@ function makeScheduler() {
 /** Lets queued microtask renders settle. */
 const settle = () => new Promise<void>((r) => setTimeout(r, 0));
 
+/**
+ * Opens a reporter with a pinned root, as every turn now does.
+ *
+ * The verb is pinned because it rotates per turn and assertions should not be
+ * a lottery. `start` stands in for the old `progress.start`.
+ */
+function makeReporter(options: Partial<SubagentProgressOptions> = {}) {
+  const sink = makeSink();
+  const progress = new SubagentProgress({
+    sink: sink.sink,
+    revealDelayMs: 0,
+    minEditIntervalMs: 0,
+    ...options,
+  });
+  const rootActivity = progress.rootActivity("Thinking");
+  return {
+    sink,
+    progress,
+    root: rootActivity,
+    start: (name: string, query: string) => rootActivity.start(name, query),
+  };
+}
+
+/**
+ * Pins a root on a reporter and exposes the sub-agent opener.
+ *
+ * Sub-agents hang off the turn's root now, so what tests used to call as
+ * `progress.start` is `root.start`. The verb is pinned because it rotates per
+ * turn and assertions should not be a lottery.
+ */
+function rooted(progress: SubagentProgress) {
+  const root = progress.rootActivity("Thinking");
+  return { root, start: (name: string, query: string) => root.start(name, query) };
+}
+
 // ─── renderProgress ──────────────────────────────────────────────────────────
 
 describe("renderProgress", () => {
-  test("running batch lists each sub-agent with its query", () => {
-    const batches: SubagentBatch[] = [
-      [
-        { name: "Events", query: "upcoming meetups", state: "running", activeTools: [], toolLog: [], children: [] },
-        { name: "Projects", query: "active projects", state: "running", activeTools: [], toolLog: [], children: [] },
-      ],
-    ];
-    expect(render(batches)).toBe(
-      "Running 2 subagents\n" +
-        "⏳ Events — upcoming meetups\n" +
-        "⏳ Projects — active projects",
+  test("a running turn heads the message and nests its sub-agents", () => {
+    expect(
+      render(
+        root([
+          entry({ name: "Events", query: "upcoming meetups" }),
+          entry({ name: "Projects", query: "active projects" }),
+        ]),
+      ),
+    ).toBe(
+      "⏳ Thinking\n" +
+        "    ⏳ Events — upcoming meetups\n" +
+        "    ⏳ Projects — active projects",
     );
   });
 
   test("a settled sub-agent keeps its task line and gains a checkmark", () => {
-    const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] }],
-    ];
-    expect(render(batches)).toBe(
-      "Done — 1 subagent\n✅ Events — upcoming meetups",
-    );
+    expect(
+      render(root([entry({ name: "Events", query: "upcoming meetups", state: "done" })])),
+    ).toBe("⏳ Thinking\n    ✅ Events — upcoming meetups");
   });
 
   test("the sub-agent's own answer is not shown", () => {
-    const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "upcoming meetups", state: "done", detail: "3 meetups on 24 Aug", activeTools: [], toolLog: [], children: [] }],
-    ];
-    expect(render(batches)).not.toContain("24 Aug");
-  });
-
-  test("a batch is still running while any member is", () => {
-    const batches: SubagentBatch[] = [
-      [
-        { name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] },
-        { name: "Projects", query: "projects", state: "running", activeTools: [], toolLog: [], children: [] },
-      ],
-    ];
-    expect(render(batches)).toContain("Running 2 subagents");
+    expect(
+      render(
+        root([
+          entry({
+            name: "Events",
+            query: "upcoming meetups",
+            state: "done",
+            detail: "3 events found",
+          }),
+        ]),
+      ),
+    ).not.toContain("3 events found");
   });
 
   test("failures keep their reason, since the reply cannot explain the gap", () => {
-    const batches: SubagentBatch[] = [
-      [{ name: "GitHub", query: "list repos", state: "failed", detail: "rate limited", activeTools: [], toolLog: [], children: [] }],
-    ];
-    expect(render(batches)).toBe(
-      "Done — 1 subagent\n❌ GitHub — list repos (failed: rate limited)",
+    expect(
+      render(
+        root([
+          entry({ name: "Research", query: "rate limits", state: "failed", detail: "timed out" }),
+        ]),
+      ),
+    ).toBe("⏳ Thinking\n    ❌ Research — rate limits (failed: timed out)");
+  });
+
+  test("a settled turn drops the root line and promotes its sub-agents", () => {
+    expect(
+      render(
+        root(
+          [
+            entry({ name: "Events", query: "upcoming meetups", state: "done" }),
+            entry({
+              name: "Research",
+              query: "rate limits",
+              state: "failed",
+              detail: "timed out",
+            }),
+          ],
+          "done",
+        ),
+      ),
+    ).toBe(
+      "🏁 Completed\n" +
+        "✅ Events — upcoming meetups\n" +
+        "❌ Research — rate limits (failed: timed out)",
     );
   });
 
-  test("later rounds are appended below finished ones", () => {
-    const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "meetups", state: "done", detail: "3 meetups", activeTools: [], toolLog: [], children: [] }],
-      [{ name: "Members", query: "who is going", state: "running", activeTools: [], toolLog: [], children: [] }],
-    ];
-    expect(render(batches)).toBe(
-      "Done — 1 subagent\n" +
-        "✅ Events — meetups\n" +
-        "\n" +
-        "Running 1 subagent\n" +
-        "⏳ Members — who is going",
+  test("a sub-agent that settled earlier renders as a sibling of a later one", () => {
+    expect(
+      render(
+        root([
+          entry({ name: "Events", query: "upcoming meetups", state: "done" }),
+          entry({ name: "Members", query: "who is going" }),
+        ]),
+      ),
+    ).toBe(
+      "⏳ Thinking\n" +
+        "    ✅ Events — upcoming meetups\n" +
+        "    ⏳ Members — who is going",
     );
   });
 
   test("multi-line tasks are flattened to one line", () => {
-    const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "line one\n\nline two", state: "running", activeTools: [], toolLog: [], children: [] }],
-    ];
-    expect(render(batches)).toContain("⏳ Events — line one line two");
+    expect(render(root([entry({ name: "Events", query: "line one\nline two" })]))).toBe(
+      "⏳ Thinking\n    ⏳ Events — line one line two",
+    );
   });
 
   test("long tasks are truncated", () => {
-    const batches: SubagentBatch[] = [
-      [{ name: "Events", query: "A".repeat(400), state: "running", activeTools: [], toolLog: [], children: [] }],
-    ];
-    const line = render(batches).split("\n")[1] ?? "";
-    expect(line).toContain("…");
-    expect(line.length).toBeLessThan(100);
+    const out = render(root([entry({ name: "Events", query: "x".repeat(120) })]));
+    expect(out).toContain("…");
+    expect(out.length).toBeLessThan(120);
   });
 
-  // Styling is carried by entities now, so the text is never rewritten —
-  // markup a member or model typed stays exactly as typed.
   test("markup in a running query is left verbatim", () => {
-    const out = render([
-      [{ name: "Events", query: "<b>hi</b> & bye", state: "running", activeTools: [], toolLog: [], children: [] }],
-    ]);
-    expect(out).toContain("<b>hi</b> & bye");
-    expect(out).not.toContain("&amp;");
+    expect(render(root([entry({ name: "Events", query: "<b>bold</b> & co" })]))).toContain(
+      "<b>bold</b> & co",
+    );
   });
 
   test("markup in a failure reason is left verbatim", () => {
-    const out = render([
-      [{ name: "Events", query: "q", state: "failed", detail: "a & b <script>", activeTools: [], toolLog: [], children: [] }],
-    ]);
-    expect(out).toContain("a & b <script>");
-    expect(out).not.toContain("&lt;");
+    expect(
+      render(
+        root([entry({ name: "Events", query: "q", state: "failed", detail: "<i>nope</i>" })]),
+      ),
+    ).toContain("<i>nope</i>");
   });
 
   test("the sub-agent name is bold, as an entity rather than markup", () => {
-    const [batch] = [
-      [{ name: "Events", query: "q", state: "running" as const, activeTools: [], toolLog: [], children: [] }],
-    ];
-    const rendered = renderProgress(batch ? [batch] : []);
-    const bold = (rendered.entities ?? [])
+    const rendered = renderProgress(root([entry({ name: "Events", query: "upcoming meetups" })]));
+    expect(rendered.text).not.toContain("<b>");
+    const bold = rendered.entities
       .filter((e) => e.type === "bold")
       .map((e) => rendered.text.slice(e.offset, e.offset + e.length));
     expect(bold).toContain("Events");
   });
 
-  test("empty batches render nothing", () => {
-    expect(render([])).toBe("");
-    expect(render([[]])).toBe("");
+  test("no root renders nothing", () => {
+    expect(render(null)).toBe("");
   });
 });
 
@@ -195,13 +256,14 @@ describe("SubagentProgress", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
-    return { ...sink, ...clock, progress };
+    const { start } = rooted(progress);
+    return { ...sink, ...clock, progress, ...rooted(progress) };
   }
 
   test("a fast sub-agent never posts a message", async () => {
-    const { progress, sent, edits } = setup();
+    const { progress, sent, edits, start } = setup();
 
-    const handle = progress.start("Events", "upcoming meetups");
+    const handle = start("Events", "upcoming meetups");
     handle.done("3 meetups");
     await progress.finish();
 
@@ -210,108 +272,48 @@ describe("SubagentProgress", () => {
   });
 
   test("a slow sub-agent posts once the reveal timer fires", async () => {
-    const { progress, sent, fire } = setup();
+    const { progress, sent, fire, start } = setup();
 
-    progress.start("Events", "upcoming meetups");
+    start("Events", "upcoming meetups");
     expect(sent).toEqual([]);
 
     fire();
     await settle();
 
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toContain("Running 1 subagent");
+    expect(sent[0]).toContain("⏳ Thinking");
     expect(sent[0]).toContain("⏳ Events — upcoming meetups");
   });
 
-  test("sub-agents started together share one round", async () => {
-    const { progress, sent, fire } = setup();
-
-    progress.start("Events", "meetups");
-    progress.start("Projects", "projects");
-    fire();
-    await settle();
-
-    expect(sent[0]).toContain("Running 2 subagents");
-  });
-
   test("the message is edited as each sub-agent settles", async () => {
-    const { progress, current, fire, edits } = setup();
+    const { progress, current, fire, edits, start } = setup();
 
-    const events = progress.start("Events", "meetups");
-    const projects = progress.start("Projects", "projects");
+    const events = start("Events", "meetups");
+    const projects = start("Projects", "projects");
     fire();
     await settle();
 
     events.done("3 meetups");
     await settle();
     expect(current()).toContain("✅ Events — meetups");
-    expect(current()).toContain("Running 2 subagents");
+    expect(current()).toContain("⏳ Thinking");
 
+    // Every sub-agent settling does not settle the turn — only finish() does,
+    // so the root still heads the message here.
     projects.done("12 projects");
     await settle();
-    expect(current()).toContain("Done — 2 subagents");
+    expect(current()).toContain("⏳ Thinking");
     expect(current()).toContain("✅ Projects — projects");
+
+    await progress.finish();
+    expect(current()).toContain("🏁 Completed");
     expect(edits.every((e) => e.messageId === 100)).toBe(true);
   });
 
-  /** The behaviour requested: keep the finished round, append the next one. */
-  test("a later round is appended, keeping the earlier round's end state", async () => {
-    const { progress, current, fire } = setup();
-
-    const first = progress.start("Events", "meetups");
-    fire();
-    await settle();
-    first.done("3 meetups");
-    await settle();
-
-    const second = progress.start("Members", "who is going");
-    await settle();
-    second.done("8 members going");
-    await progress.finish();
-
-    const text = current() ?? "";
-    expect(text).toBe(
-      "Done — 1 subagent\n" +
-        "✅ Events — meetups\n" +
-        "\n" +
-        "Done — 1 subagent\n" +
-        "✅ Members — who is going",
-    );
-  });
-
-  test("a sub-agent joining a running round is added to it", async () => {
-    const { progress, current, fire } = setup();
-
-    progress.start("Events", "meetups");
-    fire();
-    await settle();
-
-    progress.start("Projects", "projects");
-    await settle();
-
-    expect(current()).toContain("Running 2 subagents");
-  });
-
-  test("an earlier fast round still appears once a later round reveals", async () => {
-    const { progress, current, fire, sent } = setup();
-
-    const fast = progress.start("Events", "meetups");
-    fast.done("3 meetups");
-    expect(sent).toEqual([]);
-
-    progress.start("GitHub", "list repos");
-    fire();
-    await settle();
-
-    const text = current() ?? "";
-    expect(text).toContain("✅ Events — meetups");
-    expect(text).toContain("Running 1 subagent");
-  });
-
   test("failures show in the final state", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("GitHub", "list repos");
+    const handle = start("GitHub", "list repos");
     fire();
     await settle();
     handle.failed("rate limited");
@@ -321,9 +323,9 @@ describe("SubagentProgress", () => {
   });
 
   test("settling twice is ignored", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
     handle.done("3 meetups");
@@ -336,18 +338,20 @@ describe("SubagentProgress", () => {
   });
 
   test("identical renders do not produce redundant edits", async () => {
-    const { progress, edits, fire } = setup();
+    const { progress, edits, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
     handle.done("3 meetups");
     await settle();
-    const afterFirst = edits.length;
-
     await progress.finish();
-    expect(edits.length).toBe(afterFirst);
+    const afterFinish = edits.length;
+
+    // The same state rendered again must not go out a second time.
+    await progress.finish();
+    expect(edits.length).toBe(afterFinish);
   });
 
   test("finish is silent when nothing ever revealed", async () => {
@@ -358,9 +362,9 @@ describe("SubagentProgress", () => {
   });
 
   test("finish cancels a pending reveal", async () => {
-    const { progress, pendingCount, sent } = setup();
+    const { progress, pendingCount, sent, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     handle.done("3 meetups");
     expect(pendingCount()).toBe(1);
 
@@ -370,9 +374,9 @@ describe("SubagentProgress", () => {
   });
 
   test("a failed send is not retried on every update", async () => {
-    const { progress, sent, edits, fire } = setup(true);
+    const { progress, sent, edits, fire, start } = setup(true);
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
     expect(sent).toHaveLength(1);
@@ -385,10 +389,10 @@ describe("SubagentProgress", () => {
   });
 
   test("completedResults returns only successful output", async () => {
-    const { progress, fire } = setup();
+    const { progress, fire, start } = setup();
 
-    const ok = progress.start("Events", "meetups");
-    const bad = progress.start("GitHub", "repos");
+    const ok = start("Events", "meetups");
+    const bad = start("GitHub", "repos");
     fire();
     await settle();
 
@@ -402,22 +406,22 @@ describe("SubagentProgress", () => {
   // ── nested tool calls ─────────────────────────────────────────────────────
 
   test("a running sub-agent shows the tool it is calling", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
     handle.activity.toolStart("graphql_query");
     await settle();
 
-    expect(current()).toContain("⏳ Events — meetups\n    ↳ looking up data");
+    expect(current()).toContain("    ⏳ Events — meetups\n        ↳ looking up data");
   });
 
   test("the last tool stays on screen after it finishes", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -432,9 +436,9 @@ describe("SubagentProgress", () => {
   });
 
   test("parallel tool calls are listed together", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -442,13 +446,13 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("rsvp_event");
     await settle();
 
-    expect(current()).toContain("↳ looking up data\n    ↳ RSVPing");
+    expect(current()).toContain("        ↳ looking up data\n        ↳ RSVPing");
   });
 
   test("ending one of two parallel tools leaves the other", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -464,9 +468,9 @@ describe("SubagentProgress", () => {
   });
 
   test("consecutive calls to the same tool collapse into a count", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -480,9 +484,9 @@ describe("SubagentProgress", () => {
   });
 
   test("the stack grows in call order", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "plan it");
+    const handle = start("Events", "plan it");
     fire();
     await settle();
     handle.activity.toolStart("graphql_query")();
@@ -492,16 +496,16 @@ describe("SubagentProgress", () => {
 
     const lines = (current() ?? "").split("\n").filter((l) => l.includes("↳"));
     expect(lines).toEqual([
-      "    ↳ looking up data",
-      "    ↳ creating the event",
-      "    ↳ RSVPing",
+      "        ↳ looking up data",
+      "        ↳ creating the event",
+      "        ↳ RSVPing",
     ]);
   });
 
   test("a long stack folds the oldest entries away", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "plan it");
+    const handle = start("Events", "plan it");
     fire();
     await settle();
     for (const t of [
@@ -519,9 +523,9 @@ describe("SubagentProgress", () => {
   });
 
   test("the stack collapses away when the sub-agent settles", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "plan it");
+    const handle = start("Events", "plan it");
     fire();
     await settle();
     handle.activity.toolStart("graphql_query")();
@@ -533,14 +537,14 @@ describe("SubagentProgress", () => {
     await progress.finish();
 
     expect(current()).toBe(
-      "Done — 1 subagent\n✅ Events — plan it",
+      "🏁 Completed\n✅ Events — plan it",
     );
   });
 
   test("a settled sub-agent shows no tool line", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
     handle.activity.toolStart("graphql_query");
@@ -554,9 +558,9 @@ describe("SubagentProgress", () => {
   });
 
   test("ending a tool twice is harmless", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -571,9 +575,9 @@ describe("SubagentProgress", () => {
   });
 
   test("tool names go out verbatim, with no markup to neutralise", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
     handle.activity.toolStart("<script>");
@@ -583,13 +587,6 @@ describe("SubagentProgress", () => {
     // the styling travels as entities, so markup here is inert either way.
     expect(current()).toContain("<script>");
     expect(current()).not.toContain("&lt;");
-  });
-
-  test("started reflects whether any sub-agent ran", () => {
-    const { progress } = setup();
-    expect(progress.started).toBe(false);
-    progress.start("Events", "meetups");
-    expect(progress.started).toBe(true);
   });
 });
 
@@ -604,13 +601,14 @@ describe("nested sub-agents", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
-    return { ...sink, ...clock, progress };
+    const { start } = rooted(progress);
+    return { ...sink, ...clock, progress, ...rooted(progress) };
   }
 
   test("a sub-agent's children are indented beneath it", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const parent = progress.start("Events", "plan the meetup");
+    const parent = start("Events", "plan the meetup");
     fire();
     await settle();
 
@@ -618,16 +616,16 @@ describe("nested sub-agents", () => {
     await settle();
 
     expect(current()).toBe(
-      "Running 1 subagent\n" +
-        "⏳ Events — plan the meetup\n" +
-        "    ⏳ Venues — find a room",
+      "⏳ Thinking\n" +
+        "    ⏳ Events — plan the meetup\n" +
+        "        ⏳ Venues — find a room",
     );
   });
 
   test("nesting is not limited to one level", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const a = progress.start("Events", "plan the meetup");
+    const a = start("Events", "plan the meetup");
     fire();
     await settle();
     const b = a.activity.start("Venues", "find a room");
@@ -636,29 +634,30 @@ describe("nested sub-agents", () => {
     await settle();
 
     const lines = (current() ?? "").split("\n");
-    expect(lines[1]).toBe("⏳ Events — plan the meetup");
-    expect(lines[2]).toBe("    ⏳ Venues — find a room");
-    expect(lines[3]).toBe("        ⏳ Members — who can host");
-    expect(lines[4]).toBe("            ⏳ GitHub — check the rota repo");
+    expect(lines[0]).toBe("⏳ Thinking");
+    expect(lines[1]).toBe("    ⏳ Events — plan the meetup");
+    expect(lines[2]).toBe("        ⏳ Venues — find a room");
+    expect(lines[3]).toBe("            ⏳ Members — who can host");
+    expect(lines[4]).toBe("                ⏳ GitHub — check the rota repo");
   });
 
   test("a child's tools indent under the child", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const parent = progress.start("Events", "plan the meetup");
+    const parent = start("Events", "plan the meetup");
     fire();
     await settle();
     const child = parent.activity.start("Venues", "find a room");
     child.activity.toolStart("graphql_query");
     await settle();
 
-    expect(current()).toContain("    ⏳ Venues — find a room\n        ↳ looking up data");
+    expect(current()).toContain("        ⏳ Venues — find a room\n            ↳ looking up data");
   });
 
   test("children settle independently of their parent", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const parent = progress.start("Events", "plan the meetup");
+    const parent = start("Events", "plan the meetup");
     fire();
     await settle();
     const child = parent.activity.start("Venues", "find a room");
@@ -667,15 +666,15 @@ describe("nested sub-agents", () => {
     child.done("Room 3 is free");
     await settle();
 
-    expect(current()).toContain("⏳ Events — plan the meetup");
-    expect(current()).toContain("    ✅ Venues — find a room");
-    expect(current()).toContain("Running 1 subagent");
+    expect(current()).toContain("    ⏳ Events — plan the meetup");
+    expect(current()).toContain("        ✅ Venues — find a room");
+    expect(current()).toContain("⏳ Thinking");
   });
 
   test("a settled parent keeps showing its children", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const parent = progress.start("Events", "plan the meetup");
+    const parent = start("Events", "plan the meetup");
     fire();
     await settle();
     const child = parent.activity.start("Venues", "find a room");
@@ -684,29 +683,16 @@ describe("nested sub-agents", () => {
     await progress.finish();
 
     expect(current()).toBe(
-      "Done — 1 subagent\n" +
+      "🏁 Completed\n" +
         "✅ Events — plan the meetup\n" +
         "    ✅ Venues — find a room",
     );
   });
 
-  test("the top-level round count ignores nested sub-agents", async () => {
-    const { progress, current, fire } = setup();
-
-    const parent = progress.start("Events", "plan the meetup");
-    fire();
-    await settle();
-    parent.activity.start("Venues", "find a room");
-    parent.activity.start("Members", "who can host");
-    await settle();
-
-    expect(current()).toContain("Running 1 subagent");
-  });
-
   test("completedResults collects successes from every depth", async () => {
-    const { progress, fire } = setup();
+    const { progress, fire, start } = setup();
 
-    const parent = progress.start("Events", "plan the meetup");
+    const parent = start("Events", "plan the meetup");
     fire();
     await settle();
     const child = parent.activity.start("Venues", "find a room");
@@ -720,15 +706,15 @@ describe("nested sub-agents", () => {
     expect(progress.completedResults()).toEqual(["Meetup planned", "Room 3 is free"]);
   });
 
-  test("a deep tree is clamped to Telegram's message limit", () => {
-    const { progress } = setup();
-    let handle = progress.start("Root", "x".repeat(50));
+  test("a deep tree is clamped to Telegram's message limit", async () => {
+    const { current, fire, start } = setup();
+    let handle = start("Root", "x".repeat(50));
     for (let i = 0; i < 200; i++) {
       handle = handle.activity.start(`Agent${i}`, "y".repeat(50));
     }
-    // Rendered via the same path the sink would receive.
-    const text = render([[]]);
-    expect(text.length).toBeLessThanOrEqual(MAX_MESSAGE_CHARS + 2);
+    fire();
+    await settle();
+    expect(current()!.length).toBeLessThanOrEqual(MAX_MESSAGE_CHARS + 2);
   });
 });
 
@@ -744,21 +730,22 @@ describe("edit throttling", () => {
       scheduler: clock.scheduler,
       now: () => time,
     });
-    return { ...sink, ...clock, progress, advance: (ms: number) => { time += ms; } };
+    const { start } = rooted(progress);
+    return { ...sink, ...clock, progress, ...rooted(progress), advance: (ms: number) => { time += ms; } };
   }
 
   test("the first post is never delayed", async () => {
-    const { progress, sent, fire } = setup();
-    progress.start("Events", "meetups");
+    const { progress, sent, fire, start } = setup();
+    start("Events", "meetups");
     fire();
     await settle();
     expect(sent).toHaveLength(1);
   });
 
   test("edits inside the interval are deferred, not dropped", async () => {
-    const { progress, edits, fire, advance, current } = setup();
+    const { progress, edits, fire, advance, current, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -777,9 +764,9 @@ describe("edit throttling", () => {
   });
 
   test("only the latest state is sent when several updates are coalesced", async () => {
-    const { progress, edits, fire, advance, current } = setup();
+    const { progress, edits, fire, advance, current, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -800,9 +787,9 @@ describe("edit throttling", () => {
   });
 
   test("an edit past the interval goes straight out", async () => {
-    const { progress, edits, fire, advance } = setup();
+    const { progress, edits, fire, advance, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -814,9 +801,9 @@ describe("edit throttling", () => {
   });
 
   test("finish bypasses the throttle so the end state lands immediately", async () => {
-    const { progress, current, fire } = setup();
+    const { progress, current, fire, start } = setup();
 
-    const handle = progress.start("Events", "meetups");
+    const handle = start("Events", "meetups");
     fire();
     await settle();
 
@@ -845,6 +832,7 @@ describe("tool line visibility", () => {
       now: () => time,
       revealDelayMs: 1500,
     });
+    const { start } = rooted(progress);
     const advance = (ms: number) => { time += ms; };
     const seen: string[] = [];
     const record = () => { const t = sink.current(); if (t) seen.push(t); };
@@ -852,7 +840,7 @@ describe("tool line visibility", () => {
     // Step 1 returns a tool call at ~1.0s — before the 1.5s reveal — and the
     // query is fast, so the tool is long finished by the time anything is
     // posted. This is the common shape: one tool call, early, short.
-    const handle = progress.start("Members", "find typescript people");
+    const handle = start("Members", "find typescript people");
     advance(1000);
     const end = handle.activity.toolStart("graphql_query");
     await settle();
@@ -888,8 +876,9 @@ describe("tool line visibility", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
+    const { start } = rooted(progress);
 
-    const handle = progress.start("Members", "find typescript people");
+    const handle = start("Members", "find typescript people");
     clock.fire();
     await settle();
     handle.activity.toolStart("graphql_query")();
@@ -908,8 +897,9 @@ describe("tool line visibility", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
+    const { start } = rooted(progress);
 
-    const handle = progress.start("Events", "plan it");
+    const handle = start("Events", "plan it");
     clock.fire();
     await settle();
     handle.activity.toolStart("graphql_query")();
@@ -1092,8 +1082,9 @@ describe("stacking by phrase", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
+    const { start } = rooted(progress);
 
-    const handle = progress.start("Members", "find people");
+    const handle = start("Members", "find people");
     clock.fire();
     await settleTick();
     handle.activity.toolStart("graphql_query", { query: "{ members { id } }" })();
@@ -1114,7 +1105,9 @@ describe("stacking by phrase", () => {
       minEditIntervalMs: 0,
     });
 
-    const handle = progress.start("Members", "find people");
+    const { start } = rooted(progress);
+
+    const handle = start("Members", "find people");
     clock.fire();
     await settleTick();
     const q = { query: "query Page { members { id } }" };
@@ -1136,11 +1129,20 @@ describe("main-agent root entry", () => {
       minEditIntervalMs: 0,
     });
     // Verb pinned: it rotates per turn, and assertions shouldn't be a lottery.
-    return { sink, progress, root: progress.rootActivity("Thinking") };
+    const root = progress.rootActivity("Thinking");
+    return {
+      sink,
+      progress,
+      root,
+      start: (name: string, query: string) => root.start(name, query),
+    };
   }
 
   test("logs the main agent's own tool calls", async () => {
-    const { sink, root } = withRoot();
+    const { sink, root, start } = withRoot();
+    // A sub-agent is what reveals the message at all; the main agent's own
+    // lookups are what this asserts show up alongside it.
+    start("Research", "rate limits");
     root.toolStart("recall_memory", { query: "aziz" })();
     await settle();
     expect(sink.current()).toContain("recall memory");
@@ -1148,20 +1150,12 @@ describe("main-agent root entry", () => {
 
   // The member's question is on screen directly above, so repeating it is noise.
   test("shows no task line for the root", async () => {
-    const { sink, root } = withRoot();
+    const { sink, root, start } = withRoot();
+    start("Research", "rate limits");
     root.toolStart("chat_history", {})();
     await settle();
     expect(sink.current()).toContain("⏳ Thinking\n");
     expect(sink.current()).not.toContain("Thinking —");
-  });
-
-  // The heading counts sub-agents, and the root isn't one.
-  test("suppresses the batch heading", async () => {
-    const { sink, root } = withRoot();
-    root.toolStart("chat_history", {})();
-    await settle();
-    expect(sink.current()).not.toContain("Running");
-    expect(sink.current()).not.toContain("subagent");
   });
 
   test("nests sub-agents underneath the root", async () => {
@@ -1198,64 +1192,49 @@ describe("main-agent root entry", () => {
     expect(sink.current()).toContain("\n✅ Research — rate limits");
   });
 
-  // Nothing survives the settle, and render() skips an empty text — which
-  // would strand the last in-flight frame on screen.
-  test("deletes the message when the root produced no sub-agents", async () => {
+  // The reveal is armed only by a sub-agent, and a sub-agent's entry is never
+  // removed — so anything posted has something to show. That invariant is what
+  // lets finish() have no deletion path at all.
+  test("a posted message never renders empty", async () => {
+    const { sink, start, progress } = makeReporter();
+
+    start("Research", "rate limits").done("nothing found");
+    await settle();
+    await progress.finish();
+
+    const texts = [...sink.sent, ...sink.edits.map((e) => e.text)];
+    expect(texts.length).toBeGreaterThan(0);
+    expect(texts.every((t) => t !== "")).toBe(true);
+  });
+
+  // The turn used to be able to end while the first send was still in flight,
+  // leaving finish() reading a null messageId and stranding "⏳ Thinking" on
+  // screen for good. With no deletion decision there is nothing to race.
+  test("a turn ending mid-send still settles on the completed state", async () => {
     const sink = makeSink();
-    const deleted: number[] = [];
+    const slow: ProgressSink = {
+      ...sink.sink,
+      async send(message) {
+        await new Promise((r) => setTimeout(r, 5));
+        return sink.sink.send(message);
+      },
+    };
     const progress = new SubagentProgress({
-      sink: { ...sink.sink, delete: async (id) => void deleted.push(id) },
+      sink: slow,
       revealDelayMs: 0,
       minEditIntervalMs: 0,
     });
     const root = progress.rootActivity("Thinking");
+    const handle = root.start("Events", "upcoming meetups");
 
-    root.toolStart("chat_history", {})();
+    // Lets the reveal fire, which starts the slow send. The turn then ends
+    // while that send is still in the air.
     await settle();
-    expect(sink.current()).toContain("Thinking");
-
+    handle.done("3 events found");
     await progress.finish();
-    expect(deleted).toHaveLength(1);
-  });
+    await new Promise((r) => setTimeout(r, 20));
 
-  // The header must not appear with nothing beneath it: a non-empty render
-  // would stop finish() deleting a message that has nothing to say.
-  test("no Completed header when the root produced nothing", async () => {
-    const sink = makeSink();
-    const texts: string[] = [];
-    const progress = new SubagentProgress({
-      sink: { ...sink.sink, delete: async () => {} },
-      revealDelayMs: 0,
-      minEditIntervalMs: 0,
-    });
-    const root = progress.rootActivity("Thinking");
-    root.toolStart("chat_history", {})();
-    await settle();
-    await progress.finish();
-
-    texts.push(...sink.sent, ...sink.edits.map((e) => e.text));
-    expect(texts.some((t) => t.includes("Completed"))).toBe(false);
-  });
-
-  test("a sink that cannot delete simply leaves the message", async () => {
-    const { root, progress } = withRoot();
-    root.toolStart("chat_history", {})();
-    await settle();
-    // makeSink has no delete — this must not throw.
-    await progress.finish();
-  });
-
-  // Group behaviour must be untouched: no root, heading intact.
-  test("a reporter without a root keeps the sub-agent heading", async () => {
-    const sink = makeSink();
-    const progress = new SubagentProgress({
-      sink: sink.sink,
-      revealDelayMs: 0,
-      minEditIntervalMs: 0,
-    });
-    progress.start("Research", "rate limits");
-    await settle();
-    expect(sink.current()).toContain("Running 1 subagent");
+    expect(sink.current()).toBe("🏁 Completed\n✅ Events — upcoming meetups");
   });
 });
 
@@ -1298,6 +1277,9 @@ describe("SUBAGENT_TOOLS", () => {
       minEditIntervalMs: 0,
     });
     const root = progress.rootActivity("Thinking");
+
+    // Reveals the message; without a sub-agent nothing is ever posted.
+    root.start("Research", "rate limits");
 
     const tools = {
       recall_memory: { execute: async () => {} },
@@ -1343,7 +1325,10 @@ describe("reveal timing", () => {
     expect(sink.sent).toEqual([]);
   });
 
-  test("the first tool call arms the reveal", async () => {
+  // A tool call is not on its own worth a message: in a DM the main agent's
+  // own lookups are logged, but a turn that never delegates has nothing to
+  // show beyond a verb.
+  test("a tool call alone never arms the reveal", async () => {
     const sink = makeSink();
     const clock = makeScheduler();
     const progress = new SubagentProgress({
@@ -1354,6 +1339,26 @@ describe("reveal timing", () => {
 
     const root = progress.rootActivity("Pondering");
     root.toolStart("recall_memory", {});
+    expect(clock.pendingCount()).toBe(0);
+
+    clock.fire();
+    await settle();
+    await progress.finish();
+
+    expect(sink.sent).toEqual([]);
+  });
+
+  test("a sub-agent arms the reveal", async () => {
+    const sink = makeSink();
+    const clock = makeScheduler();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      scheduler: clock.scheduler,
+      minEditIntervalMs: 0,
+    });
+
+    const root = progress.rootActivity("Pondering");
+    root.start("Research", "rate limits");
     expect(clock.pendingCount()).toBe(1);
 
     clock.fire();
@@ -1363,51 +1368,55 @@ describe("reveal timing", () => {
 });
 
 describe("model label on the heading", () => {
-  const entry = (over: Partial<SubagentEntry> = {}): SubagentEntry => ({
+  /** The turn's root, which is what carries the label while it runs. */
+  const turn = (over: Partial<SubagentEntry> = {}): SubagentEntry => ({
     name: "Pondering",
     query: "",
     state: "running",
     activeTools: [],
     toolLog: [],
     children: [],
-    isRoot: true,
     ...over,
   });
 
   test("stamps the model beside the running heading", () => {
-    const out = renderProgress([[entry()]], "DeepSeek V4 Flash").text;
+    const out = renderProgress(turn(), "DeepSeek V4 Flash").text;
     expect(out).toContain("Pondering — DeepSeek V4 Flash");
   });
 
   test("leaves the completed heading bare", () => {
-    const root = entry({
-      state: "done",
-      children: [
-        {
-          name: "Research",
-          query: "latest AI news",
-          state: "done",
-          activeTools: [],
-          toolLog: [],
-          children: [],
-        },
-      ],
-    });
-    const out = renderProgress([[root]], "DeepSeek V4 Flash").text;
+    const out = renderProgress(
+      turn({
+        state: "done",
+        children: [entry({ name: "Research", query: "latest AI news", state: "done" })],
+      }),
+      "DeepSeek V4 Flash",
+    ).text;
     expect(out).toContain("Completed");
     expect(out).not.toContain("DeepSeek V4 Flash");
   });
 
   test("renders exactly as before when no model is given", () => {
-    const out = renderProgress([[entry()]]).text;
+    const out = renderProgress(turn()).text;
     expect(out).toContain("Pondering");
     expect(out).not.toContain("—");
+  });
+
+  // A group turn logs no main-agent tools of its own, so the head line is the
+  // only thing that can carry the model. It used to render without a root at
+  // all, which put the label out of reach there entirely.
+  test("stamps the model when the root logged no tools of its own", () => {
+    const out = renderProgress(
+      turn({ children: [entry({ name: "Events", query: "upcoming meetups" })] }),
+      "Sonnet 4.5",
+    ).text;
+    expect(out).toBe("⏳ Pondering — Sonnet 4.5\n    ⏳ Events — upcoming meetups");
   });
 
   // The label is italic; the heading stays bold. Telegram fails the whole
   // message if entity offsets drift, so assert the label is actually marked up.
   test("marks the model italic, not plain", () => {
-    const rendered = renderProgress([[entry()]], "DeepSeek V4 Flash");
+    const rendered = renderProgress(turn(), "DeepSeek V4 Flash");
     const italic = rendered.entities.filter((e) => e.type === "italic");
     expect(italic).toHaveLength(1);
     expect(

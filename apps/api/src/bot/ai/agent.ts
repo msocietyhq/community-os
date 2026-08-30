@@ -44,8 +44,10 @@ interface AgentParams {
   /** Puts a clarifying question to the member. Omit to disable ask_user. */
   askUser?: (question: string) => Promise<void>;
   /**
-   * Report every main-agent tool call, not just sub-agents. DM-only: a group
-   * shouldn't get a running commentary of the bot's internals.
+   * Log the main agent's own tool calls into the status message, not just its
+   * sub-agents. DM-only: a group shouldn't get a running commentary of the
+   * bot's internals. Does not affect whether the message appears — only a
+   * sub-agent starting does that.
    */
   trackAllTools?: boolean;
   /** Renders an AI-proposed settings change card. Omit to disable the tool. */
@@ -125,28 +127,33 @@ export async function runAgent({
     : undefined;
 
   /**
-   * In DMs the main agent reports its own tool calls, not just its sub-agents.
-   *
-   * Handing the root activity back as `ctx.progress` is what makes sub-agents
-   * nest underneath it — `SubagentActivity extends ProgressHost`, so
-   * `withProgress` in tools.ts needs no change at all.
+   * Every turn opens a root entry. It heads the status message with the model
+   * serving the turn, and sub-agents nest underneath it at any depth —
+   * `SubagentActivity extends ProgressHost`, so `withProgress` in tools.ts
+   * needs no change at all.
    */
-  const rootActivity =
-    progress && trackAllTools ? progress.rootActivity() : undefined;
+  const root = progress?.rootActivity();
 
   const tools = createTools({
     api,
     graphql,
     chatId,
     senderTelegramId,
-    progress: rootActivity ?? progress,
+    progress: root,
     askUser,
     proposeSettings,
   });
 
-  // SUBAGENT_TOOLS are skipped: each already renders as a nested entry, so
-  // logging the call as well showed the same work twice.
-  const trackedTools = trackToolCalls(tools, rootActivity, SUBAGENT_TOOLS);
+  // Whether the main agent logs its *own* tool calls is the one thing that
+  // differs by chat type — a group gets the sub-agent tree without a running
+  // commentary of every lookup. SUBAGENT_TOOLS are skipped either way: each
+  // already renders as a nested entry, so logging the call as well showed the
+  // same work twice.
+  const trackedTools = trackToolCalls(
+    tools,
+    trackAllTools ? root : undefined,
+    SUBAGENT_TOOLS,
+  );
 
   console.log(`[main-agent] user=${telegramId} query="${query.slice(0, 80)}"`);
 

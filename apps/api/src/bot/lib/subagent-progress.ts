@@ -52,32 +52,12 @@ export interface SubagentEntry {
   toolLog: ToolCall[];
   /** Sub-agents spawned by this one, in start order. */
   children: SubagentEntry[];
-  /**
-   * The main agent's own entry, rather than a sub-agent.
-   *
-   * Renders without a task line (the member's question is already on screen
-   * directly above) and suppresses the batch heading, which counts sub-agents
-   * and would otherwise report the main agent as one.
-   */
-  isRoot?: boolean;
 }
-
-/** A round of sub-agents started together at the top level. */
-export type SubagentBatch = SubagentEntry[];
 
 export interface ProgressSink {
   /** Posts the status message; returns its id, or null if posting failed. */
   send(message: FormattedString): Promise<number | null>;
   edit(messageId: number, message: FormattedString): Promise<void>;
-  /**
-   * Removes the status message.
-   *
-   * Called when the final state has nothing left to report — a DM turn that
-   * used only the main agent's own tools settles to an empty message, and
-   * Telegram rejects an empty edit. Optional: a sink that can't delete simply
-   * leaves the last frame on screen.
-   */
-  delete?(messageId: number): Promise<void>;
 }
 
 export interface Scheduler {
@@ -173,10 +153,6 @@ const realScheduler: Scheduler = {
 /** Collapses to a single line and clips. No escaping: styling is entities. */
 function oneLine(text: string, max: number): string {
   return clip(text.replace(/\s+/g, " ").trim(), max);
-}
-
-function plural(count: number): string {
-  return count === 1 ? "subagent" : "subagents";
 }
 
 /**
@@ -431,66 +407,41 @@ function withModel(
   return modelLabel ? line.plain(" — ").i(modelLabel) : line;
 }
 
-function renderBatch(
-  batch: SubagentBatch,
-  modelLabel?: string,
-): FormattedString {
-  const root = batch.find((e) => e.isRoot);
-  if (root) {
-    // No heading: it counts sub-agents, and the root isn't one.
-    //
-    // Once settled the root line itself is dropped — "Thinking" is only
-    // interesting while it's happening. What survives is what it actually
-    // produced, promoted to the top level. A root that produced nothing
-    // renders empty, and finish() deletes the message.
-    if (root.state === "running") {
-      const [head, ...rest] = renderEntry(root, 0);
-      if (!head) return new FormattedString("");
-      return FormattedString.join([withModel(head, modelLabel), ...rest], "\n");
-    }
-
-    const entries = root.children.flatMap((child) => renderEntry(child, 0));
-
-    // No heading when there's nothing under it — that would make the render
-    // non-empty and stop finish() from deleting a message with nothing to say.
-    if (entries.length === 0) return new FormattedString("");
-
-    return FormattedString.join(
-      [new FormattedString("🏁 ").concat(FormattedString.b("Completed")), ...entries],
-      "\n",
-    );
+/**
+ * Renders the root and everything beneath it.
+ *
+ * While the root is running it heads the message, carrying the model label,
+ * with its own tool calls and every sub-agent nested underneath. Once settled
+ * the root line is dropped — "Thinking" is only interesting while it is
+ * happening — and what it produced is promoted to the top level under a
+ * completion heading.
+ */
+function renderRoot(root: SubagentEntry, modelLabel?: string): FormattedString {
+  if (root.state === "running") {
+    const [head, ...rest] = renderEntry(root, 0);
+    if (!head) return new FormattedString("");
+    return FormattedString.join([withModel(head, modelLabel), ...rest], "\n");
   }
 
-  const entries = batch.flatMap((e) => renderEntry(e, 0));
-  const settled = batch.every((e) => e.state !== "running");
-  const heading = FormattedString.b(
-    settled
-      ? `Done — ${batch.length} ${plural(batch.length)}`
-      : `Running ${batch.length} ${plural(batch.length)}`,
+  return FormattedString.join(
+    [
+      new FormattedString("🏁 ").concat(FormattedString.b("Completed")),
+      ...root.children.flatMap((child) => renderEntry(child, 0)),
+    ],
+    "\n",
   );
-
-  return FormattedString.join([heading, ...entries], "\n");
 }
 
 /**
- * Renders every round, oldest first. Finished rounds keep their end state and
- * new rounds are appended below, so the message reads as a running log.
+ * Renders the turn's activity, or nothing at all before it has any.
  *
  * Deep trees can outgrow Telegram's message limit, so the result is clamped.
  */
 export function renderProgress(
-  batches: SubagentBatch[],
+  root: SubagentEntry | null,
   modelLabel?: string,
 ): FormattedString {
-  const rendered = FormattedString.join(
-    batches
-      .filter((b) => b.length > 0)
-      .map((b) => renderBatch(b, modelLabel))
-      // A settled root with no sub-agents renders to nothing; without this it
-      // would contribute a blank line between the batches around it.
-      .filter((b) => b.text.length > 0),
-    "\n\n",
-  );
+  const rendered = root ? renderRoot(root, modelLabel) : new FormattedString("");
 
   if (rendered.text.length <= MAX_MESSAGE_CHARS) return rendered;
   // `slice` carries the entities and trims any that straddle the cut.
@@ -511,7 +462,7 @@ export interface SubagentProgressOptions {
   modelLabel?: string;
 }
 
-export class SubagentProgress implements ProgressHost {
+export class SubagentProgress {
   private readonly sink: ProgressSink;
   private readonly scheduler: Scheduler;
   private readonly revealDelayMs: number;
@@ -519,7 +470,7 @@ export class SubagentProgress implements ProgressHost {
   private readonly now: () => number;
   private readonly modelLabel?: string;
 
-  private readonly batches: SubagentBatch[] = [];
+  private root: SubagentEntry | null = null;
   private messageId: number | null = null;
   private lastText: string | null = null;
   private revealed = false;
@@ -540,47 +491,23 @@ export class SubagentProgress implements ProgressHost {
     this.modelLabel = options.modelLabel;
   }
 
-  /** True once any sub-agent has been registered. */
-  get started(): boolean {
-    return this.batches.length > 0;
-  }
-
-  /**
-   * Registers a top-level sub-agent. Sub-agents started while a previous round
-   * is still in flight join that round; otherwise a new round opens.
-   */
-  start(name: string, query: string): SubagentHandle {
-    const current = this.batches.at(-1);
-    const openBatch =
-      current && current.some((e) => e.state === "running") ? current : undefined;
-
-    const batch = openBatch ?? [];
-    if (!openBatch) this.batches.push(batch);
-
-    const entry = newEntry(name, query);
-    batch.push(entry);
-
-    this.armReveal();
-    return this.createHandle(entry);
-  }
-
   /**
    * Opens the main agent's own entry and returns its activity.
    *
-   * Used in DMs only. Because `SubagentActivity extends ProgressHost`, handing
-   * this back as `ctx.progress` makes every sub-agent nest underneath it with
-   * no change at the call sites — the same recursion that already handles
-   * sub-agents spawning sub-agents.
+   * Because `SubagentActivity extends ProgressHost`, handing this back as
+   * `ctx.progress` makes every sub-agent nest underneath it with no change at
+   * the call sites — the same recursion that already handles sub-agents
+   * spawning sub-agents.
    *
    * Not settled explicitly: `finish()` renders the final state, and a root
    * left running reads correctly as "this is what it did".
    */
   rootActivity(name: string = pickThinkingVerb()): SubagentActivity {
-    const entry: SubagentEntry = { ...newEntry(name, ""), isRoot: true };
-    this.batches.push([entry]);
+    const entry = newEntry(name, "");
+    this.root = entry;
     // Deliberately no armReveal(): opening the root only means a turn started,
     // and a turn that answers straight from the model has nothing to report.
-    // The first tool call or sub-agent arms it — see toolStart and start.
+    // A sub-agent starting arms it — see the `start` branch of createHandle.
     return this.createHandle(entry).activity;
   }
 
@@ -593,7 +520,7 @@ export class SubagentProgress implements ProgressHost {
         walk(entry.children);
       }
     };
-    walk(this.batches.flat());
+    walk(this.root ? [this.root] : []);
     return out;
   }
 
@@ -611,28 +538,13 @@ export class SubagentProgress implements ProgressHost {
 
     // The root has no natural completion point — the turn ending IS its
     // completion. Settle it here or the final message shows it still running.
-    for (const entry of this.batches.flat()) {
-      if (entry.isRoot && entry.state === "running") {
-        entry.state = "done";
-        entry.activeTools = [];
-        entry.toolLog = [];
-      }
+    if (this.root && this.root.state === "running") {
+      this.root.state = "done";
+      this.root.activeTools = [];
+      this.root.toolLog = [];
     }
 
     this.revealed = true;
-
-    // Nothing left to report — a DM turn whose main agent used only its own
-    // tools. render() skips an empty text, which would strand the last
-    // in-flight frame on screen, so remove the message instead.
-    if (
-      renderProgress(this.batches, this.modelLabel).text === "" &&
-      this.messageId !== null
-    ) {
-      const messageId = this.messageId;
-      this.messageId = null;
-      await this.sink.delete?.(messageId).catch(() => {});
-      return;
-    }
 
     // The end state should land immediately, not wait out the throttle.
     await this.render(true);
@@ -655,10 +567,6 @@ export class SubagentProgress implements ProgressHost {
       toolStart: (toolName, args) => {
         if (entry.state !== "running") return () => {};
 
-        // Arms the reveal for the root, whose creation deliberately doesn't:
-        // the first tool call is the earliest point there is anything to say.
-        // A no-op for sub-agents, which armed it when they started.
-        this.armReveal();
         entry.activeTools = [...entry.activeTools, toolName];
 
         const phrase = describeToolCall(toolName, args);
@@ -702,6 +610,16 @@ export class SubagentProgress implements ProgressHost {
     };
   }
 
+  /**
+   * Starts the countdown to the message appearing. Called only when a
+   * sub-agent opens — the one event worth interrupting a chat for.
+   *
+   * A plain tool call deliberately does not arm it. That keeps the message out
+   * of turns answered from the model or from the main agent's own lookups, and
+   * it guarantees a posted message always has a sub-agent to show — which is
+   * what makes an empty render impossible, and why finish() needs no deletion
+   * path.
+   */
   private armReveal(): void {
     if (this.revealed || this.cancelReveal) return;
 
@@ -744,7 +662,7 @@ export class SubagentProgress implements ProgressHost {
       do {
         this.renderPending = false;
 
-        const message = renderProgress(this.batches, this.modelLabel);
+        const message = renderProgress(this.root, this.modelLabel);
         const text = message.text;
         if (text === "" || text === this.lastText) break;
 
