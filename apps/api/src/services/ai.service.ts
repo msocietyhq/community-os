@@ -10,6 +10,7 @@ import {
   DEFAULT_TIER_MODELS,
   isConfigurableTier,
   type AiModelKey,
+  type AiProvider,
   type AiTier,
   type ModelDef,
 } from "@community-os/shared/ai-catalog";
@@ -24,7 +25,12 @@ import { estimateCost } from "./ai-pricing";
 import { cacheSplit, withPromptCaching } from "./ai-cache";
 import { hasCredentials, modelFor } from "./ai-provider";
 import { resolveModelKey } from "./model-resolution";
-import { downProviders } from "./provider-health.service";
+import { classifyProviderError } from "./ai-provider-errors";
+import {
+  downProviders,
+  markHealthy,
+  markOutOfCredit,
+} from "./provider-health.service";
 
 // ── Tier resolution ─────────────────────────────────────────
 
@@ -244,74 +250,139 @@ function recordSpend(
   );
 }
 
+/**
+ * Runs one AI call, and on credit exhaustion runs it once more on whatever the
+ * tier resolves to after the dead provider is marked down.
+ *
+ * One retry, not a loop: the second resolution already skips every provider
+ * known to be down, so a second credit failure means the substitute is empty
+ * too. That is rare enough to fail loudly rather than cascade.
+ *
+ * A successful call clears any outage on its provider, which is how a probe
+ * after the backoff window turns into recovery.
+ */
+async function withCreditFailover<R>(
+  tier: AiTier,
+  attempt: (resolved: ResolvedTier) => Promise<R>,
+): Promise<R> {
+  const first = await resolveTier(tier);
+
+  try {
+    const result = await attempt(first);
+    await onCallSucceeded(first.def.provider);
+    return result;
+  } catch (error) {
+    if (classifyProviderError(error) !== "out_of_credit") throw error;
+
+    const outage = await markOutOfCredit(first.def.provider);
+    console.warn(
+      `[ai] ${first.def.provider} is out of credit (failure ` +
+        `#${outage.failureCount}, next probe ${outage.retryAfter.toISOString()})`,
+    );
+
+    if (outage.firstTransition) notifyOutage(first.def.provider, tier);
+
+    const second = await resolveTier(tier);
+    if (second.key === first.key) throw error;
+
+    console.warn(`[ai] retrying ${tier} on ${second.key}`);
+    const result = await attempt(second);
+    await onCallSucceeded(second.def.provider);
+    return result;
+  }
+}
+
+/** Recovery bookkeeping, plus the one DM that says a provider is back. */
+async function onCallSucceeded(provider: AiProvider): Promise<void> {
+  const recovered = await markHealthy(provider).catch((err) => {
+    console.error("[ai] markHealthy failed:", err);
+    return false;
+  });
+  if (!recovered) return;
+
+  // Dynamic import keeps the service layer free of a static bot dependency,
+  // matching the spend-alert call in assertWithinBudget.
+  import("../bot/lib/provider-alert")
+    .then((m) => m.notifyAdminsOfProviderRecovery(provider))
+    .catch((err) => console.error("[ai] recovery alert failed:", err));
+}
+
+/** Fire-and-forget: a failed DM must never block a member's answer. */
+function notifyOutage(provider: AiProvider, tier: AiTier): void {
+  import("../bot/lib/provider-alert")
+    .then((m) => m.notifyAdminsOfProviderOutage(provider, tier))
+    .catch((err) => console.error("[ai] outage alert failed:", err));
+}
+
 async function trackedGenerateText(
   params: Omit<Parameters<typeof generateText>[0], "model">,
   ctx: TrackingContext,
 ): Promise<Awaited<ReturnType<typeof generateText>>> {
   await assertWithinBudget(ctx);
 
-  const { key: modelId, def, model } = await resolveTier(ctx.tier);
-  const start = performance.now();
+  return withCreditFailover(ctx.tier, async ({ key: modelId, def, model }) => {
+    const start = performance.now();
 
-  try {
-    // The caller's own providerOptions land second, so an explicit setting
-    // still wins over the catalog's default fragment.
-    const withReasoning =
-      ctx.reasoning && def.reasoning
-        ? {
-            ...params,
-            providerOptions: {
-              ...def.reasoning[ctx.reasoning],
-              ...params.providerOptions,
-            },
-          }
-        : params;
+    try {
+      // The caller's own providerOptions land second, so an explicit setting
+      // still wins over the catalog's default fragment.
+      const withReasoning =
+        ctx.reasoning && def.reasoning
+          ? {
+              ...params,
+              providerOptions: {
+                ...def.reasoning[ctx.reasoning],
+                ...params.providerOptions,
+              },
+            }
+          : params;
 
-    const result = await generateText(
-      withPromptCaching({ ...withReasoning, model } as TextParams, def),
-    );
-    const durationMs = Math.round(performance.now() - start);
-    const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
+      const result = await generateText(
+        withPromptCaching({ ...withReasoning, model } as TextParams, def),
+      );
+      const durationMs = Math.round(performance.now() - start);
+      const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
 
-    recordSpend(
-      modelId,
-      result.usage.inputTokens ?? 0,
-      result.usage.outputTokens ?? 0,
-      cacheReadTokens,
-      cacheWriteTokens,
-    );
+      recordSpend(
+        modelId,
+        result.usage.inputTokens ?? 0,
+        result.usage.outputTokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens,
+      );
 
-    trackUsage({
-      model: modelId,
-      caller: ctx.caller,
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-      cacheReadTokens,
-      cacheWriteTokens,
-      telegramUserId: ctx.telegramUserId,
-      chatId: ctx.chatId,
-      success: true,
-      durationMs,
-    }).catch((err) => console.error("[ai-usage] tracking failed:", err));
+      trackUsage({
+        model: modelId,
+        caller: ctx.caller,
+        inputTokens: result.usage.inputTokens ?? 0,
+        outputTokens: result.usage.outputTokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens,
+        telegramUserId: ctx.telegramUserId,
+        chatId: ctx.chatId,
+        success: true,
+        durationMs,
+      }).catch((err) => console.error("[ai-usage] tracking failed:", err));
 
-    return result;
-  } catch (error) {
-    const durationMs = Math.round(performance.now() - start);
+      return result;
+    } catch (error) {
+      const durationMs = Math.round(performance.now() - start);
 
-    trackUsage({
-      model: modelId,
-      caller: ctx.caller,
-      inputTokens: 0,
-      outputTokens: 0,
-      telegramUserId: ctx.telegramUserId,
-      chatId: ctx.chatId,
-      success: false,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      durationMs,
-    }).catch((err) => console.error("[ai-usage] tracking failed:", err));
+      trackUsage({
+        model: modelId,
+        caller: ctx.caller,
+        inputTokens: 0,
+        outputTokens: 0,
+        telegramUserId: ctx.telegramUserId,
+        chatId: ctx.chatId,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        durationMs,
+      }).catch((err) => console.error("[ai-usage] tracking failed:", err));
 
-    throw error;
-  }
+      throw error;
+    }
+  });
 }
 
 async function trackedGenerateObject<
@@ -322,55 +393,56 @@ async function trackedGenerateObject<
 ): Promise<Awaited<ReturnType<typeof generateObject>>> {
   await assertWithinBudget(ctx);
 
-  const { key: modelId, model } = await resolveTier(ctx.tier);
-  const start = performance.now();
+  return withCreditFailover(ctx.tier, async ({ key: modelId, model }) => {
+    const start = performance.now();
 
-  try {
-    // Deliberately not cached: a structured-output call is one-shot by
-    // construction, so a cache write here could never be read back.
-    const result = await generateObject({ ...params, model } as ObjectParams);
-    const durationMs = Math.round(performance.now() - start);
-    const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
+    try {
+      // Deliberately not cached: a structured-output call is one-shot by
+      // construction, so a cache write here could never be read back.
+      const result = await generateObject({ ...params, model } as ObjectParams);
+      const durationMs = Math.round(performance.now() - start);
+      const { cacheReadTokens, cacheWriteTokens } = cacheSplit(result.usage);
 
-    recordSpend(
-      modelId,
-      result.usage.inputTokens ?? 0,
-      result.usage.outputTokens ?? 0,
-      cacheReadTokens,
-      cacheWriteTokens,
-    );
+      recordSpend(
+        modelId,
+        result.usage.inputTokens ?? 0,
+        result.usage.outputTokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens,
+      );
 
-    trackUsage({
-      model: modelId,
-      caller: ctx.caller,
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-      cacheReadTokens,
-      cacheWriteTokens,
-      telegramUserId: ctx.telegramUserId,
-      chatId: ctx.chatId,
-      success: true,
-      durationMs,
-    }).catch((err) => console.error("[ai-usage] tracking failed:", err));
+      trackUsage({
+        model: modelId,
+        caller: ctx.caller,
+        inputTokens: result.usage.inputTokens ?? 0,
+        outputTokens: result.usage.outputTokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens,
+        telegramUserId: ctx.telegramUserId,
+        chatId: ctx.chatId,
+        success: true,
+        durationMs,
+      }).catch((err) => console.error("[ai-usage] tracking failed:", err));
 
-    return result;
-  } catch (error) {
-    const durationMs = Math.round(performance.now() - start);
+      return result;
+    } catch (error) {
+      const durationMs = Math.round(performance.now() - start);
 
-    trackUsage({
-      model: modelId,
-      caller: ctx.caller,
-      inputTokens: 0,
-      outputTokens: 0,
-      telegramUserId: ctx.telegramUserId,
-      chatId: ctx.chatId,
-      success: false,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      durationMs,
-    }).catch((err) => console.error("[ai-usage] tracking failed:", err));
+      trackUsage({
+        model: modelId,
+        caller: ctx.caller,
+        inputTokens: 0,
+        outputTokens: 0,
+        telegramUserId: ctx.telegramUserId,
+        chatId: ctx.chatId,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        durationMs,
+      }).catch((err) => console.error("[ai-usage] tracking failed:", err));
 
-    throw error;
-  }
+      throw error;
+    }
+  });
 }
 
 // ── Usage persistence & analytics ───────────────────────────
