@@ -122,9 +122,16 @@ export async function initBot(): Promise<void> {
   // Publishes the "/" autocomplete menu. Fire-and-forget: Telegram rejects the
   // whole call if any entry is malformed (commands.test.ts guards the format),
   // and a menu that failed to update must never stop the bot from starting.
-  bot.api
-    .setMyCommands(telegramCommands())
-    .catch((err) => console.error("Failed to publish command menu:", err));
+  // Two scopes: groups get the commands that work there, DMs get everything.
+  // Fire-and-forget — Telegram rejects the whole call if any entry is
+  // malformed (commands.test.ts guards the format), and a menu that failed to
+  // update must never stop the bot from starting.
+  Promise.all([
+    bot.api.setMyCommands(telegramCommands(false)),
+    bot.api.setMyCommands(telegramCommands(true), {
+      scope: { type: "all_private_chats" },
+    }),
+  ]).catch((err) => console.error("Failed to publish command menu:", err));
 
   // Start long polling (fire-and-forget — resolves only when bot stops)
   bot.start({ allowed_updates: [...ALLOWED_UPDATES] }).catch((err) => {

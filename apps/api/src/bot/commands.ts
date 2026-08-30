@@ -17,6 +17,12 @@ export interface BotCommandDef {
   description: string;
   /** Leading icon for the /help listing. Not sent to Telegram. */
   icon: string;
+  /**
+   * Handler rejects group chats outright ("use this in a private chat").
+   * Such a command is a dead row in a group, so it is filtered out of both
+   * the group command menu and the group /help.
+   */
+  dmOnly?: boolean;
 }
 
 export const BOT_COMMANDS: BotCommandDef[] = [
@@ -26,6 +32,7 @@ export const BOT_COMMANDS: BotCommandDef[] = [
     command: "create_project",
     description: "Submit a new project",
     icon: "➕",
+    dmOnly: true,
   },
   {
     command: "reputation",
@@ -45,36 +52,53 @@ export const BOT_COMMANDS: BotCommandDef[] = [
     command: "profile",
     description: "View or edit your community profile",
     icon: "👤",
+    dmOnly: true,
   },
   {
     command: "login",
-    description: "Get a login link for the web portal (DM)",
+    description: "Get a login link for the web portal",
     icon: "🔑",
+    dmOnly: true,
   },
   {
     command: "settings",
-    description: "Configure the bot (admins only, DM)",
+    description: "Configure the bot (admins only)",
     icon: "⚙️",
+    dmOnly: true,
   },
   { command: "help", description: "Show this help message", icon: "❓" },
 ];
 
+/**
+ * The commands usable in this chat type.
+ *
+ * The DM-only ones aren't hidden for tidiness — their handlers refuse a group
+ * outright, so listing them there offers something that cannot work.
+ */
+export function commandsFor(inPrivate: boolean): BotCommandDef[] {
+  return inPrivate ? BOT_COMMANDS : BOT_COMMANDS.filter((c) => !c.dmOnly);
+}
+
 /** The payload `setMyCommands` takes — icons stripped, order preserved. */
-export function telegramCommands(): { command: string; description: string }[] {
-  return BOT_COMMANDS.map(({ command, description }) => ({
+export function telegramCommands(
+  inPrivate: boolean,
+): { command: string; description: string }[] {
+  return commandsFor(inPrivate).map(({ command, description }) => ({
     command,
     description,
   }));
 }
 
 /** The /help body, one icon-prefixed line per command. */
-export function helpLines(): string {
-  return BOT_COMMANDS.map(
-    (c) => `${c.icon} /${c.command} — ${c.description}`,
-  ).join("\n");
+export function helpLines(inPrivate: boolean): string {
+  return commandsFor(inPrivate)
+    .map((c) => `${c.icon} /${c.command} — ${c.description}`)
+    .join("\n");
 }
 
 /** The /start body. Same list, no icons — it reads as prose there. */
-export function startLines(): string {
-  return BOT_COMMANDS.map((c) => `/${c.command} — ${c.description}`).join("\n");
+export function startLines(inPrivate: boolean): string {
+  return commandsFor(inPrivate)
+    .map((c) => `/${c.command} — ${c.description}`)
+    .join("\n");
 }

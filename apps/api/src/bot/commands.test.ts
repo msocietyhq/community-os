@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   BOT_COMMANDS,
+  commandsFor,
   helpLines,
   startLines,
   telegramCommands,
@@ -39,9 +40,52 @@ describe("BOT_COMMANDS", () => {
   });
 });
 
+describe("chat-type filtering", () => {
+  const dmOnly = BOT_COMMANDS.filter((c) => c.dmOnly).map((c) => c.command);
+
+  // These four reply "use this in a private chat" and stop, so a group must
+  // not be offered them — in the menu or in /help.
+  test("the DM-only set is the handlers that refuse groups", () => {
+    expect([...dmOnly].sort()).toEqual([
+      "create_project",
+      "login",
+      "profile",
+      "settings",
+    ]);
+  });
+
+  test("a group gets everything except the DM-only commands", () => {
+    const inGroup = commandsFor(false).map((c) => c.command);
+    expect(inGroup).toHaveLength(BOT_COMMANDS.length - dmOnly.length);
+    for (const command of dmOnly) {
+      expect(inGroup, command).not.toContain(command);
+    }
+  });
+
+  test("a DM gets the whole list", () => {
+    expect(commandsFor(true)).toEqual(BOT_COMMANDS);
+  });
+
+  test("/help and the menu agree in each chat type", () => {
+    for (const inPrivate of [true, false]) {
+      const listed = commandsFor(inPrivate).map((c) => c.command);
+      const menu = telegramCommands(inPrivate).map((c) => c.command);
+      expect(menu, `menu ${inPrivate}`).toEqual(listed);
+      for (const command of listed) {
+        expect(helpLines(inPrivate), `${command} ${inPrivate}`).toContain(
+          `/${command} —`,
+        );
+      }
+      for (const command of dmOnly.filter(() => !inPrivate)) {
+        expect(helpLines(false), command).not.toContain(`/${command} —`);
+      }
+    }
+  });
+});
+
 describe("renderers", () => {
   test("telegramCommands strips icons and keeps order", () => {
-    const sent = telegramCommands();
+    const sent = telegramCommands(true);
     expect(sent).toHaveLength(BOT_COMMANDS.length);
     expect(sent[0]).toEqual({
       command: BOT_COMMANDS[0]!.command,
@@ -51,8 +95,8 @@ describe("renderers", () => {
   });
 
   test("both listings cover every command", () => {
-    const help = helpLines();
-    const start = startLines();
+    const help = helpLines(true);
+    const start = startLines(true);
     for (const { command } of BOT_COMMANDS) {
       expect(help, `${command} in /help`).toContain(`/${command} —`);
       expect(start, `${command} in /start`).toContain(`/${command} —`);

@@ -60,15 +60,17 @@ helpHandler.command("start", async (ctx) => {
   await ctx.reply(
     `Welcome to the MSOCIETY Bot! 🤖\n\n` +
       `I help manage the MSOCIETY community. Here's what I can do:\n\n` +
-      `${startLines()}\n\n` +
+      `${startLines(ctx.chat.type === "private")}\n\n` +
       `You can also mention @msocietybot with any question about the community!`,
   );
 });
 
 helpHandler.command("help", async (ctx) => {
+  // Listed for the chat it was asked in: the DM-only commands refuse a group,
+  // so advertising them there is an offer the bot cannot keep.
   await ctx.reply(
     `<b>MSOCIETY Bot Commands</b>\n\n` +
-      `${helpLines()}\n\n` +
+      `${helpLines(ctx.chat?.type === "private")}\n\n` +
       `💬 Mention @msocietybot to ask me anything!`,
     { parse_mode: "HTML" },
   );
