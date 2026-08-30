@@ -33,16 +33,17 @@ describe("renderModelsPage", () => {
   });
 
   test("marks which tiers currently use a model", () => {
-    // Haiku is the default for both micro and fast.
-    expect(page()).toContain("in use: micro, fast");
+    expect(page()).toContain("in use: fast");
   });
 
-  test("flags a model that cannot be selected everywhere", () => {
-    // DeepSeek is toolLoop: false, so it is confined to micro.
-    const out = page();
-    if (allKeys.some((k) => !AI_CATALOG[k].toolLoop)) {
-      expect(out).toContain("only selectable for micro");
-    }
+  // micro is pinned and has no control, so naming it would invite a request
+  // to change something the user cannot change.
+  test("never names a pinned tier", () => {
+    expect(page()).not.toContain("micro");
+  });
+
+  test("says nothing about selectability — every model suits every tier", () => {
+    expect(page()).not.toContain("only selectable");
   });
 
   test("flags a model whose provider key is missing", () => {

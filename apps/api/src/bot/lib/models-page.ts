@@ -2,7 +2,7 @@ import {
   AI_CATALOG,
   AI_PROVIDERS,
   AI_TIERS,
-  modelKeysForTier,
+  isConfigurableTier,
   type AiModelKey,
   type AiTier,
 } from "@community-os/shared/ai-catalog";
@@ -28,8 +28,13 @@ const usd = (v: number) => `$${v.toFixed(2)}`;
 export function renderModelsPage(input: ModelsPageInput): string {
   const configured = new Set(input.configured);
 
+  // Only tiers someone can actually change. Pinned tiers are an internal
+  // routing detail — naming them here would invite a request to change
+  // something that has no control.
   const usedBy = (key: AiModelKey): AiTier[] =>
-    AI_TIERS.filter((t) => input.tierModels[t] === key);
+    AI_TIERS.filter(
+      (t) => isConfigurableTier(t) && input.tierModels[t] === key,
+    );
 
   const sections = AI_PROVIDERS.map((provider) => {
     const keys = (Object.keys(AI_CATALOG) as AiModelKey[]).filter(
@@ -40,18 +45,8 @@ export function renderModelsPage(input: ModelsPageInput): string {
       const def = AI_CATALOG[key];
       const tiers = usedBy(key);
 
-      // Which tiers may select it at all — a model that cannot hold a tool
-      // loop is confined to micro, and that is worth stating rather than
-      // leaving the reader to notice it missing from the other menus.
-      const selectable = AI_TIERS.filter((t) =>
-        (modelKeysForTier(t) as readonly AiModelKey[]).includes(key),
-      );
-
       const status = [
         tiers.length > 0 ? `in use: ${tiers.join(", ")}` : null,
-        selectable.length < AI_TIERS.length
-          ? `only selectable for ${selectable.join(", ")}`
-          : null,
         configured.has(key) ? null : `${def.envKey} not set`,
       ].filter(Boolean);
 

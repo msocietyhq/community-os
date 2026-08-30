@@ -41,12 +41,6 @@ export interface ModelDef {
   } | null;
   /** Env var that must hold a key for this model to be usable. */
   envKey: string;
-  /**
-   * Whether this model is trusted with a multi-step tool loop. The main chat
-   * agent runs ten steps with the full tool suite; a model that fumbles that
-   * must not be selectable for the tiers driving it.
-   */
-  toolLoop: boolean;
 }
 
 /** Identity helper so each entry is checked while staying a literal. */
@@ -74,7 +68,6 @@ export const AI_CATALOG = {
     cacheControl: ANTHROPIC_CACHE_CONTROL,
     reasoning: ANTHROPIC_REASONING,
     envKey: "ANTHROPIC_API_KEY",
-    toolLoop: true,
   }),
   "anthropic/sonnet-5": model({
     provider: "anthropic",
@@ -87,7 +80,6 @@ export const AI_CATALOG = {
     cacheControl: ANTHROPIC_CACHE_CONTROL,
     reasoning: ANTHROPIC_REASONING,
     envKey: "ANTHROPIC_API_KEY",
-    toolLoop: true,
   }),
   "anthropic/opus-5": model({
     provider: "anthropic",
@@ -98,7 +90,6 @@ export const AI_CATALOG = {
     cacheControl: ANTHROPIC_CACHE_CONTROL,
     reasoning: ANTHROPIC_REASONING,
     envKey: "ANTHROPIC_API_KEY",
-    toolLoop: true,
   }),
   // DeepSeek prices by time of day: off-peak (01:00–04:00 and 06:00–10:00 UTC,
   // Mon–Fri) is half of peak. The catalog holds one number, so it holds the
@@ -117,9 +108,6 @@ export const AI_CATALOG = {
     cacheControl: null,
     reasoning: null,
     envKey: "DEEPSEEK_API_KEY",
-    // Not yet vetted against the ten-step agent loop. Keeping this false
-    // confines it to `micro`, where no tool is ever passed.
-    toolLoop: false,
   }),
   "deepseek/v4-pro": model({
     provider: "deepseek",
@@ -130,7 +118,6 @@ export const AI_CATALOG = {
     cacheControl: null,
     reasoning: null,
     envKey: "DEEPSEEK_API_KEY",
-    toolLoop: false,
   }),
 } satisfies Record<string, ModelDef>;
 
@@ -155,25 +142,36 @@ export const AI_MODEL_KEYS = Object.keys(AI_CATALOG) as [
 export const AI_TIERS = ["micro", "fast", "smart", "deep"] as const;
 export type AiTier = (typeof AI_TIERS)[number];
 
-/** Tiers that hand the model a multi-step tool loop. */
-const TOOL_LOOP_TIERS: readonly AiTier[] = ["fast", "smart", "deep"];
+/**
+ * Tiers whose model can be changed at runtime. Everything else is pinned in
+ * code and has no settings entry.
+ *
+ * `micro` is pinned deliberately. It is entirely `generateObject`, and
+ * structured output is the least portable thing across providers — DeepSeek,
+ * for one, has no native JSON-schema mode, so the AI SDK falls back to pasting
+ * the schema into the system prompt and hoping. That turns a provider
+ * guarantee into a request, on the highest-volume path in the system, where
+ * failures are silent: the chime-in judge resolves errors to silence and the
+ * memory extractor logs and moves on. Not a knob worth exposing.
+ */
+export const CONFIGURABLE_TIERS = ["fast", "smart", "deep"] as const;
+export type ConfigurableTier = (typeof CONFIGURABLE_TIERS)[number];
 
-export function isToolLoopTier(tier: AiTier): boolean {
-  return TOOL_LOOP_TIERS.includes(tier);
+export function isConfigurableTier(tier: AiTier): tier is ConfigurableTier {
+  return (CONFIGURABLE_TIERS as readonly AiTier[]).includes(tier);
 }
 
 /**
- * Which models may be selected for a tier.
+ * Which models may be selected for a tier: every model, for every tier.
  *
- * A cheap model that cannot hold a ten-step tool conversation is perfectly
- * good at judging one chat message, so it stays available to `micro` while
- * being filtered out of the tiers that would break with it.
+ * Kept as a function rather than inlining `AI_MODEL_KEYS` at the call sites so
+ * a per-tier restriction has one place to live if one is ever wanted. It
+ * previously filtered `fast`/`smart`/`deep` down to models vetted for the
+ * ten-step agent loop; that gate was removed deliberately — capability is a
+ * judgement for whoever picks the model, not something this table asserts.
  */
-export function modelKeysForTier(tier: AiTier): [AiModelKey, ...AiModelKey[]] {
-  const keys = isToolLoopTier(tier)
-    ? AI_MODEL_KEYS.filter((k) => AI_CATALOG[k].toolLoop)
-    : [...AI_MODEL_KEYS];
-  return keys as [AiModelKey, ...AiModelKey[]];
+export function modelKeysForTier(_tier: AiTier): [AiModelKey, ...AiModelKey[]] {
+  return [...AI_MODEL_KEYS] as [AiModelKey, ...AiModelKey[]];
 }
 
 /** The tier defaults. Exact parity with the previous hardcoded AI_MODEL_IDS. */

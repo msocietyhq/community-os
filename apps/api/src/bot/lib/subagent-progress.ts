@@ -418,7 +418,23 @@ function renderEntry(entry: SubagentEntry, depth: number): FormattedString[] {
   return lines;
 }
 
-function renderBatch(batch: SubagentBatch): FormattedString {
+/**
+ * Appends ` — <label>` in italics, or leaves the line alone when unknown.
+ *
+ * Only the running heading carries it. Once settled the message is a record of
+ * what was produced, and the model that produced it is noise there.
+ */
+function withModel(
+  line: FormattedString,
+  modelLabel?: string,
+): FormattedString {
+  return modelLabel ? line.plain(" — ").i(modelLabel) : line;
+}
+
+function renderBatch(
+  batch: SubagentBatch,
+  modelLabel?: string,
+): FormattedString {
   const root = batch.find((e) => e.isRoot);
   if (root) {
     // No heading: it counts sub-agents, and the root isn't one.
@@ -428,7 +444,9 @@ function renderBatch(batch: SubagentBatch): FormattedString {
     // produced, promoted to the top level. A root that produced nothing
     // renders empty, and finish() deletes the message.
     if (root.state === "running") {
-      return FormattedString.join(renderEntry(root, 0), "\n");
+      const [head, ...rest] = renderEntry(root, 0);
+      if (!head) return new FormattedString("");
+      return FormattedString.join([withModel(head, modelLabel), ...rest], "\n");
     }
 
     const entries = root.children.flatMap((child) => renderEntry(child, 0));
@@ -460,11 +478,14 @@ function renderBatch(batch: SubagentBatch): FormattedString {
  *
  * Deep trees can outgrow Telegram's message limit, so the result is clamped.
  */
-export function renderProgress(batches: SubagentBatch[]): FormattedString {
+export function renderProgress(
+  batches: SubagentBatch[],
+  modelLabel?: string,
+): FormattedString {
   const rendered = FormattedString.join(
     batches
       .filter((b) => b.length > 0)
-      .map(renderBatch)
+      .map((b) => renderBatch(b, modelLabel))
       // A settled root with no sub-agents renders to nothing; without this it
       // would contribute a blank line between the batches around it.
       .filter((b) => b.text.length > 0),
@@ -483,6 +504,11 @@ export interface SubagentProgressOptions {
   minEditIntervalMs?: number;
   /** Injectable clock, so throttling is deterministic under test. */
   now?: () => number;
+  /**
+   * The model serving this turn, shown italicised beside the heading. Omitted
+   * in tests and anywhere the model isn't known, which renders as before.
+   */
+  modelLabel?: string;
 }
 
 export class SubagentProgress implements ProgressHost {
@@ -491,6 +517,7 @@ export class SubagentProgress implements ProgressHost {
   private readonly revealDelayMs: number;
   private readonly minEditIntervalMs: number;
   private readonly now: () => number;
+  private readonly modelLabel?: string;
 
   private readonly batches: SubagentBatch[] = [];
   private messageId: number | null = null;
@@ -510,6 +537,7 @@ export class SubagentProgress implements ProgressHost {
     this.revealDelayMs = options.revealDelayMs ?? REVEAL_DELAY_MS;
     this.minEditIntervalMs = options.minEditIntervalMs ?? MIN_EDIT_INTERVAL_MS;
     this.now = options.now ?? Date.now;
+    this.modelLabel = options.modelLabel;
   }
 
   /** True once any sub-agent has been registered. */
@@ -596,7 +624,10 @@ export class SubagentProgress implements ProgressHost {
     // Nothing left to report — a DM turn whose main agent used only its own
     // tools. render() skips an empty text, which would strand the last
     // in-flight frame on screen, so remove the message instead.
-    if (renderProgress(this.batches).text === "" && this.messageId !== null) {
+    if (
+      renderProgress(this.batches, this.modelLabel).text === "" &&
+      this.messageId !== null
+    ) {
       const messageId = this.messageId;
       this.messageId = null;
       await this.sink.delete?.(messageId).catch(() => {});
@@ -713,7 +744,7 @@ export class SubagentProgress implements ProgressHost {
       do {
         this.renderPending = false;
 
-        const message = renderProgress(this.batches);
+        const message = renderProgress(this.batches, this.modelLabel);
         const text = message.text;
         if (text === "" || text === this.lastText) break;
 

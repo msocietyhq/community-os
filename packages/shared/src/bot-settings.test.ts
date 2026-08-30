@@ -10,7 +10,12 @@ import {
   type SettingKey,
   optionsFor,
 } from "./bot-settings";
-import { AI_TIERS, modelKeysForTier } from "./ai-catalog";
+import {
+  AI_TIERS,
+  CONFIGURABLE_TIERS,
+  isConfigurableTier,
+  modelKeysForTier,
+} from "./ai-catalog";
 
 describe("registry invariants", () => {
   test("every default parses against its own schema", () => {
@@ -52,7 +57,7 @@ describe("registry invariants", () => {
   // value-free prefixes above. A model key like "anthropic/haiku-4-5" pushes
   // hardest, and Telegram fails the ENTIRE message if any callback is over 64.
   test("every model option's edit callback fits in 64 bytes", () => {
-    for (const tier of AI_TIERS) {
+    for (const tier of CONFIGURABLE_TIERS) {
       const key = `ai.model.${tier}` as SettingKey;
       for (const value of modelKeysForTier(tier)) {
         const data = callbackFor("edit", key, value);
@@ -64,9 +69,18 @@ describe("registry invariants", () => {
     }
   });
 
-  test("every tier setting is registered", () => {
+  // micro is pinned in code — exposing it would put a runtime knob on the
+  // highest-volume path, where structured-output support varies by provider
+  // and failures are silent.
+  test("configurable tiers have a setting; pinned tiers do not", () => {
+    const registered: readonly string[] = SETTING_KEYS;
     for (const tier of AI_TIERS) {
-      expect(SETTING_KEYS, `ai.model.${tier}`).toContain(`ai.model.${tier}`);
+      const key = `ai.model.${tier}`;
+      if (isConfigurableTier(tier)) {
+        expect(registered, key).toContain(key);
+      } else {
+        expect(registered, key).not.toContain(key);
+      }
     }
   });
 
@@ -156,8 +170,8 @@ describe("previewText", () => {
 });
 
 describe("optionsFor", () => {
-  test("lists the models allowed for each tier", () => {
-    for (const tier of AI_TIERS) {
+  test("lists the models allowed for each configurable tier", () => {
+    for (const tier of CONFIGURABLE_TIERS) {
       const key = `ai.model.${tier}` as SettingKey;
       expect(optionsFor(key), key).toEqual([...modelKeysForTier(tier)]);
     }

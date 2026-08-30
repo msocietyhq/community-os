@@ -115,8 +115,13 @@ export async function runAgent({
     return guardToolResult(json.data ?? json.errors);
   };
 
+  // Resolved up front: it both labels the progress message and tells the agent
+  // what it is running on. Shares its resolution with the call itself, so the
+  // heading, the prompt and the model that actually serves the turn agree.
+  const running = await aiService.currentModelFor("fast");
+
   const progress = progressSink
-    ? new SubagentProgress({ sink: progressSink })
+    ? new SubagentProgress({ sink: progressSink, modelLabel: running.label })
     : undefined;
 
   /**
@@ -152,6 +157,7 @@ export async function runAgent({
       chatHistory,
       senderTelegramId,
       schemaSDL,
+      runningModel: `${running.key} (${running.label})`,
       now: new Date(),
     },
     memoryRecaller,

@@ -68,6 +68,7 @@ function baseInput(overrides = {}) {
     chatHistory: [] as ModelMessage[],
     senderTelegramId: 42 as number | null,
     schemaSDL: SDL,
+    runningModel: "anthropic/haiku-4-5 (Haiku 4.5)",
     now: NOW,
     ...overrides,
   };
@@ -440,5 +441,30 @@ describe("buildAgentContext", () => {
 
     expect(ctx.system).toMatchSnapshot();
     expect(ctx.messages).toMatchSnapshot();
+  });
+});
+
+describe("model identity", () => {
+  test("tells the agent which model is actually serving the request", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(
+      baseInput({ runningModel: "deepseek/v4-flash (DeepSeek V4 Flash)" }),
+      recaller,
+    );
+
+    expect(ctx.system).toContain(
+      "You are running on deepseek/v4-flash (DeepSeek V4 Flash)",
+    );
+  });
+
+  // The observed failure this guards: asked "what model are you?", the agent
+  // read the settings table, saw deep → Opus 5, and announced it was Opus 5
+  // while actually running on DeepSeek via the fast tier.
+  test("warns the agent off inferring its model from the settings table", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(baseInput(), recaller);
+
+    expect(ctx.system).toContain("not whatever");
+    expect(ctx.system).toContain("you always write the final reply");
   });
 });

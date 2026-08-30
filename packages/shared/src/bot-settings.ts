@@ -267,22 +267,12 @@ export const BOT_SETTINGS = {
     control: "money",
     format: (v) => (v === null ? "off" : usd(v)),
   }),
-  "ai.model.micro": def<AiModelKey>({
-    schema: z.enum(modelKeysForTier("micro")),
-    default: DEFAULT_TIER_MODELS.micro,
-    label: "Micro model",
-    description:
-      "One-shot judgement calls with no tools: the chime-in judge, the memory extractor and the backfill. The judge runs on ordinary group traffic, so this is the highest-volume tier and the cheapest place to save money. A weak model here costs nothing worse than a poor chime-in decision.",
-    group: "cost",
-    control: "choice",
-    format: (v) => AI_CATALOG[v].label,
-  }),
   "ai.model.fast": def<AiModelKey>({
     schema: z.enum(modelKeysForTier("fast")),
     default: DEFAULT_TIER_MODELS.fast,
     label: "Fast model",
     description:
-      "The main chat agent and every sub-agent, each running up to ten tool-calling steps. Only models vetted for tool loops are offered here. If a change leaves the bot unable to hold a conversation, change it back from this menu — the menu never asks the AI anything.",
+      "The main chat agent and every sub-agent, each running up to ten tool-calling steps. Any model may be chosen; a model that handles single calls well can still drift over ten. If a change leaves the bot unable to hold a conversation, change it back from this menu — the menu never asks the AI anything.",
     group: "cost",
     control: "choice",
     format: (v) => AI_CATALOG[v].label,
@@ -302,7 +292,7 @@ export const BOT_SETTINGS = {
     default: DEFAULT_TIER_MODELS.deep,
     label: "Deep model",
     description:
-      "The deepest advisor escalation, charged against each member's advisor budget. The most expensive model per call, though far from the largest share of the bill. Recoverable from this menu.",
+      "The deepest advisor escalation, charged against each member's advisor budget. Usually the priciest per call, though far from the largest share of the bill. Recoverable from this menu.",
     group: "cost",
     control: "choice",
     format: (v) => AI_CATALOG[v].label,

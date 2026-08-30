@@ -38,6 +38,12 @@ export interface AgentContextInput {
   chatHistory: ModelMessage[];
   senderTelegramId: number | null;
   schemaSDL: string;
+  /**
+   * The model actually serving this request, as `key (Label)`. The agent has
+   * no introspection, so without being told it answers "what model are you?"
+   * from the settings table and gets it wrong.
+   */
+  runningModel: string;
   /** Injected so prompt rendering is deterministic under test. */
   now: Date;
 }
@@ -150,6 +156,7 @@ function getSystemPrompt(
   memories: SourcedMemory[],
   schemaSDL: string,
   now: Date,
+  runningModel: string,
 ): string {
   const today = now.toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
 
@@ -194,6 +201,10 @@ ${blocks.join("\n\n")}`
   return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
 
 Today's date is ${today}. Use this when creating events or interpreting relative dates.
+
+You are running on ${runningModel} — this request's actual model, not whatever
+the settings table lists. Advisors run on other tiers and return advice to you;
+you always write the final reply, so never say it came from another model.
 
 You help members with:
 - Finding information about upcoming events
@@ -356,7 +367,7 @@ export async function buildAgentContext(
   const memories = [...deduped.values()].slice(0, MAX_INJECTED_MEMORIES);
 
   return {
-    system: getSystemPrompt(memories, schemaSDL, now),
+    system: getSystemPrompt(memories, schemaSDL, now, input.runningModel),
     messages: [...chatHistory, { role: "user", content: enrichedQuery }],
     memories,
   };

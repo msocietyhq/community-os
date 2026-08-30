@@ -12,6 +12,7 @@ import {
   MAX_MESSAGE_CHARS,
   type ProgressSink,
   type SubagentBatch,
+  type SubagentEntry,
 } from "./subagent-progress";
 
 /** Progress renders to entities now; these assertions read the plain text. */
@@ -1358,5 +1359,59 @@ describe("reveal timing", () => {
     clock.fire();
     await settle();
     expect(sink.sent).toHaveLength(1);
+  });
+});
+
+describe("model label on the heading", () => {
+  const entry = (over: Partial<SubagentEntry> = {}): SubagentEntry => ({
+    name: "Pondering",
+    query: "",
+    state: "running",
+    activeTools: [],
+    toolLog: [],
+    children: [],
+    isRoot: true,
+    ...over,
+  });
+
+  test("stamps the model beside the running heading", () => {
+    const out = renderProgress([[entry()]], "DeepSeek V4 Flash").text;
+    expect(out).toContain("Pondering — DeepSeek V4 Flash");
+  });
+
+  test("leaves the completed heading bare", () => {
+    const root = entry({
+      state: "done",
+      children: [
+        {
+          name: "Research",
+          query: "latest AI news",
+          state: "done",
+          activeTools: [],
+          toolLog: [],
+          children: [],
+        },
+      ],
+    });
+    const out = renderProgress([[root]], "DeepSeek V4 Flash").text;
+    expect(out).toContain("Completed");
+    expect(out).not.toContain("DeepSeek V4 Flash");
+  });
+
+  test("renders exactly as before when no model is given", () => {
+    const out = renderProgress([[entry()]]).text;
+    expect(out).toContain("Pondering");
+    expect(out).not.toContain("—");
+  });
+
+  // The label is italic; the heading stays bold. Telegram fails the whole
+  // message if entity offsets drift, so assert the label is actually marked up.
+  test("marks the model italic, not plain", () => {
+    const rendered = renderProgress([[entry()]], "DeepSeek V4 Flash");
+    const italic = rendered.entities.filter((e) => e.type === "italic");
+    expect(italic).toHaveLength(1);
+    expect(
+      rendered.text.slice(italic[0]!.offset, italic[0]!.offset + italic[0]!.length),
+    ).toBe("DeepSeek V4 Flash");
   });
 });

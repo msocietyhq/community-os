@@ -233,9 +233,9 @@ describe("model setting page", () => {
   });
 
   test("never puts more than two models on a row", () => {
-    const page = renderSettingPage("ai.model.micro", snapshot, null);
+    const page = renderSettingPage("ai.model.smart", snapshot, null);
     const modelLabels = new Set(
-      modelKeysForTier("micro").map((k) => AI_CATALOG[k].label),
+      modelKeysForTier("smart").map((k) => AI_CATALOG[k].label),
     );
 
     for (const row of page.keyboard.inline_keyboard) {

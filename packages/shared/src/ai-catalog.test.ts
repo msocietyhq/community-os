@@ -55,17 +55,12 @@ describe("modelKeysForTier", () => {
     }
   });
 
-  // The chat agent and every sub-agent run ten-step tool loops on these tiers.
-  test("tool-loop tiers only offer tool-loop models", () => {
-    for (const tier of ["fast", "smart", "deep"] as const) {
-      for (const key of modelKeysForTier(tier)) {
-        expect(AI_CATALOG[key].toolLoop, `${key} on ${tier}`).toBe(true);
-      }
+  // Any model may be set for any tier — there is deliberately no capability
+  // gate in this table. Picking a model that suits the tier is a human call.
+  test("every tier offers the whole catalog", () => {
+    for (const tier of AI_TIERS) {
+      expect(modelKeysForTier(tier), tier).toEqual([...AI_MODEL_KEYS]);
     }
-  });
-
-  test("micro offers every model, tool-loop or not", () => {
-    expect(modelKeysForTier("micro").length).toBe(AI_MODEL_KEYS.length);
   });
 });
 

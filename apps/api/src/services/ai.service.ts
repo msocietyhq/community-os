@@ -8,6 +8,7 @@ import {
   AI_CATALOG,
   AI_TIERS,
   DEFAULT_TIER_MODELS,
+  isConfigurableTier,
   type AiModelKey,
   type AiTier,
   type ModelDef,
@@ -43,44 +44,72 @@ interface ResolvedTier {
 }
 
 /**
- * A tier's model is read per call rather than bound at import, so a settings
- * change applies to the next message without a redeploy. Reading it here also
- * pins the model for the whole of one `generateText` — a change can never land
- * between two steps of the same tool loop.
+ * The model a tier will use.
  *
- * `getSettings` is memoised in-process with a 30s TTL and invalidated
- * synchronously on write, so this is a map lookup, not a query.
+ * Read per call rather than bound at import, so a settings change applies to
+ * the next message without a redeploy — and pinned for the whole of one
+ * `generateText`, so a change can never land between two steps of a tool loop.
+ * `getSettings` is memoised in-process with a 30s TTL, so this is a map lookup.
  *
- * An unusable selection falls back to the tier default with a warning rather
- * than throwing, matching `buildSnapshot`: a bad row in the settings table
- * must never be able to take the bot down.
+ * A tier that isn't configurable never reads settings at all: its model is
+ * pinned in the catalog, so there is no row to read. For the rest, an unusable
+ * selection falls back to the tier default rather than throwing, matching
+ * `buildSnapshot` — a bad settings row must never take the bot down.
  */
-async function resolveTier(tier: AiTier): Promise<ResolvedTier> {
+async function pickModelKey(tier: AiTier): Promise<AiModelKey> {
+  if (!isConfigurableTier(tier)) return DEFAULT_TIER_MODELS[tier];
+
   const settings = await getSettings();
   const chosen = settings[`ai.model.${tier}`];
+  return hasCredentials(chosen) ? chosen : DEFAULT_TIER_MODELS[tier];
+}
 
-  if (!hasCredentials(chosen)) {
-    const fallback = DEFAULT_TIER_MODELS[tier];
-    console.warn(
-      `[ai] ${tier} is set to ${chosen} but ${AI_CATALOG[chosen].envKey} is not set — falling back to ${fallback}`,
-    );
-    return {
-      key: fallback,
-      def: AI_CATALOG[fallback],
-      model: modelFor(fallback),
-    };
+async function resolveTier(tier: AiTier): Promise<ResolvedTier> {
+  const key = await pickModelKey(tier);
+
+  if (isConfigurableTier(tier)) {
+    const settings = await getSettings();
+    const chosen = settings[`ai.model.${tier}`];
+    if (key !== chosen) {
+      console.warn(
+        `[ai] ${tier} is set to ${chosen} but ${AI_CATALOG[chosen].envKey} is not set — falling back to ${key}`,
+      );
+    }
   }
 
-  return { key: chosen, def: AI_CATALOG[chosen], model: modelFor(chosen) };
+  return { key, def: AI_CATALOG[key], model: modelFor(key) };
+}
+
+/**
+ * Which model a tier currently resolves to, without instantiating a provider.
+ *
+ * Exists so a caller can tell the model what it is running on. The agent has
+ * no introspection — nothing in a request reveals which model is serving it —
+ * so without this it answers "what model are you?" by reading the settings
+ * table and guessing, which is how it came to confidently report the wrong
+ * model and the wrong tier.
+ *
+ * Shares `pickModelKey` with `resolveTier`, so the prompt cannot claim one
+ * model while the call runs on another.
+ */
+export async function currentModelFor(
+  tier: AiTier,
+): Promise<{ key: AiModelKey; label: string }> {
+  const key = await pickModelKey(tier);
+  return { key, label: AI_CATALOG[key].label };
 }
 
 /** Reports which tiers are pointed at a model this deployment cannot run. */
-export function unusableTiers(
-  snapshot: Record<`ai.model.${AiTier}`, AiModelKey>,
-): { tier: AiTier; key: AiModelKey; envKey: string }[] {
+export async function unusableTiers(): Promise<
+  { tier: AiTier; key: AiModelKey; envKey: string }[]
+> {
+  const settings = await getSettings();
   const out: { tier: AiTier; key: AiModelKey; envKey: string }[] = [];
+
   for (const tier of AI_TIERS) {
-    const key = snapshot[`ai.model.${tier}`];
+    const key = isConfigurableTier(tier)
+      ? settings[`ai.model.${tier}`]
+      : DEFAULT_TIER_MODELS[tier];
     if (!hasCredentials(key)) {
       out.push({ tier, key, envKey: AI_CATALOG[key].envKey });
     }
@@ -621,6 +650,7 @@ async function getTopUsersByTokens(since: Date, limit: number, until?: Date) {
 // ── Public service ──────────────────────────────────────────
 
 export const aiService = {
+  currentModelFor,
   generateText: trackedGenerateText,
   generateObject: trackedGenerateObject,
   trackUsage,
