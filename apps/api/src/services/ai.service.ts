@@ -23,6 +23,8 @@ import { addSpend, getSpend, shouldAlert } from "./ai-spend-counter";
 import { estimateCost } from "./ai-pricing";
 import { cacheSplit, withPromptCaching } from "./ai-cache";
 import { hasCredentials, modelFor } from "./ai-provider";
+import { resolveModelKey } from "./model-resolution";
+import { downProviders } from "./provider-health.service";
 
 // ── Tier resolution ─────────────────────────────────────────
 
@@ -43,38 +45,61 @@ interface ResolvedTier {
   model: ReturnType<typeof modelFor>;
 }
 
+/** What a tier currently selects — settings for the configurable ones. */
+async function selectedModelKey(tier: AiTier): Promise<AiModelKey> {
+  if (!isConfigurableTier(tier)) return DEFAULT_TIER_MODELS[tier];
+  return (await getSettings())[`ai.model.${tier}`];
+}
+
 /**
  * The model a tier will use.
  *
  * Read per call rather than bound at import, so a settings change applies to
  * the next message without a redeploy — and pinned for the whole of one
  * `generateText`, so a change can never land between two steps of a tool loop.
- * `getSettings` is memoised in-process with a 30s TTL, so this is a map lookup.
+ * `getSettings` and the provider-health snapshot are both memoised in-process
+ * with a 30s TTL, so this is two map lookups.
  *
- * A tier that isn't configurable never reads settings at all: its model is
- * pinned in the catalog, so there is no row to read. For the rest, an unusable
- * selection falls back to the tier default rather than throwing, matching
- * `buildSnapshot` — a bad settings row must never take the bot down.
+ * "Usable" is two conditions: the model's API key is present, and its provider
+ * has not run out of credit. Both fall through the same `TIER_FALLBACK_ORDER`,
+ * so a missing key and an empty balance behave identically — the second was
+ * added by extending the first rather than sitting beside it.
+ *
+ * The stored `ai.model.<tier>` setting is never rewritten. While a provider is
+ * down the tier merely resolves elsewhere, so recovery restores the admin's
+ * original choice with nothing to undo.
  */
 async function pickModelKey(tier: AiTier): Promise<AiModelKey> {
-  if (!isConfigurableTier(tier)) return DEFAULT_TIER_MODELS[tier];
+  const selected = await selectedModelKey(tier);
+  const down = await downProviders();
 
-  const settings = await getSettings();
-  const chosen = settings[`ai.model.${tier}`];
-  return hasCredentials(chosen) ? chosen : DEFAULT_TIER_MODELS[tier];
+  const resolved = resolveModelKey({
+    tier,
+    selected,
+    isUsable: (key) =>
+      hasCredentials(key) && !down.has(AI_CATALOG[key].provider),
+  });
+
+  if (resolved === null) {
+    throw new Error(
+      `[ai] no usable model for tier ${tier}: every provider is either ` +
+        `unconfigured or out of credit`,
+    );
+  }
+
+  return resolved;
 }
 
 async function resolveTier(tier: AiTier): Promise<ResolvedTier> {
   const key = await pickModelKey(tier);
+  const selected = await selectedModelKey(tier);
 
-  if (isConfigurableTier(tier)) {
-    const settings = await getSettings();
-    const chosen = settings[`ai.model.${tier}`];
-    if (key !== chosen) {
-      console.warn(
-        `[ai] ${tier} is set to ${chosen} but ${AI_CATALOG[chosen].envKey} is not set — falling back to ${key}`,
-      );
-    }
+  if (key !== selected) {
+    console.warn(
+      `[ai] ${tier} is set to ${selected} but it is unusable ` +
+        `(no ${AI_CATALOG[selected].envKey}, or out of credit) — ` +
+        `running on ${key}`,
+    );
   }
 
   return { key, def: AI_CATALOG[key], model: modelFor(key) };
