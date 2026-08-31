@@ -68,14 +68,28 @@ const MIN_NEW_MESSAGES = 10;
  * This was effectively 1 (an EXISTS), on the stated grounds that memories are
  * distilled and rare. They are not rare: the extractor runs on every message
  * clearing its pre-filter and routinely writes several facts from one message.
- * Nine of the fourteen members swept on 2026-09-01 were selected by four or
- * fewer memories that largely restated what their profile already said.
+ * Six of the fourteen members swept on 2026-09-01 were selected by one or two
+ * memories that restated what their profile already said.
  *
- * Set against the twice-monthly sweep: halving the window roughly halves how
- * long a member's new evidence waits, which on its own would raise the number
- * of regenerations per month. This holds the total flat.
+ * A count, not an EXISTS, and counted since `ai_generated_at` rather than since
+ * the last sweep — so a member below the floor keeps their pending facts and
+ * carries them into the run that finally qualifies. Nothing is discarded for
+ * being under the threshold, only deferred. See MAX_PENDING_MEMORY_DAYS for the
+ * bound on that deferral.
  */
-const MIN_NEW_MEMORIES = 5;
+const MIN_NEW_MEMORIES = 3;
+
+/**
+ * How long a recorded fact may sit outside a member's profile before it is
+ * rebuilt regardless of how little else has accrued.
+ *
+ * Without this the floor defers indefinitely rather than temporarily: a member
+ * who picks up one fact and then goes quiet never reaches MIN_NEW_MEMORIES, so
+ * that fact never reaches their profile — and the profile is the member search
+ * index, so they stay unfindable for it forever. Three quarters of members last
+ * posted over a year ago, which is exactly the population this protects.
+ */
+const MAX_PENDING_MEMORY_DAYS = 90;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -509,6 +523,14 @@ export const aiProfileService = {
               AND bm.superseded_by IS NULL
               AND bm.created_at > m.ai_generated_at
           ) >= ${MIN_NEW_MEMORIES}
+          OR EXISTS (
+            SELECT 1 FROM bot_memories bm
+            WHERE bm.subject_telegram_id::text = u.telegram_id
+              AND bm.superseded_by IS NULL
+              AND bm.created_at > m.ai_generated_at
+              AND bm.created_at
+                    < now() - make_interval(days => ${MAX_PENDING_MEMORY_DAYS})
+          )
           OR (
             SELECT count(*) FROM telegram_messages tm
             WHERE tm.from_user_id::text = u.telegram_id
@@ -518,7 +540,7 @@ export const aiProfileService = {
     `);
 
     if (rows.length === 0) {
-      console.log("[ai-profile] monthly sweep: no members with new evidence");
+      console.log("[ai-profile] sweep: no members with new evidence");
       return { generated: 0, skipped: 0, failed: 0 };
     }
 
