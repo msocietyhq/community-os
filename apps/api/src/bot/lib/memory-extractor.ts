@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
-import { markMemoryExtracted } from "../../services/messages.service";
-import { getMessageContext } from "../../services/messages.service";
+import { resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
 import { aiService } from "../../services/ai.service";
 
 const MEMORY_CATEGORIES = [
@@ -31,11 +29,7 @@ export const factSchema = z.object({
   confidence: z.number().default(0.8),
 });
 
-export const extractionSchema = z.object({
-  facts: z.array(factSchema).default([]),
-});
-
-/** Batch variant: each fact also says which message it came from. */
+/** Each fact says which message in the run it came from. */
 export const batchExtractionSchema = z.object({
   facts: z
     .array(
@@ -57,9 +51,6 @@ export function clampConfidence(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0.8;
   return Math.min(1, Math.max(0, value));
 }
-
-/** Preceding turns shown to the extractor for context. */
-const CONTEXT_MESSAGES = 5;
 
 const NOISE_REGEX =
   /^(ok|lol|haha|heh|nice|thanks|thank you|yes|no|yep|nope|yeah|nah|sure|wow|bruh|bro|gg|true|same|fr|ikr|damn|aight|bet|salam|ws|wa'alaikumussalam|walaikumsalam)[\s!.?]*$/i;
@@ -113,10 +104,6 @@ Set confidence 0.6-1.0 based on how definitive the statement is.
 Most messages contain nothing worth remembering. Returning an empty array is the correct answer far more often than not.`;
 
 /** Live path: one message, with the preceding turns as context. */
-export const EXTRACTION_PROMPT = `You maintain a long-term memory for MSOCIETY, a community of Muslim tech professionals. You are shown one message from their group chat, with the messages just before it for context.
-
-${EXTRACTION_RULES}`;
-
 /**
  * Backfill path: a run of consecutive messages, each one a candidate.
  *
@@ -131,79 +118,61 @@ ${EXTRACTION_RULES}
 
 Read the whole exchange for context, but extract only facts the messages actually establish. Tag each fact with the index of the message it came from.`;
 
-/**
- * Extract memories from a message using Haiku. Fire-and-forget.
- */
-export async function extractMemories(
-  text: string,
-  senderName: string,
-  senderUsername: string | null,
-  senderTelegramId: number | null,
-  chatId: string,
-  messageId: number,
-): Promise<void> {
-  const senderLabel = senderUsername
-    ? `${senderName} (@${senderUsername})`
-    : senderName;
+/** Messages per model call. Also the size of the context window the model sees. */
+export const BATCH_SIZE = 10;
 
-  // Without prior turns the extractor can't tell an assertion from a question,
-  // or resolve pronouns — that's how "I guess they're the same?" became a fact.
-  const priorTurns = await getMessageContext(chatId, messageId, CONTEXT_MESSAGES);
-  const conversation = priorTurns.length
-    ? priorTurns
-        .map((m) => `${m.sender}: ${m.text}`)
-        .join("\n")
-    : "(no earlier messages)";
+export interface PendingMessage {
+  chatId: string;
+  messageId: number;
+  sender: string;
+  senderTelegramId: number | null;
+  text: string;
+}
+
+/**
+ * Extract from one run of consecutive messages.
+ *
+ * Shared by the backfill and the live buffer. The batch is its own context, so
+ * this sees the exchange around each line rather than the line alone — which is
+ * why it comes back empty on 13% of calls against the single-message path's
+ * 51%. `caller` is passed through so the two remain separable in `ai_usage`.
+ */
+export async function extractBatch(
+  batch: PendingMessage[],
+  caller: "memory-extractor" | "memory-backfill",
+): Promise<MemoryInput[]> {
+  const transcript = batch
+    .map((m, i) => `[${i}] ${m.sender}: ${m.text}`)
+    .join("\n");
 
   const result = await aiService.generateObject(
     {
-      schema: extractionSchema,
-      system: EXTRACTION_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content:
-            `Earlier in the conversation:\n${conversation}\n\n` +
-            `--- Extract from THIS message only ---\n${senderLabel}: "${text}"`,
-        },
-      ],
-      maxOutputTokens: 512,
+      schema: batchExtractionSchema,
+      system: BATCH_EXTRACTION_PROMPT,
+      messages: [{ role: "user", content: transcript }],
+      maxOutputTokens: 1024,
     },
-    {
-      caller: "memory-extractor",
-      tier: "micro",
-      telegramUserId: senderTelegramId,
-      chatId,
-      class: "background",
-    },
+    { caller, tier: "micro", class: "background" },
   );
 
-  // `aiService.generateObject` widens its result to `unknown` (its return type
-  // drops generateObject's generic), so re-parse to recover the type. The SDK
-  // has already validated against this schema.
-  const { facts } = extractionSchema.parse(result.object);
-  if (facts.length === 0) {
-    await markMemoryExtracted(chatId, [messageId]);
-    return;
-  }
-
-  const senderNameLower = senderName.toLowerCase();
-  const senderUsernameLower = senderUsername?.toLowerCase() ?? "";
+  // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.
+  const { facts } = batchExtractionSchema.parse(result.object);
 
   const memories: MemoryInput[] = [];
   for (const fact of facts) {
-    const subjectLower = (fact.subject ?? "").toLowerCase();
-    const isSender =
-      subjectLower === senderNameLower ||
-      subjectLower === senderUsernameLower ||
-      subjectLower === "i" ||
-      subjectLower === "me";
+    // Rounded because the schema can't constrain it. Out-of-range drops the
+    // fact — wrong provenance is worse than one lost fact.
+    const index = Math.round(fact.message_index);
+    const source = batch[index];
+    if (!source || !fact.content) continue;
 
-    // No fallback to the sender. `?? senderTelegramId` here once misattributed
-    // 86% of the corpus — a shared news link became a fact about the sharer.
-    // Null keeps the memory searchable but off anyone's profile.
+    const subjectLower = (fact.subject ?? "").toLowerCase();
+    const isSender = subjectLower === source.sender.toLowerCase();
+
+    // No fallback to the sender — see memory-extractor.ts. The sender's id is
+    // used only when the fact is explicitly about them.
     const subjectTelegramId = isSender
-      ? senderTelegramId
+      ? source.senderTelegramId
       : await resolveSubjectTelegramId(fact.subject);
 
     memories.push({
@@ -211,15 +180,11 @@ export async function extractMemories(
       category: fact.category,
       subject: fact.subject,
       subjectTelegramId,
-      sourceChatId: chatId,
-      sourceMessageId: messageId,
+      sourceChatId: source.chatId,
+      sourceMessageId: source.messageId,
       confidence: clampConfidence(fact.confidence),
     });
   }
 
-  await saveMemories(memories);
-  await markMemoryExtracted(chatId, [messageId]);
-  console.log(
-    `[memory-extractor] extracted ${memories.length} memories from message ${messageId}`,
-  );
+  return memories;
 }

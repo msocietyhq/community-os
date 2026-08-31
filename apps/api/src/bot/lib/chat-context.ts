@@ -6,6 +6,20 @@ import type { telegramMessages } from "../../db/schema/bot";
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
 
+/**
+ * How much of a conversation the agent is given, and for how long back.
+ *
+ * A message leaves the agent's sight when either bound is crossed: it ages past
+ * HISTORY_WINDOW_MS, or HISTORY_MESSAGE_LIMIT newer messages push it out. Both
+ * are scoped to one chat and one forum topic.
+ *
+ * Exported because memory extraction batches against them — while a message is
+ * still in here the agent can read it directly, so a fact drawn from it is
+ * redundant. See `memory-batch.ts`.
+ */
+export const HISTORY_MESSAGE_LIMIT = 50;
+export const HISTORY_WINDOW_MS = ONE_HOUR_MS;
+
 const REPLY_TEXT_MAX = 120;
 
 interface RawMessage {

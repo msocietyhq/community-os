@@ -7,6 +7,7 @@ import { projectsHandler } from "./handlers/projects";
 import { reputationHandler } from "./handlers/reputation";
 import { digestHandler } from "./handlers/digest";
 import { startDigestScheduler, stopDigestScheduler } from "./lib/digest-scheduler";
+import { flushAllConversations } from "./lib/memory-batch";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
 import { profileHandler } from "./handlers/profile";
@@ -132,5 +133,11 @@ export async function initBot(): Promise<void> {
  */
 export async function shutdownBot(): Promise<void> {
   stopDigestScheduler();
+  // Buffered runs are safe to lose — unflushed messages are unstamped, so the
+  // backfill reads them on the next boot. Flushing here just spares it the
+  // work, and keeps a redeploy from delaying a fact by the whole window.
+  await flushAllConversations().catch((err) => {
+    console.error("[memory-batch] shutdown flush failed:", err);
+  });
   await bot.stop();
 }

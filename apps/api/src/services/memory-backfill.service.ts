@@ -16,17 +16,14 @@ import {
   type MemoryInput,
 } from "./memory.service";
 import {
-  BATCH_EXTRACTION_PROMPT,
-  batchExtractionSchema,
-  clampConfidence,
+  BATCH_SIZE,
+  extractBatch,
+  type PendingMessage,
   shouldExtractMemory,
 } from "../bot/lib/memory-extractor";
 import { markMemoryExtracted } from "./messages.service";
 import { withRetry } from "../lib/retry";
 import { truncate } from "../lib/text";
-
-/** Messages per model call. Also the size of the context window the model sees. */
-const BATCH_SIZE = 10;
 
 /** Rows pulled from the database per round trip. */
 const CHUNK_SIZE = 500;
@@ -38,69 +35,11 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 
-interface PendingMessage {
-  chatId: string;
-  messageId: number;
-  sender: string;
-  senderTelegramId: number | null;
-  text: string;
-}
-
 export interface MemoryBackfillResult {
   scanned: number;
   extracted: number;
   batches: number;
   failed: number;
-}
-
-/** Extract from one run of consecutive messages. */
-async function extractBatch(batch: PendingMessage[]): Promise<MemoryInput[]> {
-  const transcript = batch
-    .map((m, i) => `[${i}] ${m.sender}: ${m.text}`)
-    .join("\n");
-
-  const result = await aiService.generateObject(
-    {
-      schema: batchExtractionSchema,
-      system: BATCH_EXTRACTION_PROMPT,
-      messages: [{ role: "user", content: transcript }],
-      maxOutputTokens: 1024,
-    },
-    { caller: "memory-backfill", tier: "micro", class: "background" },
-  );
-
-  // Widened to `unknown` by the tracking wrapper; re-parse to recover the type.
-  const { facts } = batchExtractionSchema.parse(result.object);
-
-  const memories: MemoryInput[] = [];
-  for (const fact of facts) {
-    // Rounded because the schema can't constrain it. Out-of-range drops the
-    // fact — wrong provenance is worse than one lost fact.
-    const index = Math.round(fact.message_index);
-    const source = batch[index];
-    if (!source || !fact.content) continue;
-
-    const subjectLower = (fact.subject ?? "").toLowerCase();
-    const isSender = subjectLower === source.sender.toLowerCase();
-
-    // No fallback to the sender — see memory-extractor.ts. The sender's id is
-    // used only when the fact is explicitly about them.
-    const subjectTelegramId = isSender
-      ? source.senderTelegramId
-      : await resolveSubjectTelegramId(fact.subject);
-
-    memories.push({
-      content: fact.content,
-      category: fact.category,
-      subject: fact.subject,
-      subjectTelegramId,
-      sourceChatId: source.chatId,
-      sourceMessageId: source.messageId,
-      confidence: clampConfidence(fact.confidence),
-    });
-  }
-
-  return memories;
 }
 
 /**
@@ -165,7 +104,7 @@ export async function backfillMemories(): Promise<MemoryBackfillResult> {
       const batch = eligible.slice(i, i + BATCH_SIZE);
       batches++;
       try {
-        const memories = await withRetry(() => extractBatch(batch), {
+        const memories = await withRetry(() => extractBatch(batch, "memory-backfill"), {
           onRetry: ({ attempt, delayMs }) =>
             console.warn(
               `[memory-backfill] batch attempt ${attempt} failed, retrying in ${Math.round(delayMs / 1000)}s`,

@@ -7,6 +7,8 @@ import {
   buildTelegramMeta,
   buildEnrichedQuery,
   buildMessagesFromHistory,
+  HISTORY_MESSAGE_LIMIT,
+  HISTORY_WINDOW_MS,
   ONE_HOUR_MS,
 } from "../lib/chat-context";
 import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
@@ -180,8 +182,8 @@ aiChatHandler.on("message:text", async (ctx) => {
   const recentMessages = await getRecentChatMessages(
     String(ctx.chat.id),
     ctx.message.message_thread_id ?? null,
-    ONE_HOUR_MS,
-    50,
+    HISTORY_WINDOW_MS,
+    HISTORY_MESSAGE_LIMIT,
     ctx.message.message_id, // exclude current (it's in enrichedQuery)
   );
 
