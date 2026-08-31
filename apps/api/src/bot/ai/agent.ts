@@ -55,6 +55,17 @@ interface AgentParams {
    * leave the message in place.
    */
   progressClearAfterMs?: number;
+  /**
+   * The turn is an uninvited chime-in. Selects the chime-in system prompt,
+   * enables stay_silent, and scopes recalled memories to this chat.
+   */
+  chimingIn?: boolean;
+  /**
+   * Which tier serves this turn. Chime-ins run on `smart`: deciding whether to
+   * speak at all is a harder judgement than answering a question that was
+   * actually asked.
+   */
+  tier?: "fast" | "smart";
   /** Renders an AI-proposed settings change card. Omit to disable the tool. */
   proposeSettings?: (input: {
     changes: { key: string; from: unknown; to: unknown }[];
@@ -63,7 +74,8 @@ interface AgentParams {
 }
 
 interface AgentResult {
-  text: string;
+  /** The reply to send, or null when the agent chose to stay silent. */
+  text: string | null;
   responseMessages: ModelMessage[]; // AI SDK response messages for session storage
 }
 
@@ -80,6 +92,8 @@ export async function runAgent({
   askUser,
   proposeSettings,
   trackAllTools,
+  chimingIn,
+  tier,
 }: AgentParams): Promise<AgentResult> {
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
@@ -126,7 +140,8 @@ export async function runAgent({
   // Resolved up front: it both labels the progress message and tells the agent
   // what it is running on. Shares its resolution with the call itself, so the
   // heading, the prompt and the model that actually serves the turn agree.
-  const running = await aiService.currentModelFor("fast");
+  const activeTier = tier ?? "fast";
+  const running = await aiService.currentModelFor(activeTier);
 
   const progress = progressSink
     ? new SubagentProgress({
@@ -144,6 +159,11 @@ export async function runAgent({
    */
   const root = progress?.rootActivity();
 
+  // Set by the stay_silent tool. A flag rather than an inspection of
+  // result.steps: it is the same callback shape askUser and proposeSettings
+  // already use, and it doesn't depend on the SDK's step representation.
+  let silencedReason: string | null = null;
+
   const tools = createTools({
     api,
     graphql,
@@ -152,6 +172,11 @@ export async function runAgent({
     progress: root,
     askUser,
     proposeSettings,
+    onSilence: chimingIn
+      ? (reason) => {
+          silencedReason = reason;
+        }
+      : undefined,
   });
 
   // Whether the main agent logs its *own* tool calls is the one thing that
@@ -177,9 +202,7 @@ export async function runAgent({
       runningModel: `${running.key} (${running.label})`,
       now: new Date(),
       chatId,
-      // Threaded from the handler in the next commit; every turn is a direct
-      // address until then, which is the behaviour that already existed.
-      chimingIn: false,
+      chimingIn: chimingIn ?? false,
     },
     memoryRecaller,
   );
@@ -197,7 +220,7 @@ export async function runAgent({
       },
       {
         caller: "main-agent",
-        tier: "fast",
+        tier: activeTier,
         telegramUserId: senderTelegramId,
         chatId,
       },
@@ -206,6 +229,17 @@ export async function runAgent({
     console.log(
       `[main-agent] done — steps:${result.steps.length} tokens:${result.usage.inputTokens ?? 0}in/${result.usage.outputTokens ?? 0}out text:"${result.text?.slice(0, 120)}"`,
     );
+
+    // Checked before the fallback chain below: a deliberate silence must not be
+    // overwritten with sub-agent output or the generic error string.
+    if (silencedReason !== null) {
+      console.log(`[main-agent] staying silent — ${silencedReason}`);
+      await progress?.finish().catch(() => {});
+      return {
+        text: null,
+        responseMessages: result.response.messages as ModelMessage[],
+      };
+    }
 
     // The model sometimes ends its turn on a tool call, or hits the step cap,
     // leaving no text. Surfacing the sub-agents' own output beats discarding

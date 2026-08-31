@@ -289,7 +289,11 @@ aiChatHandler.on("message:text", async (ctx) => {
       chatHistory,
       chatId: String(ctx.chat.id),
       senderTelegramId: ctx.from?.id ?? null,
-      progressSink,
+      // An uninvited turn reports nothing. Sub-agents are what post the status
+      // message, and the nudge path calls one — so without this the group would
+      // get "Members — searching…" followed by no reply at all, which is worse
+      // than staying quiet. There is no deletion path to undo it after the fact.
+      progressSink: chimingIn ? undefined : progressSink,
       // Groups clean the status message up after the turn; a DM keeps it as
       // history.
       progressClearAfterMs: isGroup ? GROUP_PROGRESS_CLEAR_MS : undefined,
@@ -298,7 +302,16 @@ aiChatHandler.on("message:text", async (ctx) => {
       // DM-only: the group gets the same sub-agent tree, without a running
       // commentary of every lookup the bot makes.
       trackAllTools: isPrivate,
+      chimingIn,
+      // Deciding whether to speak at all is a harder judgement than answering a
+      // question that was actually asked.
+      tier: chimingIn ? "smart" : "fast",
     });
+
+    // The agent looked and had nothing worth adding. Send nothing, and don't
+    // record a chime — staying quiet must not burn the cooldown that gates
+    // speaking.
+    if (responseText === null) return;
 
     // The question is already on screen; a second message would just repeat
     // it. Key this turn to the question so the answer replays with context.
