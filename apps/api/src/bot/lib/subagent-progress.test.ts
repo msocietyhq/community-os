@@ -34,10 +34,11 @@ function root(
   return { name, query: "", state, activeTools: [], toolLog: [], children };
 }
 
-/** Captures every send/edit so the message's whole lifecycle can be asserted. */
-function makeSink(options: { failSend?: boolean } = {}) {
+/** Captures every send/edit/delete so the message's whole lifecycle can be asserted. */
+function makeSink(options: { failSend?: boolean; withDelete?: boolean } = {}) {
   const sent: string[] = [];
   const edits: { messageId: number; text: string }[] = [];
+  const deleted: number[] = [];
 
   const sink: ProgressSink = {
     async send(message) {
@@ -47,12 +48,23 @@ function makeSink(options: { failSend?: boolean } = {}) {
     async edit(messageId, message) {
       edits.push({ messageId, text: message.text });
     },
+    // `delete` is optional on the interface — a sink that omits it keeps the
+    // message forever, which is what a DM wants. Passing `withDelete: false`
+    // models that sink.
+    ...(options.withDelete === false
+      ? {}
+      : {
+          async delete(messageId: number) {
+            deleted.push(messageId);
+          },
+        }),
   };
 
   return {
     sink,
     sent,
     edits,
+    deleted,
     /** Whatever the message currently reads, or null if never posted. */
     current: () => edits.at(-1)?.text ?? sent.at(-1) ?? null,
   };
@@ -1422,5 +1434,84 @@ describe("model label on the heading", () => {
     expect(
       rendered.text.slice(italic[0]!.offset, italic[0]!.offset + italic[0]!.length),
     ).toBe("DeepSeek V4 Flash");
+  });
+});
+
+// ─── status message cleanup ──────────────────────────────────────────────────
+
+describe("status message cleanup", () => {
+  function setup(options: { clearAfterMs?: number; withDelete?: boolean } = {}) {
+    const sink = makeSink({ withDelete: options.withDelete });
+    const clock = makeScheduler();
+    const progress = new SubagentProgress({
+      sink: sink.sink,
+      scheduler: clock.scheduler,
+      minEditIntervalMs: 0,
+      clearAfterMs: options.clearAfterMs,
+    });
+    const { start } = rooted(progress);
+    return { ...sink, ...clock, progress, start };
+  }
+
+  /**
+   * Posts a message by opening a sub-agent and firing the reveal timer.
+   * The render is queued, so `settle()` — not a bare microtask flush — is what
+   * lets it land.
+   */
+  async function postAndFinish(s: ReturnType<typeof setup>) {
+    const handle = s.start("Members", "who mentioned batteries");
+    s.fire(); // reveal delay
+    await settle();
+    handle.done("nobody");
+    await s.progress.finish();
+  }
+
+  test("a group's status message is deleted after the turn", async () => {
+    const s = setup({ clearAfterMs: 60_000 });
+    await postAndFinish(s);
+
+    expect(s.sent).toHaveLength(1);
+    expect(s.deleted).toEqual([]); // not yet — the timer hasn't fired
+
+    s.fire();
+    await settle();
+
+    expect(s.deleted).toEqual([100]);
+  });
+
+  test("a DM's status message is left in place", async () => {
+    const s = setup(); // no clearAfterMs
+    await postAndFinish(s);
+
+    expect(s.sent).toHaveLength(1);
+
+    s.fire();
+    await settle();
+
+    expect(s.deleted).toEqual([]);
+  });
+
+  test("nothing is scheduled when no message was ever posted", async () => {
+    const s = setup({ clearAfterMs: 60_000 });
+
+    const handle = s.start("Members", "quick lookup");
+    handle.done("done"); // settles before the reveal timer fires
+    await s.progress.finish();
+
+    expect(s.sent).toEqual([]);
+    expect(s.pendingCount()).toBe(0);
+    expect(s.deleted).toEqual([]);
+  });
+
+  test("a sink without delete is a no-op rather than a crash", async () => {
+    const s = setup({ clearAfterMs: 60_000, withDelete: false });
+    await postAndFinish(s);
+
+    expect(s.sent).toHaveLength(1);
+
+    s.fire();
+    await settle();
+
+    expect(s.deleted).toEqual([]);
   });
 });

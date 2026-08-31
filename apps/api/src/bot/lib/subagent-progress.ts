@@ -58,6 +58,11 @@ export interface ProgressSink {
   /** Posts the status message; returns its id, or null if posting failed. */
   send(message: FormattedString): Promise<number | null>;
   edit(messageId: number, message: FormattedString): Promise<void>;
+  /**
+   * Removes the status message. Optional: a sink that omits it keeps the
+   * message forever, which is what a DM wants.
+   */
+  delete?(messageId: number): Promise<void>;
 }
 
 export interface Scheduler {
@@ -135,6 +140,15 @@ export const MAX_MESSAGE_CHARS = 3500;
  * a plain debounce would not, and would also delay the final state.
  */
 export const MIN_EDIT_INTERVAL_MS = 500;
+
+/**
+ * How long a group's status message lingers after the turn ends.
+ *
+ * Long enough to read what the bot did, short enough that the chat isn't left
+ * with a permanent artefact of the bot's internals. The reply itself is posted
+ * once the turn returns, so both are on screen for this window.
+ */
+export const GROUP_PROGRESS_CLEAR_MS = 60_000;
 
 /** Most tool lines to show per sub-agent before folding the oldest away. */
 const MAX_TOOL_LINES = 5;
@@ -460,6 +474,12 @@ export interface SubagentProgressOptions {
    * in tests and anywhere the model isn't known, which renders as before.
    */
   modelLabel?: string;
+  /**
+   * Delete the status message this long after the turn ends. Undefined leaves
+   * it in place — a status message is clutter in a busy group and useful
+   * history in a one-to-one chat, so the caller decides by chat type.
+   */
+  clearAfterMs?: number;
 }
 
 export class SubagentProgress {
@@ -469,6 +489,7 @@ export class SubagentProgress {
   private readonly minEditIntervalMs: number;
   private readonly now: () => number;
   private readonly modelLabel?: string;
+  private readonly clearAfterMs?: number;
 
   private root: SubagentEntry | null = null;
   private messageId: number | null = null;
@@ -489,6 +510,7 @@ export class SubagentProgress {
     this.minEditIntervalMs = options.minEditIntervalMs ?? MIN_EDIT_INTERVAL_MS;
     this.now = options.now ?? Date.now;
     this.modelLabel = options.modelLabel;
+    this.clearAfterMs = options.clearAfterMs;
   }
 
   /**
@@ -548,6 +570,30 @@ export class SubagentProgress {
 
     // The end state should land immediately, not wait out the throttle.
     await this.render(true);
+
+    this.scheduleClear();
+  }
+
+  /**
+   * Schedules the status message's removal.
+   *
+   * Fire-and-forget: the turn is over and the reply is already on its way, so
+   * nothing waits on this. A process restart inside the window orphans the
+   * message — the same trade `lastChimeByChat` in lib/chime-in.ts already takes.
+   */
+  private scheduleClear(): void {
+    if (this.clearAfterMs === undefined) return;
+    if (this.messageId === null) return;
+
+    const remove = this.sink.delete;
+    if (!remove) return;
+
+    const messageId = this.messageId;
+    this.scheduler.schedule(() => {
+      // .call keeps the sink as `this` — the handler's implementation closes
+      // over the grammY context and would break as a bare function reference.
+      void remove.call(this.sink, messageId);
+    }, this.clearAfterMs);
   }
 
   /** Builds the handle for an entry, wiring nesting to the same machinery. */
