@@ -83,6 +83,15 @@ export interface ToolContext {
     changes: { key: string; from: unknown; to: unknown }[];
     rationale?: string;
   }) => Promise<void>;
+  /**
+   * Records that the agent chose to say nothing, with its reason.
+   *
+   * Present only on an uninvited chime-in. Its absence is what keeps
+   * `stay_silent` out of the tool list entirely when the bot was actually
+   * addressed — a model cannot decline to answer a direct question, because it
+   * has no tool with which to do so.
+   */
+  onSilence?: (reason: string) => void;
 }
 
 /**
@@ -647,6 +656,33 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             ctx,
             NEXT_TIER[tier],
           ),
+        }
+      : {}),
+
+    // Conditionally spread like the advisors above, and deliberately not like
+    // ask_user or propose_settings_change: those are always registered and
+    // decline at runtime. Here the guarantee is that the tool does not exist
+    // when the bot was addressed directly, so a direct question can never be
+    // answered with silence.
+    ...(ctx.onSilence
+      ? {
+          stay_silent: tool({
+            description:
+              "Say nothing at all, and end the turn. Use this when you have nothing specific to contribute — no message from this chat, no member, no event or project, no fact you can cite — or when what you would otherwise write is advice, considerations, or suggestions rather than a specific. Staying silent is a correct outcome, not a failure.",
+            inputSchema: z.object({
+              reason: z
+                .string()
+                .describe("A few words on why there was nothing worth adding"),
+            }),
+            execute: async ({ reason }) => {
+              console.log("[main-agent:stay_silent]", reason.slice(0, 120));
+              ctx.onSilence?.(reason);
+              return {
+                silent: true,
+                note: "Nothing will be sent. End your turn now with no further text.",
+              };
+            },
+          }),
         }
       : {}),
 
