@@ -116,13 +116,16 @@ export function startDigestScheduler(): void {
   }
 
   if (!aiProfileCron) {
-    // Monthly, 4am SGT on the 1st — off-peak and well clear of the 9am digest.
+    // 4am SGT on the 1st and 15th — off-peak and well clear of the 9am digest.
     //
-    // Monthly rather than nightly because a profile is a slow-moving summary of
-    // who someone is; a day of chat rarely changes it enough to be worth a model
-    // call per member. New joiners don't wait for this — the boot backfill picks
-    // them up on the next deploy.
-    aiProfileCron = new Cron("0 4 1 * *", SGT, async () => {
+    // Twice a month rather than nightly because a profile is a slow-moving
+    // summary of who someone is; a day of chat rarely changes it enough to be
+    // worth a model call per member. Halving the window halves how long a
+    // member stays unfindable by search after their evidence moves, and costs
+    // nothing for members whose evidence has not — the sweep prices itself off
+    // the evidence predicate, not the schedule. New joiners wait for neither:
+    // the boot backfill picks them up on the next deploy.
+    aiProfileCron = new Cron("0 4 1,15 * *", SGT, async () => {
       try {
         await aiProfileService.regenerateStale();
       } catch (err) {
@@ -130,7 +133,7 @@ export function startDigestScheduler(): void {
       }
     });
 
-    console.log("AI profile scheduler started (monthly, 1st at 4am SGT)");
+    console.log("AI profile scheduler started (1st and 15th at 4am SGT)");
   }
 }
 

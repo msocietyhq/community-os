@@ -56,11 +56,26 @@ const MODEL_MAX_RETRIES = 3;
 const PROMPT_VERSION = 3;
 
 /**
- * New messages needed before chat alone triggers a regeneration. Any single
- * memory is enough (they're distilled and rare); raw messages are noisy, and
- * without a threshold one "salam" costs a Sonnet call to rewrite the same prose.
+ * New messages needed before chat alone triggers a regeneration. Raw messages
+ * are noisy, and without a threshold one "salam" costs a model call to rewrite
+ * the same prose.
  */
 const MIN_NEW_MESSAGES = 10;
+
+/**
+ * New recorded facts needed before memories alone trigger a regeneration.
+ *
+ * This was effectively 1 (an EXISTS), on the stated grounds that memories are
+ * distilled and rare. They are not rare: the extractor runs on every message
+ * clearing its pre-filter and routinely writes several facts from one message.
+ * Nine of the fourteen members swept on 2026-09-01 were selected by four or
+ * fewer memories that largely restated what their profile already said.
+ *
+ * Set against the twice-monthly sweep: halving the window roughly halves how
+ * long a member's new evidence waits, which on its own would raise the number
+ * of regenerations per month. This holds the total flat.
+ */
+const MIN_NEW_MEMORIES = 5;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -309,7 +324,12 @@ export const aiProfileService = {
         messages: [{ role: "user", content: evidence }],
         maxRetries: MODEL_MAX_RETRIES,
       },
-      { caller: "ai-profile-generation", tier: "smart", class: "background" },
+      // `fast` (Haiku), not `smart` (Sonnet). Sonnet is 3x the rate on both
+      // input and output for a job that is one-shot structured summarisation,
+      // and the whole-community sweep is the largest single line in the AI
+      // budget. Set here rather than by repointing `ai.model.smart`, which is
+      // shared with chime-in turns, tech-news and the digest.
+      { caller: "ai-profile-generation", tier: "fast", class: "background" },
     );
 
     // `aiService.generateObject` widens its result to `unknown` (its return type
@@ -467,7 +487,7 @@ export const aiProfileService = {
   /**
    * Regenerate members whose evidence has moved since their last run.
    *
-   * Runs monthly. Without the evidence check this would pay for a model call
+   * Runs twice a month. Without the evidence check this would pay for a model call
    * and an embedding per member per run to rewrite identical text.
    */
   async regenerateStale(): Promise<SweepResult> {
@@ -483,12 +503,12 @@ export const aiProfileService = {
         AND (
           m.ai_generated_at IS NULL
           OR m.ai_prompt_version < ${PROMPT_VERSION}
-          OR EXISTS (
-            SELECT 1 FROM bot_memories bm
+          OR (
+            SELECT count(*) FROM bot_memories bm
             WHERE bm.subject_telegram_id::text = u.telegram_id
               AND bm.superseded_by IS NULL
               AND bm.created_at > m.ai_generated_at
-          )
+          ) >= ${MIN_NEW_MEMORIES}
           OR (
             SELECT count(*) FROM telegram_messages tm
             WHERE tm.from_user_id::text = u.telegram_id
