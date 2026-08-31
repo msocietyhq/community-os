@@ -8,6 +8,7 @@ import {
   SETTING_GROUP_LABELS,
   callbackFor,
   keysInGroup,
+  previewText,
   type SettingGroup,
   type SettingKey,
   type SettingsSnapshot,
@@ -52,6 +53,18 @@ function formatValue(key: SettingKey, value: unknown): string {
   return format(value);
 }
 
+/**
+ * A setting value, rendered as the literal it is.
+ *
+ * `<code>` rather than italics: a cap, a model id, a time range is a value to
+ * be read exactly, not prose to be emphasised — and the monospace run makes a
+ * `from → to` pair scan as one thing. Italics stay for what is genuinely
+ * commentary: the rationale, the "via AI" tag, the page counter.
+ */
+function code(value: string): string {
+  return `<code>${escapeHtml(value)}</code>`;
+}
+
 function display(key: SettingKey, snapshot: SettingsSnapshot): string {
   return formatValue(key, snapshot[key]);
 }
@@ -73,6 +86,25 @@ function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   return value === def.default ? "default" : "custom";
 }
 
+
+/**
+ * A date as an admin reads it, in the community's timezone.
+ *
+ * ISO (`2026-08-22`) is what the history page shipped with; it is also UTC,
+ * so a late-evening change in Singapore was filed under the previous day. The
+ * year stays on because an audit trail is exactly where a bare "22 Aug" stops
+ * being unambiguous.
+ */
+const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Singapore",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+function formatDay(at: Date | null): string {
+  return at ? DAY_FORMAT.format(at) : "unknown date";
+}
 
 // ── Index ───────────────────────────────────────────────────
 
@@ -103,13 +135,13 @@ export function renderIndexPage(
     .row()
     .text("Recent changes", "set:hist::0");
 
-  // Italic values in ordinary text rather than an aligned <pre> table:
-  // Telegram doesn't parse entities inside <pre>, so alignment and italics are
-  // mutually exclusive, and the italics read better.
+  // Values in ordinary text rather than an aligned <pre> table: Telegram
+  // doesn't parse entities inside <pre>, so alignment and per-value markup are
+  // mutually exclusive, and the marked-up values read better.
   const rows = keys
     .map(
       (key) =>
-        `${escapeHtml(BOT_SETTINGS[key].label)} — <i>${escapeHtml(indexValue(key, snapshot))}</i>`,
+        `${escapeHtml(BOT_SETTINGS[key].label)} — ${code(indexValue(key, snapshot))}`,
     )
     .join("\n");
 
@@ -167,6 +199,7 @@ function tierOf(key: SettingKey): AiTier | null {
 export function renderSettingPage(
   key: SettingKey,
   snapshot: SettingsSnapshot,
+  /** `by` is the actor's display name; null means no recorded actor. */
   changed: { by: string | null; at: Date | null } | null,
 ): RenderedPage {
   const def = BOT_SETTINGS[key];
@@ -272,7 +305,7 @@ export function renderSettingPage(
   const changedLine =
     changed?.at == null
       ? "never"
-      : `${changed.at.toISOString().slice(0, 10)}${changed.by ? "" : " (system)"}`;
+      : `${formatDay(changed.at)} · ${changed.by ?? "system"}`;
 
   // The full value for text settings, in a <pre> block. Entities aren't parsed
   // inside <pre>, so the admin's own markup shows as written rather than being
@@ -285,8 +318,8 @@ export function renderSettingPage(
   const text =
     `<b>${escapeHtml(def.label)}</b>\n\n` +
     `${escapeHtml(def.description)}\n${body}\n` +
-    `Current:  <i>${escapeHtml(display(key, snapshot))}</i>\n` +
-    `Default:  <i>${escapeHtml(formatValue(key, def.default))}</i>\n` +
+    `Current:  ${code(display(key, snapshot))}\n` +
+    `Default:  ${code(formatValue(key, def.default))}\n` +
     `Changed:  <i>${escapeHtml(changedLine)}</i>`;
 
   return page(text, keyboard);
@@ -306,9 +339,9 @@ export function renderConfirmation(change: {
 
   const text =
     `✓ <b>Updated — ${escapeHtml(def.label)}</b>\n\n` +
-    `<i>${escapeHtml(formatValue(change.key, change.from))}</i>` +
+    `${code(formatValue(change.key, change.from))}` +
     `  →  ` +
-    `<i>${escapeHtml(formatValue(change.key, change.to))}</i>`;
+    `${code(formatValue(change.key, change.to))}`;
 
   return page(text, keyboard);
 }
@@ -321,8 +354,8 @@ function line(key: string, from: unknown, to: unknown): string {
   if (!def) return escapeHtml(`${key}: ?`);
   return (
     `${escapeHtml(def.label)}: ` +
-    `<i>${escapeHtml(formatValue(settingKey, from))}</i> → ` +
-    `<i>${escapeHtml(formatValue(settingKey, to))}</i>`
+    `${code(formatValue(settingKey, from))} → ` +
+    `${code(formatValue(settingKey, to))}`
   );
 }
 
@@ -381,4 +414,228 @@ export function renderApplied(
     rows.join("\n");
 
   return page(text, keyboard);
+}
+
+// ── History ─────────────────────────────────────────────────
+
+/**
+ * One audit row, in the shape the renderer needs.
+ *
+ * Declared structurally rather than imported from the settings service: a
+ * `lib/` renderer must not reach up into `services/`. `HistoryEntry` there is
+ * assignable to this.
+ */
+export interface HistoryRow {
+  key: string;
+  action: string;
+  from: unknown;
+  to: unknown;
+  actor: { name: string } | null;
+  at: Date | null;
+}
+
+/** Anything that isn't a value the registry still understands. */
+function rawHistoricValue(value: unknown): string {
+  if (value === null || value === undefined) return "unset";
+  if (typeof value === "string") return previewText(value);
+  return previewText(JSON.stringify(value));
+}
+
+/**
+ * Formats a value read back out of the audit trail.
+ *
+ * A snapshot value has been through `buildSnapshot`, so `format` can trust it.
+ * A historical one has not: it may be a shape from before a setting was
+ * retyped, or name a model since dropped from the catalog — and that key's
+ * `format` is `AI_CATALOG[v].label`, which throws on a missing entry. One row
+ * like that would otherwise take down the whole page, so the value is
+ * re-validated first and anything that fails falls back to its raw form.
+ */
+function formatHistoricValue(key: string, value: unknown): string {
+  const def = BOT_SETTINGS[key as SettingKey];
+  if (!def) return rawHistoricValue(value);
+
+  const parsed = def.schema.safeParse(value);
+  if (!parsed.success) return rawHistoricValue(value);
+
+  // A text setting's own `format` collapses to "custom", which as a history
+  // line reads "custom → custom" and answers nothing. The whole point of the
+  // line is what changed, so preview the text itself.
+  if (def.control === "text") {
+    return parsed.data === null ? "silent" : rawHistoricValue(parsed.data);
+  }
+
+  try {
+    return formatValue(key as SettingKey, parsed.data);
+  } catch {
+    return rawHistoricValue(value);
+  }
+}
+
+interface HistoryGroup {
+  /** Display name, or null for a change with no recorded actor. */
+  actor: string | null;
+  day: string;
+  rows: HistoryRow[];
+}
+
+/**
+ * Collapses consecutive rows by who made them and when.
+ *
+ * Only the attribution is shared, so only the attribution is hoisted — each
+ * setting keeps its own line. A change the AI drafted is rendered exactly like
+ * one made from the menu: an admin confirmed both, and the trail records the
+ * settings that actually moved. Presenting a draft as a labelled bundle put
+ * the AI's account of its own intent next to the facts, where it read as a
+ * description of the change rather than as a claim made before it.
+ *
+ * Grouping is on the day rather than the timestamp because the day is what the
+ * header shows; a group can never then claim a time its rows didn't happen at.
+ */
+function groupHistory(entries: HistoryRow[]): HistoryGroup[] {
+  const groups: HistoryGroup[] = [];
+
+  for (const entry of entries) {
+    const day = formatDay(entry.at);
+    const last = groups.at(-1);
+
+    if (
+      last &&
+      last.day === day &&
+      last.actor === (entry.actor?.name ?? null)
+    ) {
+      last.rows.push(entry);
+      continue;
+    }
+
+    groups.push({ actor: entry.actor?.name ?? null, day, rows: [entry] });
+  }
+
+  return groups;
+}
+
+function historyRowLine(row: HistoryRow): string {
+  const def = BOT_SETTINGS[row.key as SettingKey];
+  const label = def?.label ?? row.key;
+
+  // "update" is the overwhelming majority and adds nothing next to an arrow
+  // that already shows the update. A reset or an undo is worth calling out.
+  const action =
+    row.action === "update" ? "" : ` <i>(${escapeHtml(row.action)})</i>`;
+
+  return (
+    `• ${escapeHtml(label)}${action}  ` +
+    `${code(formatHistoricValue(row.key, row.from))} → ` +
+    `${code(formatHistoricValue(row.key, row.to))}`
+  );
+}
+
+function historyGroupBlock(group: HistoryGroup): string {
+  // Capped: an actor's name falls back to the Telegram display name when
+  // there is no handle, and that is whatever the member typed into their
+  // profile — emoji, padding and all.
+  const actor = previewText(group.actor ?? "system", 32);
+  const header = `<b>${escapeHtml(group.day)}</b> · ${escapeHtml(actor)}`;
+
+  return `${header}\n${group.rows.map(historyRowLine).join("\n")}`;
+}
+
+/**
+ * Telegram rejects a message over this outright — the admin gets nothing, not
+ * a clipped list — and it counts the text *after* entities are parsed, so the
+ * markup itself is free.
+ */
+const TELEGRAM_TEXT_LIMIT = 4096;
+
+/**
+ * Length as Telegram counts it: the markup this file emits doesn't count.
+ *
+ * Every tag a renderer here can emit has to be listed — a tag left out is
+ * counted as visible text, and the page budget then trims entries that would
+ * have fitted.
+ */
+function visibleLength(html: string): number {
+  return html.replace(/<\/?(?:b|i|code)>/g, "").length;
+}
+
+/**
+ * Entries per page — the same twenty the flat list showed.
+ *
+ * Grouped, an entry is taller than the single line it used to be: twenty
+ * typical ones come to about 570 characters, but twenty at their worst (a
+ * padded display name, two truncated templates each) come to roughly 4750 and
+ * would lose the whole message rather than the overflow. The budget below is
+ * what makes twenty safe — it stops filling the page early and `Older` resumes
+ * from exactly where it stopped, so a pathological run costs a tap, not an
+ * entry.
+ */
+export const HISTORY_PAGE_SIZE = 20;
+
+const HISTORY_HEADING = "🕘 <b>Recent changes</b>";
+
+export function renderHistoryPage(
+  /**
+   * Up to `HISTORY_PAGE_SIZE + 1` entries. The extra one is never rendered —
+   * it exists so the renderer knows a next page is there without a count
+   * query.
+   */
+  entries: HistoryRow[],
+  key: SettingKey | null,
+  offset = 0,
+): RenderedPage {
+  const keyboard = new InlineKeyboard();
+
+  if (entries.length === 0) {
+    backButton(keyboard, key);
+    return page(`${HISTORY_HEADING}\n\nNo changes recorded yet.`, keyboard);
+  }
+
+  const blocks: string[] = [];
+  let used = visibleLength(HISTORY_HEADING) + 2;
+  let shown = 0;
+
+  for (const group of groupHistory(entries.slice(0, HISTORY_PAGE_SIZE))) {
+    const block = historyGroupBlock(group);
+    const cost = visibleLength(block) + (blocks.length === 0 ? 0 : 2);
+
+    // The first group goes on regardless: a page that dropped its only group
+    // would leave `Older` pointing at the offset it is already on, and an
+    // entry no navigation could ever reach.
+    if (blocks.length > 0 && used + cost > TELEGRAM_TEXT_LIMIT) break;
+
+    used += cost;
+    blocks.push(block);
+    shown += group.rows.length;
+  }
+
+  const hasMore = entries.length > shown;
+  const paginated = hasMore || offset > 0;
+
+  const jumpTo = (to: number) => callbackFor("hist", key ?? "", String(to));
+
+  if (offset > 0) {
+    keyboard.text("‹ Newer", jumpTo(Math.max(0, offset - HISTORY_PAGE_SIZE)));
+  }
+  if (hasMore) {
+    keyboard.text("Older ›", jumpTo(offset + shown));
+  }
+  if (paginated) keyboard.row();
+  backButton(keyboard, key);
+
+  // The range replaces a page count: knowing the total would cost a second
+  // COUNT query on every tap, and "11–20" answers the same question.
+  const range = paginated ? `  <i>${offset + 1}–${offset + shown}</i>` : "";
+
+  return page(
+    `${HISTORY_HEADING}${range}\n\n${blocks.join("\n\n")}`,
+    keyboard,
+  );
+}
+
+function backButton(keyboard: InlineKeyboard, key: SettingKey | null): void {
+  if (key) {
+    keyboard.text("‹ Back", callbackFor("view", key));
+  } else {
+    keyboard.text("‹ Settings", "set:idx:availability");
+  }
 }

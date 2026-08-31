@@ -35,6 +35,8 @@ import {
   renderApplied,
   renderConfirmation,
   renderDraftCard,
+  renderHistoryPage,
+  HISTORY_PAGE_SIZE,
   renderIndexPage,
   renderSettingPage,
   type RenderedPage,
@@ -52,6 +54,9 @@ import { escapeHtml } from "../lib/telegram-html";
 export const settingsHandler = new Composer<BotContext>();
 
 export const SETTINGS_TEXT_CONVERSATION = "settings-text-edit";
+
+/** Far past any real trail; only there to bound a hand-crafted callback. */
+const MAX_HISTORY_OFFSET = 100_000;
 
 interface AdminActor extends Actor {
   role: Role;
@@ -174,7 +179,7 @@ settingsHandler.callbackQuery(/^set:view:(.+)$/, async (ctx) => {
   const page = renderSettingPage(
     key,
     snapshot,
-    latest ? { by: latest.performedBy, at: latest.at } : null,
+    latest ? { by: latest.actor?.name ?? null, at: latest.at } : null,
   );
 
   await showPage(ctx, page);
@@ -263,35 +268,14 @@ settingsHandler.callbackQuery(/^set:hist:([^:]*):(\d+)$/, async (ctx) => {
   const rawKey = ctx.match![1]!;
   const key = rawKey && isSettingKey(rawKey) ? rawKey : null;
 
-  const entries = await getHistory(key, 20);
+  // Callback data is a string any client can send, so the offset is clamped
+  // rather than trusted — an OFFSET past Postgres' bigint range errors out.
+  const offset = Math.min(Number(ctx.match![2]), MAX_HISTORY_OFFSET);
 
-  const body =
-    entries.length === 0
-      ? "No changes recorded yet."
-      : entries
-          .map((entry) => {
-            const label = isSettingKey(entry.key)
-              ? BOT_SETTINGS[entry.key].label
-              : entry.key;
-            const when = entry.at?.toISOString().slice(0, 10) ?? "?";
-            const via = entry.source === "ai_draft" ? " · via AI" : "";
-            return `• ${escapeHtml(label)} · <i>${escapeHtml(entry.action)}</i> · ${when}${via}`;
-          })
-          .join("\n");
-
-  await ctx.answerCallbackQuery();
-  await ctx.editMessageText(`🕘 <b>Recent changes</b>\n\n${body}`, {
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          key
-            ? { text: "‹ Back", callback_data: `set:view:${key}` }
-            : { text: "‹ Settings", callback_data: "set:idx:availability" },
-        ],
-      ],
-    },
-  });
+  // One more than the page holds, so the renderer can tell there is a page
+  // after this one without a second COUNT query.
+  const entries = await getHistory(key, HISTORY_PAGE_SIZE + 1, offset);
+  await showPage(ctx, renderHistoryPage(entries, key, offset));
 });
 
 // ── Draft callbacks ─────────────────────────────────────────

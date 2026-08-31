@@ -7,7 +7,7 @@ import {
   type SettingsSnapshot,
 } from "@community-os/shared/bot-settings";
 import { db } from "../db";
-import { auditLog, botSettings } from "../db/schema";
+import { auditLog, botSettings, user } from "../db/schema";
 import { createAuditEntry } from "../middleware/audit";
 
 export type ChangeSource = "menu" | "ai_draft";
@@ -194,13 +194,27 @@ export async function applyChanges(
 
 // ── History ─────────────────────────────────────────────────
 
+export interface HistoryActor {
+  id: string;
+  /**
+   * How the actor is shown to an admin. The Telegram handle where there is
+   * one — it is short, unambiguous, and taps through to the profile — falling
+   * back to the account name, which is a decorated display name more often
+   * than not.
+   */
+  name: string;
+}
+
 export interface HistoryEntry {
   key: string;
   action: string;
   from: unknown;
   to: unknown;
   source: string | null;
-  performedBy: string | null;
+  /** Why, for a change the AI drafted. Null for a menu change. */
+  rationale: string | null;
+  /** Null for a change with no recorded actor — a migration or a seed. */
+  actor: HistoryActor | null;
   at: Date | null;
 }
 
@@ -214,21 +228,46 @@ function readBag(raw: unknown): ValueBag {
   return raw !== null && typeof raw === "object" ? (raw as ValueBag) : {};
 }
 
+function readActor(
+  id: string | null,
+  name: string | null,
+  username: string | null,
+): HistoryActor | null {
+  if (id === null) return null;
+  // The join misses when the account has since been deleted; the id is still
+  // evidence that a person, not the system, made the change.
+  return { id, name: username ? `@${username}` : (name ?? "unknown") };
+}
+
 export async function getHistory(
   key: SettingKey | null,
   limit = 20,
+  offset = 0,
 ): Promise<HistoryEntry[]> {
   const where =
     key === null
       ? eq(auditLog.entityType, "bot_setting")
       : and(eq(auditLog.entityType, "bot_setting"), eq(auditLog.entityId, key));
 
+  // Joined rather than resolved per row: the page renders up to twenty
+  // entries, and an id is not something an admin can read.
   const rows = await db
-    .select()
+    .select({
+      entityId: auditLog.entityId,
+      action: auditLog.action,
+      oldValue: auditLog.oldValue,
+      newValue: auditLog.newValue,
+      performedBy: auditLog.performedBy,
+      createdAt: auditLog.createdAt,
+      actorName: user.name,
+      actorUsername: user.telegramUsername,
+    })
     .from(auditLog)
+    .leftJoin(user, eq(user.id, auditLog.performedBy))
     .where(where)
     .orderBy(desc(auditLog.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 
   return rows.map((row) => {
     const newBag = readBag(row.newValue);
@@ -238,7 +277,9 @@ export async function getHistory(
       from: readBag(row.oldValue).value,
       to: newBag.value,
       source: typeof newBag.source === "string" ? newBag.source : null,
-      performedBy: row.performedBy,
+      rationale:
+        typeof newBag.rationale === "string" ? newBag.rationale : null,
+      actor: readActor(row.performedBy, row.actorName, row.actorUsername),
       at: row.createdAt,
     };
   });
