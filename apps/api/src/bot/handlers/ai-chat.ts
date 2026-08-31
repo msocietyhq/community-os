@@ -18,7 +18,7 @@ import { shouldResume, isExpired } from "../lib/pending-question";
 import {
   preFilter,
   offCooldown,
-
+  asideIfPermitted,
   recordChime,
   lastChimeAt,
   CHIME_IN_CONTEXT_MESSAGES,
@@ -297,8 +297,12 @@ aiChatHandler.on("message:text", async (ctx) => {
       // Groups clean the status message up after the turn; a DM keeps it as
       // history.
       progressClearAfterMs: isGroup ? GROUP_PROGRESS_CLEAR_MS : undefined,
-      askUser,
-      proposeSettings,
+      // Both post into the chat, so neither is available uninvited. ask_user
+      // would interrupt the room with a force_reply about a message that was
+      // never addressed to the bot, which is the interjection this whole path
+      // exists to avoid; withholding the callback is what removes the tool.
+      askUser: chimingIn ? undefined : askUser,
+      proposeSettings: chimingIn ? undefined : proposeSettings,
       // DM-only: the group gets the same sub-agent tree, without a running
       // commentary of every lookup the bot makes.
       trackAllTools: isPrivate,
@@ -329,7 +333,16 @@ aiChatHandler.on("message:text", async (ctx) => {
     logBotMessage(sentMsg, ctx.me, chatType, responseText);
   } catch (error) {
     console.error("AI chat error:", error);
-    await ctx.reply("Sorry, I encountered an error. Please try again later.", {
+    // An uninvited turn stays silent even when it fails. The member asked the
+    // room, not the bot, so an apology for a request they never made is the
+    // same unwanted interjection as a bad answer — and they have no idea what
+    // it is apologising for.
+    const notice = asideIfPermitted(
+      "Sorry, I encountered an error. Please try again later.",
+      chimingIn,
+    );
+    if (notice === null) return;
+    await ctx.reply(notice, {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
     });
   }

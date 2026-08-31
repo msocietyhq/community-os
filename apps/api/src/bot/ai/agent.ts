@@ -13,6 +13,7 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
+import { asideIfPermitted, answerIfPermitted } from "../lib/chime-in";
 import { guardToolResult } from "./tool-result-guard";
 import {
   SubagentProgress,
@@ -95,21 +96,33 @@ export async function runAgent({
   chimingIn,
   tier,
 }: AgentParams): Promise<AgentResult> {
+  /**
+   * A message the bot would send for its own reasons — an apology, or a prompt
+   * to go and set something up. On an uninvited turn there is nobody to say it
+   * to: the member asked the room, not the bot, and a notice they never asked
+   * for is the same unwanted interjection the chime-in gates exist to prevent.
+   *
+   * "Your profile is not set up yet" is the one that would have bitten. In a
+   * 500-member group plenty of people have no profile, so any chime-in they
+   * triggered would have answered a question they asked each other with a
+   * demand that they run /profile.
+   */
+  const aside = (text: string): AgentResult => ({
+    text: asideIfPermitted(text, chimingIn ?? false),
+    responseMessages: [],
+  });
+
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
-    return {
-      text: "Your profile is not set up yet. Please use /profile first to set up your community profile!",
-      responseMessages: [],
-    };
+    return aside(
+      "Your profile is not set up yet. Please use /profile first to set up your community profile!",
+    );
   }
 
   // Create a bearer token for this user's session
   const token = await getBotToken(telegramUser);
   if (!token) {
-    return {
-      text: "I'm having trouble authenticating you. Please try again later.",
-      responseMessages: [],
-    };
+    return aside("I'm having trouble authenticating you. Please try again later.");
   }
 
   // In-process API client with the user's auth token
@@ -247,7 +260,7 @@ export async function runAgent({
     // unwanted interjection the chime-in gates exist to prevent. Nobody is
     // waiting on this reply, so having nothing to say and saying nothing are
     // the same outcome.
-    if (chimingIn && !result.text) {
+    if (chimingIn && answerIfPermitted(result.text, true) === null) {
       console.log("[main-agent] chime-in produced no text — staying silent");
       await progress?.finish().catch(() => {});
       return {
@@ -278,10 +291,9 @@ export async function runAgent({
   } catch (error) {
     await progress?.finish().catch(() => {});
     if (error instanceof Error && error.message.includes("rate limit")) {
-      return {
-        text: "I'm being rate-limited right now. Please try again in a minute or two 🙏",
-        responseMessages: [],
-      };
+      return aside(
+        "I'm being rate-limited right now. Please try again in a minute or two 🙏",
+      );
     }
     throw error;
   }
