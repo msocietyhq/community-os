@@ -8,6 +8,7 @@ import {
 } from "@community-os/shared/bot-settings";
 import { db } from "../db";
 import { auditLog, botSettings } from "../db/schema";
+import { user } from "../db/schema/auth";
 import { createAuditEntry } from "../middleware/audit";
 
 export type ChangeSource = "menu" | "ai_draft";
@@ -201,6 +202,12 @@ export interface HistoryEntry {
   to: unknown;
   source: string | null;
   performedBy: string | null;
+  /**
+   * The actor's display name, resolved at read time rather than copied into
+   * the trail. A rename should show the person's current name everywhere, and
+   * the id alone is meaningless to an admin reading the history.
+   */
+  performedByName: string | null;
   at: Date | null;
 }
 
@@ -223,9 +230,21 @@ export async function getHistory(
       ? eq(auditLog.entityType, "bot_setting")
       : and(eq(auditLog.entityType, "bot_setting"), eq(auditLog.entityId, key));
 
+  // Left join, not inner: `performed_by` is nullable, and an entry written by
+  // the system — or by a user since deleted — must still appear in the trail.
   const rows = await db
-    .select()
+    .select({
+      entityId: auditLog.entityId,
+      action: auditLog.action,
+      oldValue: auditLog.oldValue,
+      newValue: auditLog.newValue,
+      performedBy: auditLog.performedBy,
+      createdAt: auditLog.createdAt,
+      actorName: user.name,
+      actorUsername: user.telegramUsername,
+    })
     .from(auditLog)
+    .leftJoin(user, eq(user.id, auditLog.performedBy))
     .where(where)
     .orderBy(desc(auditLog.createdAt))
     .limit(limit);
@@ -239,6 +258,9 @@ export async function getHistory(
       to: newBag.value,
       source: typeof newBag.source === "string" ? newBag.source : null,
       performedBy: row.performedBy,
+      performedByName:
+        row.actorName ??
+        (row.actorUsername ? `@${row.actorUsername}` : null),
       at: row.createdAt,
     };
   });

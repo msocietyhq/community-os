@@ -35,6 +35,7 @@ import {
   renderApplied,
   renderConfirmation,
   renderDraftCard,
+  renderHistoryPage,
   renderIndexPage,
   renderSettingPage,
   type RenderedPage,
@@ -174,7 +175,12 @@ settingsHandler.callbackQuery(/^set:view:(.+)$/, async (ctx) => {
   const page = renderSettingPage(
     key,
     snapshot,
-    latest ? { by: latest.performedBy, at: latest.at } : null,
+    latest
+      ? {
+          by: { id: latest.performedBy, name: latest.performedByName },
+          at: latest.at,
+        }
+      : null,
   );
 
   await showPage(ctx, page);
@@ -265,33 +271,21 @@ settingsHandler.callbackQuery(/^set:hist:([^:]*):(\d+)$/, async (ctx) => {
 
   const entries = await getHistory(key, 20);
 
-  const body =
-    entries.length === 0
-      ? "No changes recorded yet."
-      : entries
-          .map((entry) => {
-            const label = isSettingKey(entry.key)
-              ? BOT_SETTINGS[entry.key].label
-              : entry.key;
-            const when = entry.at?.toISOString().slice(0, 10) ?? "?";
-            const via = entry.source === "ai_draft" ? " · via AI" : "";
-            return `• ${escapeHtml(label)} · <i>${escapeHtml(entry.action)}</i> · ${when}${via}`;
-          })
-          .join("\n");
-
-  await ctx.answerCallbackQuery();
-  await ctx.editMessageText(`🕘 <b>Recent changes</b>\n\n${body}`, {
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          key
-            ? { text: "‹ Back", callback_data: `set:view:${key}` }
-            : { text: "‹ Settings", callback_data: "set:idx:availability" },
-        ],
-      ],
-    },
-  });
+  await showPage(
+    ctx,
+    renderHistoryPage(
+      entries.map((entry) => ({
+        key: entry.key,
+        action: entry.action,
+        from: entry.from,
+        to: entry.to,
+        source: entry.source,
+        actor: { id: entry.performedBy, name: entry.performedByName },
+        at: entry.at,
+      })),
+      key,
+    ),
+  );
 });
 
 // ── Draft callbacks ─────────────────────────────────────────

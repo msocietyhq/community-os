@@ -7,6 +7,7 @@ import {
   SETTING_GROUPS,
   SETTING_GROUP_LABELS,
   callbackFor,
+  isSettingKey,
   keysInGroup,
   type SettingGroup,
   type SettingKey,
@@ -71,6 +72,59 @@ function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   const value = snapshot[key];
   if (value === null) return "silent";
   return value === def.default ? "default" : "custom";
+}
+
+/**
+ * Formats a value read back out of the audit trail.
+ *
+ * Trail values are raw jsonb, so a pause deadline arrives as a string and its
+ * `format` — which calls `Date` methods — would throw on it. Parsing through
+ * the setting's own schema first restores the real type. A value that no
+ * longer parses is shown as written rather than dropping the row: a garbled
+ * entry is still evidence of who changed what.
+ */
+function trailValue(key: SettingKey, raw: unknown): string {
+  const parsed = BOT_SETTINGS[key].schema.safeParse(raw);
+  if (parsed.success) return formatValue(key, parsed.data);
+  return raw === undefined ? "?" : JSON.stringify(raw);
+}
+
+/** Who made a change: the user id as stored, plus their resolved name. */
+export interface ChangeActor {
+  id: string | null;
+  name: string | null;
+}
+
+/**
+ * A null id means nobody was attributed — a migration or a seed wrote it. A
+ * name that failed to resolve means the account is gone, which is worth
+ * showing as such rather than silently reading like a system change.
+ */
+function actorLabel(actor: ChangeActor): string {
+  if (actor.name) return actor.name;
+  return actor.id ? "deleted account" : "system";
+}
+
+/**
+ * Timestamps are shown in SGT to the minute. The date alone was ambiguous —
+ * a run of edits made in one sitting all collapsed onto the same day.
+ */
+function stamp(at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(at);
+
+  const at_ = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return (
+    `${at_("year")}-${at_("month")}-${at_("day")} ` +
+    `${at_("hour")}:${at_("minute")}`
+  );
 }
 
 
@@ -167,7 +221,7 @@ function tierOf(key: SettingKey): AiTier | null {
 export function renderSettingPage(
   key: SettingKey,
   snapshot: SettingsSnapshot,
-  changed: { by: string | null; at: Date | null } | null,
+  changed: { by: ChangeActor; at: Date | null } | null,
 ): RenderedPage {
   const def = BOT_SETTINGS[key];
   const keyboard = new InlineKeyboard();
@@ -272,7 +326,7 @@ export function renderSettingPage(
   const changedLine =
     changed?.at == null
       ? "never"
-      : `${changed.at.toISOString().slice(0, 10)}${changed.by ? "" : " (system)"}`;
+      : `${stamp(changed.at)} · ${actorLabel(changed.by)}`;
 
   // The full value for text settings, in a <pre> block. Entities aren't parsed
   // inside <pre>, so the admin's own markup shows as written rather than being
@@ -290,6 +344,61 @@ export function renderSettingPage(
     `Changed:  <i>${escapeHtml(changedLine)}</i>`;
 
   return page(text, keyboard);
+}
+
+// ── History ─────────────────────────────────────────────────
+
+export interface HistoryRow {
+  key: string;
+  action: string;
+  from: unknown;
+  to: unknown;
+  /** `ai_draft` when the change came out of a proposed draft. */
+  source: string | null;
+  actor: ChangeActor;
+  at: Date | null;
+}
+
+/**
+ * The audit trail as an admin reads it: what changed, from what to what, when,
+ * and by whom. It used to render the key, the action and the date only, which
+ * answered none of the questions anybody opens this page with.
+ */
+export function renderHistoryPage(
+  entries: HistoryRow[],
+  key: SettingKey | null,
+): RenderedPage {
+  const keyboard = new InlineKeyboard().text(
+    key ? "‹ Back" : "‹ Settings",
+    key ? callbackFor("view", key) : "set:idx:availability",
+  );
+
+  const rows = entries.map((entry) => {
+    const settingKey = isSettingKey(entry.key) ? entry.key : null;
+    const label = settingKey ? BOT_SETTINGS[settingKey].label : entry.key;
+
+    // A removed setting has no formatter left, so its values are shown raw
+    // rather than hiding a row the trail still holds.
+    const change = settingKey
+      ? `${trailValue(settingKey, entry.from)} → ${trailValue(settingKey, entry.to)}`
+      : `${JSON.stringify(entry.from) ?? "?"} → ${JSON.stringify(entry.to) ?? "?"}`;
+
+    const meta = [
+      entry.action,
+      entry.at ? stamp(entry.at) : "?",
+      actorLabel(entry.actor),
+      ...(entry.source === "ai_draft" ? ["via AI"] : []),
+    ].join(" · ");
+
+    return (
+      `• <b>${escapeHtml(label)}</b> — <i>${escapeHtml(change)}</i>\n` +
+      `   <i>${escapeHtml(meta)}</i>`
+    );
+  });
+
+  const body = rows.length === 0 ? "No changes recorded yet." : rows.join("\n");
+
+  return page(`🕘 <b>Recent changes</b>\n\n${body}`, keyboard);
 }
 
 // ── Confirmation ────────────────────────────────────────────
