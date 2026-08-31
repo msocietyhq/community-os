@@ -661,10 +661,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       : {}),
 
     // Conditionally spread like the advisors above, and deliberately not like
-    // ask_user or propose_settings_change: those are always registered and
-    // decline at runtime. Here the guarantee is that the tool does not exist
-    // when the bot was addressed directly, so a direct question can never be
-    // answered with silence.
+    // ask_user or propose_settings_change, which are always registered and
+    // decline at runtime. The tool genuinely does not exist when the bot was
+    // addressed, so a direct question can never be answered with silence.
     ...(ctx.onSilence
       ? {
           stay_silent: tool({
@@ -676,15 +675,10 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
                 .describe("A few words on why there was nothing worth adding"),
             }),
             execute: async ({ reason }, { messages }) => {
-              // Refuse to abstain on an assumption. Measured at roughly a coin
-              // flip: the model calls this having searched nothing at all, and
-              // reports there was nothing in the chat — which it has no basis
-              // for. The prompt already says deciding without looking is the
-              // failure mode; that wasn't enough, so this enforces it.
-              // Refused once, not repeatedly. A model that comes back and
-              // insists after being told to look is honoured: refusing again
-              // would spend the step budget arguing, and silence is the safe
-              // outcome regardless.
+              // Refuse to abstain on an assumption — see hasLookedUp. Refused
+              // once only: a model that insists after being sent to look is
+              // honoured, since refusing again would spend the step budget
+              // arguing and silence is the safe outcome either way.
               if (!hasLookedUp(messages) && !hasAttemptedSilence(messages)) {
                 console.log("[main-agent:stay_silent] refused — nothing searched yet");
                 return {

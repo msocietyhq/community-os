@@ -223,11 +223,11 @@ ${schemaSDL}`;
 /**
  * The role for a turn nobody asked for.
  *
- * Deliberately not an addition to responderRole: that document is written to
- * make the model be of service to a request, and a "stay quiet" paragraph
- * appended to it argues with everything above it. This replaces it outright,
- * and drops the schema, the service list, write operations and ask_user — none
- * of which apply to a decision that will usually be "say nothing".
+ * Replaces responderRole rather than adding to it: that document is written to
+ * make the model be of service, and a "stay quiet" paragraph appended to it
+ * argues with everything above. Leaves out the schema, the service list, write
+ * operations and ask_user, none of which apply to a decision that will usually
+ * be "say nothing".
  */
 function chimeInRole(): string {
   return `## You were not addressed

@@ -286,10 +286,8 @@ aiChatHandler.on("message:text", async (ctx) => {
   try {
     await ctx.replyWithChatAction("typing");
     // Every one of these puts something in the chat, so an uninvited turn is
-    // handed none of them. Note only stay_silent is actually removed from the
-    // tool list by this; ask_user and propose_settings_change stay registered
-    // and decline at runtime — the callback is the route to the chat, not the
-    // tool's existence.
+    // handed none of them. See permittedCallbacks for what that does and does
+    // not guarantee about the tools themselves.
     const permitted = permittedCallbacks(policy.kind, {
       progressSink,
       askUser,
@@ -306,7 +304,8 @@ aiChatHandler.on("message:text", async (ctx) => {
       senderTelegramId: ctx.from?.id ?? null,
       ...permitted,
       // Groups clean the status message up after the turn; a DM keeps it as
-      // history. Unrelated to whether the bot was spoken to.
+      // history. Turns on chat type, not on whether the bot was spoken to —
+      // though an uninvited turn has no sink for it to act on anyway.
       progressClearAfterMs: isGroup ? GROUP_PROGRESS_CLEAR_MS : undefined,
       // DM-only: the group gets the same sub-agent tree, without a running
       // commentary of every lookup the bot makes.

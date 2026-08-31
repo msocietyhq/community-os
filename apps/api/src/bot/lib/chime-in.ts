@@ -268,11 +268,10 @@ export const LOOKUP_TOOLS: ReadonlySet<string> = new Set([
 /**
  * Whether the agent has actually searched before it tries to stay silent.
  *
- * Measured at roughly a coin flip on the chime-in prompt: the model would call
- * `stay_silent` having called nothing at all, and report that there was nothing
- * in the chat — an assertion it had no basis for. The prompt already says
- * "deciding without looking is the failure mode", and that was not enough, so
- * the tool enforces it rather than asking for it.
+ * Measured at roughly a coin flip: the model would call `stay_silent` having
+ * searched nothing at all and report that there was nothing in the chat — an
+ * assertion it had no basis for. The prompt already says deciding without
+ * looking is the failure mode, and saying it was not enough.
  */
 export function hasLookedUp(messages: ModelMessage[]): boolean {
   return calledTool(messages, (name) => LOOKUP_TOOLS.has(name));

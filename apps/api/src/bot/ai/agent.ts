@@ -81,8 +81,7 @@ export async function runAgent({
 }: AgentParams): Promise<AgentOutcome> {
   /**
    * The bot talking about its own state rather than answering anything. Whether
-   * it reaches the chat is not this function's business — `deliver` decides,
-   * and withholds it from a room that never asked.
+   * it reaches the chat is `deliver`'s call, not this function's.
    */
   const notice = (text: string): AgentOutcome => ({
     kind: "notice",
@@ -230,10 +229,9 @@ export async function runAgent({
       policy,
     );
 
-    // Fire-and-forget: track which memories were used. Skipped on a silent turn
-    // to match the behaviour before this was extracted — access counts feed
-    // memory ranking, and a chime-in that decided to say nothing should not
-    // promote whatever it happened to recall.
+    // Fire-and-forget, and skipped when nothing was said: access counts feed
+    // memory ranking, so a turn that stayed silent must not promote whatever it
+    // happened to recall.
     if (outcome.kind !== "silent" && memories.length > 0) {
       incrementAccessCount(memories.map((m) => m.id));
     }

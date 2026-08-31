@@ -577,9 +577,9 @@ export class SubagentProgress {
   /**
    * Schedules the status message's removal.
    *
-   * Fire-and-forget: the turn is over and the reply is already on its way, so
-   * nothing waits on this. A process restart inside the window orphans the
-   * message — the same trade `lastChimeByChat` in lib/chime-in.ts already takes.
+   * Fire-and-forget: the turn is over and the handler posts the reply moments
+   * later, so nothing waits on this. A process restart inside the window
+   * orphans the message — the same trade `lastChimeByChat` already takes.
    */
   private scheduleClear(): void {
     if (this.clearAfterMs === undefined) return;
