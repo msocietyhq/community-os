@@ -42,12 +42,20 @@ export interface RecalledMemory {
 }
 
 /**
- * Check for an existing semantically similar memory (cosine > 0.85)
- * with the same subject and category.
+ * Check for an existing semantically similar memory (cosine > 0.85) about the
+ * same subject, in the same category.
+ *
+ * Matched on `subject_telegram_id` when the subject resolved to a member, and
+ * only on the free-text `subject` when it did not. That string is whatever the
+ * model happened to write: the corpus holds 248 distinct subject strings for
+ * 165 resolved members, with one person appearing as "Syafiq Hanafee",
+ * "@iamfeek" and "iamfeek". Keying on it let every spelling of a name carry its
+ * own untouchable copy of the same fact.
  */
 async function findDuplicate(
   embedding: number[],
   subject: string | null | undefined,
+  subjectTelegramId: number | null | undefined,
   category: string,
 ): Promise<{ id: string; content: string } | null> {
   const vectorLiteral = `[${embedding.join(",")}]`;
@@ -58,7 +66,9 @@ async function findDuplicate(
     sql`1 - (${botMemories.embedding} <=> ${vectorLiteral}::vector) > 0.85`,
   ];
 
-  if (subject) {
+  if (subjectTelegramId != null) {
+    conditions.push(eq(botMemories.subjectTelegramId, subjectTelegramId));
+  } else if (subject) {
     conditions.push(eq(botMemories.subject, subject));
   }
 
@@ -90,46 +100,52 @@ export async function saveMemory(memory: MemoryInput): Promise<SaveMemoryResult>
   const duplicate = await findDuplicate(
     embedding,
     memory.subject,
+    memory.subjectTelegramId,
     memory.category,
   );
 
-  if (duplicate) {
-    // If content is essentially the same, skip
-    if (duplicate.content.toLowerCase() === memory.content.toLowerCase()) {
-      return { id: null, status: "skipped_duplicate" };
-    }
-
-    // Supersede the old memory
-    await db
-      .update(botMemories)
-      .set({
-        supersededBy: sql`gen_random_uuid()`, // placeholder, will be replaced
-        supersededAt: new Date(),
-      })
-      .where(eq(botMemories.id, duplicate.id));
+  if (
+    duplicate &&
+    duplicate.content.toLowerCase() === memory.content.toLowerCase()
+  ) {
+    return { id: null, status: "skipped_duplicate" };
   }
 
-  const [inserted] = await db
-    .insert(botMemories)
-    .values({
-      content: memory.content,
-      category: memory.category,
-      subject: memory.subject ?? null,
-      subjectTelegramId: memory.subjectTelegramId ?? null,
-      sourceChatId: memory.sourceChatId ?? null,
-      sourceMessageId: memory.sourceMessageId ?? null,
-      confidence: memory.confidence ?? 0.8,
-      embedding,
-    })
-    .returning({ id: botMemories.id });
+  // Insert first, then point the old row at the new one, both in one
+  // transaction.
+  //
+  // This previously ran as three statements outside a transaction, writing
+  // `gen_random_uuid()` into `superseded_by` as a placeholder and replacing it
+  // afterwards. A failure between the two left the old memory superseded by an
+  // id matching no row: filtered out of every recall query by
+  // `superseded_by IS NULL`, and indistinguishable from a real supersede, so
+  // nothing could find it again to repair it.
+  const inserted = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(botMemories)
+      .values({
+        content: memory.content,
+        category: memory.category,
+        subject: memory.subject ?? null,
+        subjectTelegramId: memory.subjectTelegramId ?? null,
+        sourceChatId: memory.sourceChatId ?? null,
+        sourceMessageId: memory.sourceMessageId ?? null,
+        confidence: memory.confidence ?? 0.8,
+        embedding,
+      })
+      .returning({ id: botMemories.id });
 
-  // Update the superseded record to point to the new one
+    if (duplicate && row) {
+      await tx
+        .update(botMemories)
+        .set({ supersededBy: row.id, supersededAt: new Date() })
+        .where(eq(botMemories.id, duplicate.id));
+    }
+
+    return row;
+  });
+
   if (duplicate && inserted) {
-    await db
-      .update(botMemories)
-      .set({ supersededBy: inserted.id })
-      .where(eq(botMemories.id, duplicate.id));
-
     return { id: inserted.id, status: "superseded", supersededId: duplicate.id };
   }
 
