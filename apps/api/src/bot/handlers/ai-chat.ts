@@ -18,12 +18,12 @@ import { shouldResume, isExpired } from "../lib/pending-question";
 import {
   preFilter,
   offCooldown,
-  asideIfPermitted,
   recordChime,
   lastChimeAt,
   CHIME_IN_CONTEXT_MESSAGES,
 } from "../lib/chime-in";
 import { judgeChimeIn } from "../lib/chime-in-judge";
+import { policyFor, permittedCallbacks, deliver } from "../lib/turn";
 import { toTelegramMarkdown } from "../lib/markdown";
 import { renderDraftCard } from "../lib/settings-menu";
 import { isPaused } from "@community-os/shared/bot-settings";
@@ -147,6 +147,10 @@ aiChatHandler.on("message:text", async (ctx) => {
   } else {
     return;
   }
+
+  // Settled as soon as we know whether the bot was spoken to. At function
+  // scope so the catch block below answers to the same policy.
+  const policy = policyFor(chimingIn ? "uninvited" : "addressed");
 
   // Whatever happens next, the question has had its answer (or been ignored
   // in favour of something else) — don't let it linger and catch a later message.
@@ -281,7 +285,15 @@ aiChatHandler.on("message:text", async (ctx) => {
 
   try {
     await ctx.replyWithChatAction("typing");
-    const { text: responseText, responseMessages } = await runAgent({
+    // Every one of these puts something in the chat, so an uninvited turn is
+    // handed none of them — withholding the callback is what removes the tool.
+    const permitted = permittedCallbacks(policy.kind, {
+      progressSink,
+      askUser,
+      proposeSettings,
+    });
+
+    const outcome = await runAgent({
       query,
       enrichedQuery,
       telegramId,
@@ -289,60 +301,53 @@ aiChatHandler.on("message:text", async (ctx) => {
       chatHistory,
       chatId: String(ctx.chat.id),
       senderTelegramId: ctx.from?.id ?? null,
-      // An uninvited turn reports nothing. Sub-agents are what post the status
-      // message, and the nudge path calls one — so without this the group would
-      // get "Members — searching…" followed by no reply at all, which is worse
-      // than staying quiet. There is no deletion path to undo it after the fact.
-      progressSink: chimingIn ? undefined : progressSink,
+      ...permitted,
       // Groups clean the status message up after the turn; a DM keeps it as
-      // history.
+      // history. Unrelated to whether the bot was spoken to.
       progressClearAfterMs: isGroup ? GROUP_PROGRESS_CLEAR_MS : undefined,
-      // Both post into the chat, so neither is available uninvited. ask_user
-      // would interrupt the room with a force_reply about a message that was
-      // never addressed to the bot, which is the interjection this whole path
-      // exists to avoid; withholding the callback is what removes the tool.
-      askUser: chimingIn ? undefined : askUser,
-      proposeSettings: chimingIn ? undefined : proposeSettings,
       // DM-only: the group gets the same sub-agent tree, without a running
       // commentary of every lookup the bot makes.
       trackAllTools: isPrivate,
-      chimingIn,
-      // Deciding whether to speak at all is a harder judgement than answering a
-      // question that was actually asked.
-      tier: chimingIn ? "smart" : "fast",
+      policy,
     });
-
-    // The agent looked and had nothing worth adding. Send nothing, and don't
-    // record a chime — staying quiet must not burn the cooldown that gates
-    // speaking.
-    if (responseText === null) return;
 
     // The question is already on screen; a second message would just repeat
     // it. Key this turn to the question so the answer replays with context.
     if (questionMessageId !== null) {
-      rememberTurn(questionMessageId, responseMessages);
+      rememberTurn(questionMessageId, outcome.responseMessages);
       return;
     }
 
-    const sentMsg = await replyFormatted(ctx, responseText, {
+    // The one place anything reaches the chat.
+    const delivery = deliver(outcome, policy);
+    if (!delivery.send) {
+      console.log(`[ai-chat] not sending — ${delivery.reason}`);
+      return;
+    }
+
+    const sentMsg = await replyFormatted(ctx, delivery.text, {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
     });
 
-    rememberTurn(sentMsg.message_id, responseMessages);
-    if (chimingIn) recordChime(String(ctx.chat.id));
-    logBotMessage(sentMsg, ctx.me, chatType, responseText);
+    rememberTurn(sentMsg.message_id, outcome.responseMessages);
+    if (delivery.recordChime) recordChime(String(ctx.chat.id));
+    logBotMessage(sentMsg, ctx.me, chatType, delivery.text);
   } catch (error) {
     console.error("AI chat error:", error);
-    // An uninvited turn stays silent even when it fails. The member asked the
-    // room, not the bot, so an apology for a request they never made is the
-    // same unwanted interjection as a bad answer — and they have no idea what
-    // it is apologising for.
-    const notice = asideIfPermitted(
-      "Sorry, I encountered an error. Please try again later.",
-      chimingIn,
+    // A failure is the bot talking about itself, so it goes through the same
+    // rule as any other notice: an uninvited turn stays silent even when it
+    // breaks. The member asked the room, not the bot, and has no idea what an
+    // apology would even be for.
+    const delivery = deliver(
+      {
+        kind: "notice",
+        text: "Sorry, I encountered an error. Please try again later.",
+        responseMessages: [],
+      },
+      policy,
     );
-    if (notice === null) return;
-    await ctx.reply(notice, {
+    if (!delivery.send) return;
+    await ctx.reply(delivery.text, {
       reply_to_message_id: isGroup ? ctx.message.message_id : undefined,
     });
   }

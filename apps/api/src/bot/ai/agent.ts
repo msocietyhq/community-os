@@ -13,7 +13,7 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
-import { asideIfPermitted, answerIfPermitted } from "../lib/chime-in";
+import type { AgentOutcome, TurnPolicy } from "../lib/turn";
 import { guardToolResult } from "./tool-result-guard";
 import {
   SubagentProgress,
@@ -57,27 +57,16 @@ interface AgentParams {
    */
   progressClearAfterMs?: number;
   /**
-   * The turn is an uninvited chime-in. Selects the chime-in system prompt,
-   * enables stay_silent, and scopes recalled memories to this chat.
+   * What this turn may do and which tier serves it. An uninvited turn also
+   * selects the chime-in system prompt and scopes recalled memories to this
+   * chat. See lib/turn.ts.
    */
-  chimingIn?: boolean;
-  /**
-   * Which tier serves this turn. Chime-ins run on `smart`: deciding whether to
-   * speak at all is a harder judgement than answering a question that was
-   * actually asked.
-   */
-  tier?: "fast" | "smart";
+  policy: TurnPolicy;
   /** Renders an AI-proposed settings change card. Omit to disable the tool. */
   proposeSettings?: (input: {
     changes: { key: string; from: unknown; to: unknown }[];
     rationale?: string;
   }) => Promise<void>;
-}
-
-interface AgentResult {
-  /** The reply to send, or null when the agent chose to stay silent. */
-  text: string | null;
-  responseMessages: ModelMessage[]; // AI SDK response messages for session storage
 }
 
 export async function runAgent({
@@ -93,28 +82,22 @@ export async function runAgent({
   askUser,
   proposeSettings,
   trackAllTools,
-  chimingIn,
-  tier,
-}: AgentParams): Promise<AgentResult> {
+  policy,
+}: AgentParams): Promise<AgentOutcome> {
   /**
-   * A message the bot would send for its own reasons — an apology, or a prompt
-   * to go and set something up. On an uninvited turn there is nobody to say it
-   * to: the member asked the room, not the bot, and a notice they never asked
-   * for is the same unwanted interjection the chime-in gates exist to prevent.
-   *
-   * "Your profile is not set up yet" is the one that would have bitten. In a
-   * 500-member group plenty of people have no profile, so any chime-in they
-   * triggered would have answered a question they asked each other with a
-   * demand that they run /profile.
+   * The bot talking about its own state rather than answering anything. Whether
+   * it reaches the chat is not this function's business — `deliver` decides,
+   * and withholds it from a room that never asked.
    */
-  const aside = (text: string): AgentResult => ({
-    text: asideIfPermitted(text, chimingIn ?? false),
+  const notice = (text: string): AgentOutcome => ({
+    kind: "notice",
+    text,
     responseMessages: [],
   });
 
   const resolved = await resolveUser(telegramId);
   if (!resolved) {
-    return aside(
+    return notice(
       "Your profile is not set up yet. Please use /profile first to set up your community profile!",
     );
   }
@@ -122,7 +105,7 @@ export async function runAgent({
   // Create a bearer token for this user's session
   const token = await getBotToken(telegramUser);
   if (!token) {
-    return aside("I'm having trouble authenticating you. Please try again later.");
+    return notice("I'm having trouble authenticating you. Please try again later.");
   }
 
   // In-process API client with the user's auth token
@@ -153,8 +136,7 @@ export async function runAgent({
   // Resolved up front: it both labels the progress message and tells the agent
   // what it is running on. Shares its resolution with the call itself, so the
   // heading, the prompt and the model that actually serves the turn agree.
-  const activeTier = tier ?? "fast";
-  const running = await aiService.currentModelFor(activeTier);
+  const running = await aiService.currentModelFor(policy.tier);
 
   const progress = progressSink
     ? new SubagentProgress({
@@ -185,7 +167,7 @@ export async function runAgent({
     progress: root,
     askUser,
     proposeSettings,
-    onSilence: chimingIn
+    onSilence: policy.allowSilence
       ? (reason) => {
           silencedReason = reason;
         }
@@ -215,7 +197,7 @@ export async function runAgent({
       runningModel: `${running.key} (${running.label})`,
       now: new Date(),
       chatId,
-      chimingIn: chimingIn ?? false,
+      chimingIn: policy.kind === "uninvited",
     },
     memoryRecaller,
   );
@@ -233,7 +215,7 @@ export async function runAgent({
       },
       {
         caller: "main-agent",
-        tier: activeTier,
+        tier: policy.tier,
         telegramUserId: senderTelegramId,
         chatId,
       },
@@ -243,39 +225,7 @@ export async function runAgent({
       `[main-agent] done — steps:${result.steps.length} tokens:${result.usage.inputTokens ?? 0}in/${result.usage.outputTokens ?? 0}out text:"${result.text?.slice(0, 120)}"`,
     );
 
-    // Checked before the fallback chain below: a deliberate silence must not be
-    // overwritten with sub-agent output or the generic error string.
-    if (silencedReason !== null) {
-      console.log(`[main-agent] staying silent — ${silencedReason}`);
-      await progress?.finish().catch(() => {});
-      return {
-        text: null,
-        responseMessages: result.response.messages as ModelMessage[],
-      };
-    }
-
-    // An uninvited turn fails closed. Ending on a tool call or exhausting the
-    // step cap leaves no text, and the fallback below would then post "I
-    // couldn't generate a response" into a group that never asked — the exact
-    // unwanted interjection the chime-in gates exist to prevent. Nobody is
-    // waiting on this reply, so having nothing to say and saying nothing are
-    // the same outcome.
-    if (chimingIn && answerIfPermitted(result.text, true) === null) {
-      console.log("[main-agent] chime-in produced no text — staying silent");
-      await progress?.finish().catch(() => {});
-      return {
-        text: null,
-        responseMessages: result.response.messages as ModelMessage[],
-      };
-    }
-
-    // The model sometimes ends its turn on a tool call, or hits the step cap,
-    // leaving no text. Surfacing the sub-agents' own output beats discarding
-    // their work behind a generic error.
-    const text =
-      result.text ||
-      progress?.completedResults().join("\n\n") ||
-      "I couldn't generate a response. Please try again.";
+    const responseMessages = result.response.messages as ModelMessage[];
 
     // Fire-and-forget: track which memories were used
     if (memories.length > 0) {
@@ -284,14 +234,25 @@ export async function runAgent({
 
     await progress?.finish().catch(() => {});
 
-    return {
-      text,
-      responseMessages: result.response.messages as ModelMessage[],
-    };
+    if (silencedReason !== null) {
+      console.log(`[main-agent] staying silent — ${silencedReason}`);
+      return { kind: "silent", reason: silencedReason, responseMessages };
+    }
+
+    // The model sometimes ends its turn on a tool call, or hits the step cap,
+    // leaving no text. Surfacing the sub-agents' own output beats discarding
+    // their work.
+    const answer = result.text || progress?.completedResults().join("\n\n");
+    if (answer) return { kind: "reply", text: answer, responseMessages };
+
+    // Nothing to say. A notice rather than a reply, which is what keeps it out
+    // of a group that never asked — an uninvited turn with no answer is silent,
+    // and `deliver` is the one place that decides so.
+    return { ...notice("I couldn't generate a response. Please try again."), responseMessages };
   } catch (error) {
     await progress?.finish().catch(() => {});
     if (error instanceof Error && error.message.includes("rate limit")) {
-      return aside(
+      return notice(
         "I'm being rate-limited right now. Please try again in a minute or two 🙏",
       );
     }
