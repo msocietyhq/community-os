@@ -1,6 +1,6 @@
 import { tool, stepCountIs, type ModelMessage } from "ai";
 import { z } from "zod";
-import { hasLookedUp } from "../lib/chime-in";
+import { hasLookedUp, hasAttemptedSilence } from "../lib/chime-in";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
 import { env } from "../../env";
@@ -681,7 +681,11 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
               // reports there was nothing in the chat — which it has no basis
               // for. The prompt already says deciding without looking is the
               // failure mode; that wasn't enough, so this enforces it.
-              if (!hasLookedUp(messages)) {
+              // Refused once, not repeatedly. A model that comes back and
+              // insists after being told to look is honoured: refusing again
+              // would spend the step budget arguing, and silence is the safe
+              // outcome regardless.
+              if (!hasLookedUp(messages) && !hasAttemptedSilence(messages)) {
                 console.log("[main-agent:stay_silent] refused — nothing searched yet");
                 return {
                   silent: false,

@@ -275,10 +275,31 @@ export const LOOKUP_TOOLS: ReadonlySet<string> = new Set([
  * the tool enforces it rather than asking for it.
  */
 export function hasLookedUp(messages: ModelMessage[]): boolean {
+  return calledTool(messages, (name) => LOOKUP_TOOLS.has(name));
+}
+
+/**
+ * Whether the agent has already reached for `stay_silent` once.
+ *
+ * The lookup requirement is a nudge, not a cage: it refuses the first attempt
+ * so a model that skipped straight to abstaining goes and looks. If it comes
+ * back and insists, that is honoured. Refusing repeatedly would spend the step
+ * budget arguing, and silence is the safe outcome anyway — there is nothing to
+ * win by forcing a third attempt.
+ */
+export function hasAttemptedSilence(messages: ModelMessage[]): boolean {
+  return calledTool(messages, (name) => name === "stay_silent");
+}
+
+/** True when any assistant turn called a tool the predicate accepts. */
+function calledTool(
+  messages: ModelMessage[],
+  matches: (toolName: string) => boolean,
+): boolean {
   for (const message of messages) {
     if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
     for (const part of message.content) {
-      if (part.type === "tool-call" && LOOKUP_TOOLS.has(part.toolName)) return true;
+      if (part.type === "tool-call" && matches(part.toolName)) return true;
     }
   }
   return false;

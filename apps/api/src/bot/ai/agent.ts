@@ -241,6 +241,21 @@ export async function runAgent({
       };
     }
 
+    // An uninvited turn fails closed. Ending on a tool call or exhausting the
+    // step cap leaves no text, and the fallback below would then post "I
+    // couldn't generate a response" into a group that never asked — the exact
+    // unwanted interjection the chime-in gates exist to prevent. Nobody is
+    // waiting on this reply, so having nothing to say and saying nothing are
+    // the same outcome.
+    if (chimingIn && !result.text) {
+      console.log("[main-agent] chime-in produced no text — staying silent");
+      await progress?.finish().catch(() => {});
+      return {
+        text: null,
+        responseMessages: result.response.messages as ModelMessage[],
+      };
+    }
+
     // The model sometimes ends its turn on a tool call, or hits the step cap,
     // leaving no text. Surfacing the sub-agents' own output beats discarding
     // their work behind a generic error.

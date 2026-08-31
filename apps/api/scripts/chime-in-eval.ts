@@ -19,7 +19,7 @@
 import { stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { judgeChimeIn } from "../src/bot/lib/chime-in-judge";
-import { hasLookedUp } from "../src/bot/lib/chime-in";
+import { hasLookedUp, hasAttemptedSilence } from "../src/bot/lib/chime-in";
 import { buildAgentContext, type MemoryRecaller } from "../src/bot/ai/context";
 import { aiService } from "../src/services/ai.service";
 
@@ -241,7 +241,7 @@ function stubTools(c: AgentCase, onSilence: (reason: string) => void) {
       execute: async ({ reason }, { messages }) => {
         // Mirrors the real tool: abstaining is refused until something has
         // actually been searched.
-        if (!hasLookedUp(messages)) {
+        if (!hasLookedUp(messages) && !hasAttemptedSilence(messages)) {
           return {
             silent: false,
             note: "You haven't looked yet. Search chat_history for this topic — and members, if the question is about who would know — then decide.",

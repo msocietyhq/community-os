@@ -5,6 +5,7 @@ import {
   preFilter,
   offCooldown,
   hasLookedUp,
+  hasAttemptedSilence,
   applyConfidenceGate,
   chimeDecisionSchema,
   recordChime,
@@ -226,5 +227,30 @@ describe("hasLookedUp", () => {
         call("chat_history"),
       ]),
     ).toBe(true);
+  });
+});
+
+describe("hasAttemptedSilence", () => {
+  const call = (toolName: string): ModelMessage => ({
+    role: "assistant",
+    content: [{ type: "tool-call", toolCallId: "1", toolName, input: {} }],
+  });
+
+  test("no attempt yet", () => {
+    expect(hasAttemptedSilence([call("chat_history")])).toBe(false);
+  });
+
+  test("a prior attempt is remembered, so the refusal fires only once", () => {
+    expect(hasAttemptedSilence([call("stay_silent")])).toBe(true);
+  });
+
+  /**
+   * The pairing that matters: skipped the lookup AND already refused once, so
+   * the second attempt must be honoured rather than argued with.
+   */
+  test("insisting after a refusal is not blocked again", () => {
+    const conversation = [call("stay_silent")];
+    expect(hasLookedUp(conversation)).toBe(false);
+    expect(hasAttemptedSilence(conversation)).toBe(true);
   });
 });
