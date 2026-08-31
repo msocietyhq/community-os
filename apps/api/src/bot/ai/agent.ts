@@ -248,7 +248,11 @@ export async function runAgent({
     // Nothing to say. A notice rather than a reply, which is what keeps it out
     // of a group that never asked — an uninvited turn with no answer is silent,
     // and `deliver` is the one place that decides so.
-    return { ...notice("I couldn't generate a response. Please try again."), responseMessages };
+    return {
+      kind: "notice",
+      text: "I couldn't generate a response. Please try again.",
+      responseMessages,
+    };
   } catch (error) {
     await progress?.finish().catch(() => {});
     if (error instanceof Error && error.message.includes("rate limit")) {
