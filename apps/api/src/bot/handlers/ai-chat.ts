@@ -379,8 +379,13 @@ async function shouldChimeIn(
     minConfidence: settings["chimeIn.minConfidence"],
   });
 
+  // The message text is logged alongside the verdict so real traffic
+  // accumulates as a corpus. The judge's prompt is currently far too short to
+  // cache on Haiku 4.5 (4096-token minimum); worked examples mined from these
+  // lines are what would make a larger prompt worth its cost, and they also
+  // back-test the grounding rule. See the design spec.
   console.log(
-    `[chime-in] ${decision.respond ? "SPEAK" : "stay quiet"} (${decision.confidence.toFixed(2)}) — ${decision.reason}`,
+    `[chime-in] ${decision.respond ? "SPEAK" : "stay quiet"} (${decision.confidence.toFixed(2)}) — ${decision.reason} — "${text.slice(0, 200)}"`,
   );
 
   return decision.respond;
