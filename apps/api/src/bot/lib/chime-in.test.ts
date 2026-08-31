@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { beforeEach, describe, expect, test } from "bun:test";
+import type { ModelMessage } from "ai";
 import {
   preFilter,
   offCooldown,
+  hasLookedUp,
   applyConfidenceGate,
   chimeDecisionSchema,
   recordChime,
@@ -173,5 +175,56 @@ describe("inQuietHours", () => {
     const w = { start: "23:00", end: "07:00" };
     expect(inQuietHours(w, at("23:00"))).toBe(true);
     expect(inQuietHours(w, at("07:00"))).toBe(false);
+  });
+});
+
+describe("hasLookedUp", () => {
+  const call = (toolName: string): ModelMessage => ({
+    role: "assistant",
+    content: [
+      { type: "tool-call", toolCallId: "1", toolName, input: {} },
+    ],
+  });
+
+  test("no tool calls at all — has not looked", () => {
+    expect(hasLookedUp([{ role: "user", content: "anyone tried X?" }])).toBe(false);
+  });
+
+  test("searching the chat counts", () => {
+    expect(hasLookedUp([call("chat_history")])).toBe(true);
+  });
+
+  test("looking up members counts", () => {
+    expect(hasLookedUp([call("members")])).toBe(true);
+  });
+
+  test("querying community data counts", () => {
+    expect(hasLookedUp([call("graphql_query")])).toBe(true);
+  });
+
+  /**
+   * The grounding rule turns on what the community knows. Searching the web is
+   * not checking whether this chat already answered the question.
+   */
+  test("web research alone does not count", () => {
+    expect(hasLookedUp([call("research")])).toBe(false);
+  });
+
+  test("reaching for stay_silent first does not count as looking", () => {
+    expect(hasLookedUp([call("stay_silent")])).toBe(false);
+  });
+
+  test("a plain-text assistant turn is not a tool call", () => {
+    expect(hasLookedUp([{ role: "assistant", content: "let me check" }])).toBe(false);
+  });
+
+  test("finds the lookup anywhere in the conversation", () => {
+    expect(
+      hasLookedUp([
+        { role: "user", content: "anyone tried X?" },
+        call("research"),
+        call("chat_history"),
+      ]),
+    ).toBe(true);
   });
 });

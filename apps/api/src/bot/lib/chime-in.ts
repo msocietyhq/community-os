@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ModelMessage } from "ai";
 import type { QuietHours } from "@community-os/shared/bot-settings";
 
 /**
@@ -247,4 +248,38 @@ export function inQuietHours(window: QuietHours, now: Date): boolean {
   return start <= end
     ? current >= start && current < end
     : current >= start || current < end;
+}
+
+// ── Abstaining honestly ─────────────────────────────────────
+
+/**
+ * Tool calls that count as having looked at what the community knows.
+ *
+ * `research` is deliberately absent: searching the web is not checking whether
+ * this chat already answered the question, and the grounding rule turns on
+ * community knowledge specifically.
+ */
+export const LOOKUP_TOOLS: ReadonlySet<string> = new Set([
+  "chat_history",
+  "members",
+  "graphql_query",
+]);
+
+/**
+ * Whether the agent has actually searched before it tries to stay silent.
+ *
+ * Measured at roughly a coin flip on the chime-in prompt: the model would call
+ * `stay_silent` having called nothing at all, and report that there was nothing
+ * in the chat — an assertion it had no basis for. The prompt already says
+ * "deciding without looking is the failure mode", and that was not enough, so
+ * the tool enforces it rather than asking for it.
+ */
+export function hasLookedUp(messages: ModelMessage[]): boolean {
+  for (const message of messages) {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type === "tool-call" && LOOKUP_TOOLS.has(part.toolName)) return true;
+    }
+  }
+  return false;
 }

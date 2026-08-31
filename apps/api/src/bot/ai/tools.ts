@@ -1,5 +1,6 @@
 import { tool, stepCountIs, type ModelMessage } from "ai";
 import { z } from "zod";
+import { hasLookedUp } from "../lib/chime-in";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
 import { env } from "../../env";
@@ -674,7 +675,20 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
                 .string()
                 .describe("A few words on why there was nothing worth adding"),
             }),
-            execute: async ({ reason }) => {
+            execute: async ({ reason }, { messages }) => {
+              // Refuse to abstain on an assumption. Measured at roughly a coin
+              // flip: the model calls this having searched nothing at all, and
+              // reports there was nothing in the chat — which it has no basis
+              // for. The prompt already says deciding without looking is the
+              // failure mode; that wasn't enough, so this enforces it.
+              if (!hasLookedUp(messages)) {
+                console.log("[main-agent:stay_silent] refused — nothing searched yet");
+                return {
+                  silent: false,
+                  note: "You haven't looked yet. Search chat_history for this topic — and members, if the question is about who would know — then decide.",
+                };
+              }
+
               console.log("[main-agent:stay_silent]", reason.slice(0, 120));
               ctx.onSilence?.(reason);
               return {
