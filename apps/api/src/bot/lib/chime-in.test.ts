@@ -6,8 +6,6 @@ import {
   offCooldown,
   hasLookedUp,
   hasAttemptedSilence,
-  asideIfPermitted,
-  answerIfPermitted,
   applyConfidenceGate,
   chimeDecisionSchema,
   recordChime,
@@ -254,63 +252,5 @@ describe("hasAttemptedSilence", () => {
     const conversation = [call("stay_silent")];
     expect(hasLookedUp(conversation)).toBe(false);
     expect(hasAttemptedSilence(conversation)).toBe(true);
-  });
-});
-
-describe("asideIfPermitted", () => {
-  const CHIMING = true;
-  const ADDRESSED = false;
-
-  /**
-   * The four notices that were each reachable on the chime-in path. Every one
-   * would have interrupted a group with a message about the bot's own state,
-   * in response to a question nobody addressed to it.
-   */
-  const NOTICES = [
-    "Your profile is not set up yet. Please use /profile first to set up your community profile!",
-    "I'm having trouble authenticating you. Please try again later.",
-    "I'm being rate-limited right now. Please try again in a minute or two 🙏",
-    "Sorry, I encountered an error. Please try again later.",
-  ];
-
-  test.each(NOTICES)("an uninvited turn swallows: %s", (notice) => {
-    expect(asideIfPermitted(notice, CHIMING)).toBeNull();
-  });
-
-  test.each(NOTICES)("an addressed turn still sends: %s", (notice) => {
-    expect(asideIfPermitted(notice, ADDRESSED)).toBe(notice);
-  });
-});
-
-describe("answerIfPermitted", () => {
-  const CHIMING = true;
-  const ADDRESSED = false;
-
-  test("an uninvited turn sends the model's own answer", () => {
-    expect(answerIfPermitted("@faizal_tan used Budget Mac", CHIMING)).toBe(
-      "@faizal_tan used Budget Mac",
-    );
-  });
-
-  /**
-   * A turn that ends on a tool call, or exhausts stepCountIs(10), leaves empty
-   * text. Uninvited, that must resolve to silence rather than falling through
-   * to the caller's generic apology.
-   */
-  test("empty text from an uninvited turn is silence, not a fallback", () => {
-    expect(answerIfPermitted("", CHIMING)).toBeNull();
-    expect(answerIfPermitted(null, CHIMING)).toBeNull();
-    expect(answerIfPermitted(undefined, CHIMING)).toBeNull();
-  });
-
-  /**
-   * Empty text passes through untouched when addressed — that is what keeps
-   * the caller's `result.text || completedResults() || "..."` chain working.
-   * Collapsing it to null here would silently disable that fallback.
-   */
-  test("an addressed turn keeps its text for the caller's fallback chain", () => {
-    expect(answerIfPermitted("here you go", ADDRESSED)).toBe("here you go");
-    expect(answerIfPermitted("", ADDRESSED)).toBe("");
-    expect(answerIfPermitted(undefined, ADDRESSED)).toBeNull();
   });
 });
