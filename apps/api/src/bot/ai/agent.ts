@@ -50,6 +50,11 @@ interface AgentParams {
    * sub-agent starting does that.
    */
   trackAllTools?: boolean;
+  /**
+   * Delete the progress message this long after the turn. Groups set it; DMs
+   * leave the message in place.
+   */
+  progressClearAfterMs?: number;
   /** Renders an AI-proposed settings change card. Omit to disable the tool. */
   proposeSettings?: (input: {
     changes: { key: string; from: unknown; to: unknown }[];
@@ -71,6 +76,7 @@ export async function runAgent({
   chatId,
   senderTelegramId,
   progressSink,
+  progressClearAfterMs,
   askUser,
   proposeSettings,
   trackAllTools,
@@ -123,7 +129,11 @@ export async function runAgent({
   const running = await aiService.currentModelFor("fast");
 
   const progress = progressSink
-    ? new SubagentProgress({ sink: progressSink, modelLabel: running.label })
+    ? new SubagentProgress({
+        sink: progressSink,
+        modelLabel: running.label,
+        clearAfterMs: progressClearAfterMs,
+      })
     : undefined;
 
   /**

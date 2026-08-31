@@ -10,7 +10,10 @@ import {
   ONE_HOUR_MS,
 } from "../lib/chat-context";
 import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
-import type { ProgressSink } from "../lib/subagent-progress";
+import {
+  GROUP_PROGRESS_CLEAR_MS,
+  type ProgressSink,
+} from "../lib/subagent-progress";
 import { shouldResume, isExpired } from "../lib/pending-question";
 import {
   preFilter,
@@ -204,6 +207,15 @@ aiChatHandler.on("message:text", async (ctx) => {
         console.error("[subagent-progress] edit failed:", err);
       }
     },
+    async delete(messageId) {
+      try {
+        await ctx.api.deleteMessage(ctx.chat.id, messageId);
+      } catch (err) {
+        // Already gone, or the bot lost the right to remove it. Neither is
+        // worth disturbing the turn over.
+        console.error("[subagent-progress] delete failed:", err);
+      }
+    },
   };
 
   // force_reply pops the reply composer on the asked member's client, so their
@@ -278,6 +290,9 @@ aiChatHandler.on("message:text", async (ctx) => {
       chatId: String(ctx.chat.id),
       senderTelegramId: ctx.from?.id ?? null,
       progressSink,
+      // Groups clean the status message up after the turn; a DM keeps it as
+      // history.
+      progressClearAfterMs: isGroup ? GROUP_PROGRESS_CLEAR_MS : undefined,
       askUser,
       proposeSettings,
       // DM-only: the group gets the same sub-agent tree, without a running
