@@ -329,6 +329,16 @@ export const BOT_SETTINGS = {
     control: "percent",
     format: (v) => `${Math.round(v * 100)}%`,
   }),
+  "memory.minConfidence": def<number>({
+    schema: z.number().min(0).max(1),
+    default: 0.75,
+    label: "Memory confidence floor",
+    description:
+      "How sure the extractor must be before a fact is recorded. Higher keeps only firm statements; hedged guesses are dropped rather than stored.",
+    group: "behaviour",
+    control: "percent",
+    format: (v) => `${Math.round(v * 100)}%`,
+  }),
   "memory.extractionEnabled": def<boolean>({
     schema: z.boolean(),
     default: true,

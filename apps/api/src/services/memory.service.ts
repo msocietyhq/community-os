@@ -11,6 +11,7 @@ import {
   rankByConfidenceAndRecency,
 } from "./memory-ranking";
 import { getSimilarityFloor } from "./recall-calibration";
+import { getSettings } from "./bot-settings.service";
 import { fuseByRRF } from "./reciprocal-rank-fusion";
 
 export interface MemoryInput {
@@ -42,7 +43,22 @@ export interface RecalledMemory {
 }
 
 /**
- * Check for an existing semantically similar memory (cosine > 0.85) about the
+ * Cosine floor above which a new fact is treated as a restatement of one
+ * already held, and supersedes it.
+ *
+ * Measured against the corpus: pairs between 0.80 and 0.85 are overwhelmingly
+ * distinct facts that happen to share vocabulary — "Mud expressed interest in
+ * attending an event but cannot go" against "Mud is bringing snacks for an
+ * event" scores 0.801. Lowering this to catch more restatements would silently
+ * delete real information, so it stays where it is.
+ */
+const DUPLICATE_SIMILARITY = 0.85;
+
+/** The same floor for a pair the model gave different categories. */
+const CROSS_CATEGORY_DUPLICATE_SIMILARITY = 0.92;
+
+/**
+ * Check for an existing semantically similar memory about the
  * same subject, in the same category.
  *
  * Matched on `subject_telegram_id` when the subject resolved to a member, and
@@ -51,6 +67,15 @@ export interface RecalledMemory {
  * 165 resolved members, with one person appearing as "Syafiq Hanafee",
  * "@iamfeek" and "iamfeek". Keying on it let every spelling of a name carry its
  * own untouchable copy of the same fact.
+ *
+ * Category is no longer required to match exactly, because the model does not
+ * assign it consistently: of the near-duplicate pairs already similar enough to
+ * collapse, 28% carry different categories, rising to 50% among pairs above
+ * 0.95 — the closer two facts are to identical, the more likely the tag is the
+ * only thing separating them. It still carries weight rather than being
+ * ignored: a cross-category pair must clear a higher bar, so genuine
+ * distinctions like a world fact and a person fact about the same topic survive
+ * while re-tagged restatements collapse.
  */
 async function findDuplicate(
   embedding: number[],
@@ -62,8 +87,10 @@ async function findDuplicate(
 
   const conditions = [
     isNull(botMemories.supersededBy),
-    eq(botMemories.category, category),
-    sql`1 - (${botMemories.embedding} <=> ${vectorLiteral}::vector) > 0.85`,
+    sql`1 - (${botMemories.embedding} <=> ${vectorLiteral}::vector) >
+        CASE WHEN ${botMemories.category} = ${category}
+             THEN ${DUPLICATE_SIMILARITY}
+             ELSE ${CROSS_CATEGORY_DUPLICATE_SIMILARITY} END`,
   ];
 
   if (subjectTelegramId != null) {
@@ -86,7 +113,11 @@ async function findDuplicate(
 
 export interface SaveMemoryResult {
   id: string | null;
-  status: "inserted" | "superseded" | "skipped_duplicate";
+  status:
+    | "inserted"
+    | "superseded"
+    | "skipped_duplicate"
+    | "skipped_low_confidence";
   supersededId?: string;
 }
 
@@ -154,12 +185,27 @@ export async function saveMemory(memory: MemoryInput): Promise<SaveMemoryResult>
 
 /**
  * Save multiple memories in sequence (each gets dedup check).
+ *
+ * The confidence floor lives here rather than in `saveMemory` on purpose: this
+ * is the path both extractors use, where confidence is the model's own hedge on
+ * a fact nobody asked it to record. `saveMemory` is also reached by the agent's
+ * explicit "remember this" tool, which is a deliberate instruction and should
+ * not be second-guessed by a threshold.
  */
 export async function saveMemories(
   memories: MemoryInput[],
 ): Promise<SaveMemoryResult[]> {
+  const settings = await getSettings();
+  const floor = settings["memory.minConfidence"];
+
   const results: SaveMemoryResult[] = [];
   for (const memory of memories) {
+    // Matches saveMemory's own fallback, so an unscored fact is treated the
+    // same on both sides of this check.
+    if ((memory.confidence ?? 0.8) < floor) {
+      results.push({ id: null, status: "skipped_low_confidence" });
+      continue;
+    }
     const result = await saveMemory(memory);
     results.push(result);
   }
