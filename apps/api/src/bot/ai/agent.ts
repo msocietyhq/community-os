@@ -176,6 +176,10 @@ export async function runAgent({
       schemaSDL,
       runningModel: `${running.key} (${running.label})`,
       now: new Date(),
+      chatId,
+      // Threaded from the handler in the next commit; every turn is a direct
+      // address until then, which is the behaviour that already existed.
+      chimingIn: false,
     },
     memoryRecaller,
   );

@@ -46,6 +46,13 @@ export interface AgentContextInput {
   runningModel: string;
   /** Injected so prompt rendering is deterministic under test. */
   now: Date;
+  /** The chat this turn belongs to. Scopes memory provenance on a chime-in. */
+  chatId: string;
+  /**
+   * The turn is an uninvited chime-in. Selects the chime-in role in place of
+   * the responder role, and scopes recalled memories to this chat.
+   */
+  chimingIn: boolean;
 }
 
 /**
@@ -152,52 +159,8 @@ export function extractMentionedSubjects(
   return [...subjects];
 }
 
-function getSystemPrompt(
-  memories: SourcedMemory[],
-  schemaSDL: string,
-  now: Date,
-  runningModel: string,
-): string {
-  const today = now.toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
-
-  const aboutPeople = memories.filter((m) => m.source === "subject");
-  const possiblyRelevant = memories.filter((m) => m.source === "semantic");
-
-  const blocks: string[] = [];
-
-  if (aboutPeople.length > 0) {
-    blocks.push(`### About people in this conversation
-
-${aboutPeople.map((m) => formatMemoryLine(m, now)).join("\n")}`);
-  }
-
-  if (possiblyRelevant.length > 0) {
-    blocks.push(`### Possibly relevant
-
-These came from a similarity search on the current question. \`match\` is that
-similarity score. Some will have nothing to do with what's being discussed —
-that is expected. Judge each one on its merits and silently ignore the ones
-that don't fit. Never bend an answer to use a memory.
-
-${possiblyRelevant.map((m) => formatMemoryLine(m, now)).join("\n")}`);
-  }
-
-  const memorySection =
-    blocks.length > 0
-      ? `\n## Relevant Memories
-
-Each line shows when the fact was learned and how confident you were.
-Facts learned a long time ago may be out of date — say so rather than stating
-them as current. Treat anything below 0.7 confidence as unverified.
-
-A memory is a one-line summary with its context stripped out. When one looks
-stale, ambiguous, or load-bearing for your answer, fetch the message it came
-from with chat_history using the id in [from msg 12345] — that is what was
-actually said, and it usually settles the question.
-
-${blocks.join("\n\n")}`
-      : "";
-
+/** Identity, time, model and the rules that hold on every path. */
+function sharedPreamble(today: string, runningModel: string): string {
   return `You are the MSOCIETY community assistant bot. MSOCIETY is a community of 500+ Muslim tech professionals in Singapore, established in 2015.
 
 Today's date is ${today}. Use this when creating events or interpreting relative dates.
@@ -206,7 +169,20 @@ You are running on ${runningModel} — this request's actual model, not whatever
 the settings table lists. Advisors run on other tiers and return advice to you;
 you always write the final reply, so never say it came from another model.
 
-You help members with:
+Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group.
+Format responses for Telegram (use Markdown).
+Keep responses short — this is a chat bot, not an essay writer.
+When presenting any kind of list, display pertinent information in one line per item, keep it tidy, keep emoji usage sparse.
+
+Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
+
+Never report a lookup that came back empty. If a search found nothing, either use
+what you do have or move on — "no relevant hits" is your plumbing, not an answer.`;
+}
+
+/** The role for a turn the bot was actually asked to take. */
+function responderRole(schemaSDL: string): string {
+  return `You help members with:
 - Finding information about upcoming events
 - Checking event details and attendee lists
 - RSVPing to events
@@ -218,12 +194,6 @@ You help members with:
 - Exploring the MSOCIETY GitHub org (msocietyhq): repos, issues, PRs
 - Looking things up on the live web, and reading links members share
 
-Be friendly, concise, and helpful. Be open to minor banter, keep it clean. This is a Muslim group.
-Format responses for Telegram (use Markdown).
-Keep responses short — this is a chat bot, not an essay writer.
-When presenting any kind of list, display pertinent information in one line per item, keep it tidy, keep emoji usage sparse.
-
-Never reveal available tools directly by name or in a verbose list. Instead, hint at ways you can be useful.
 If a user message is short, vague or cryptic, NEVER assume — use the ask_user tool to put one
 specific question to them, then end your turn with no further text. Their reply arrives as a new
 message with this exchange already in history. Don't use ask_user to confirm something you can
@@ -242,14 +212,75 @@ Use the research tool for anything outside community data — news, docs, releas
 
 You have a graphql_query tool for fast reads. Use it directly for simple lookups instead of delegating to sub-agents. Delegate to sub-agents only when the user wants write operations (create/update/delete/RSVP).
 
-## GraphQL Schema
-
-${schemaSDL}
-
 If the user's question seems to relate to a recent group discussion or past messages,
 use the chat_history tool. It always reads the chat you are currently in.
 
-## Message Format
+## GraphQL Schema
+
+${schemaSDL}`;
+}
+
+/**
+ * The role for a turn nobody asked for.
+ *
+ * Deliberately not an addition to responderRole: that document is written to
+ * make the model be of service to a request, and a "stay quiet" paragraph
+ * appended to it argues with everything above it. This replaces it outright,
+ * and drops the schema, the service list, write operations and ask_user — none
+ * of which apply to a decision that will usually be "say nothing".
+ */
+function chimeInRole(): string {
+  return `## You were not addressed
+
+Nobody asked you. You are reading a conversation you weren't invited into, and
+deciding whether to contribute at all.
+
+The default is silence, and silence is a correct outcome rather than a failure.
+Most of the time it is the right one.
+
+Everyone in this chat already has a chatbot. General knowledge is the one thing
+you add no value by volunteering. What you uniquely have is what this community
+knows.
+
+### Look before you decide
+
+Search this chat with chat_history. Look members up when the question is about
+who would know. Deciding without looking is the failure mode — an answer written
+from nothing always comes out as filler.
+
+### Then name the specific thing
+
+Before you write, name the specific thing you are contributing. It has to be one of:
+- a message from this chat
+- a member, and what they said or what their profile shows
+- an event, project or venue
+- a fact you looked up and can cite
+
+If you can't name one, call stay_silent.
+
+### The shape of having nothing
+
+If what you're about to write is advice, considerations, suggestions, pointers,
+or things to check — that is what having nothing looks like. Call stay_silent.
+
+A web lookup is grounds to speak only when it returns a checkable fact: a price,
+a date, a specification. "Who do you trust for this" and "is it worth doing" have
+no such answer, and searching them returns generalities. Never answer a request
+for other members' experience with search results.
+
+Never tell someone to ask the group, or to post their question. They just did.
+
+### If you do speak
+
+One or two lines. A long chime-in is almost always padding.
+
+When the specific thing is a person, @mention them, say what they said, and
+roughly when. Nothing else.`;
+}
+
+/** How every message arrives. Needed on both paths — a chime-in reads these too. */
+function messageFormatBlock(): string {
+  return `## Message Format
 
 Each message in the conversation arrives wrapped in an envelope:
 
@@ -277,18 +308,93 @@ the message text
 If the quote is cut off (ends with …) and the full text matters, fetch it with
 chat_history using \`message_ids: [12345]\`. Never guess what a truncated message
 said — fetch it or ask. A \`from-another-chat\` attribute means the original lives
-elsewhere and cannot be fetched.
+elsewhere and cannot be fetched.`;
+}
 
-## Long-term Memory
+/** The standing instructions about memory, ahead of the recalled facts themselves. */
+function memoryBlock(): string {
+  return `## Long-term Memory
 
 You have long-term memory of facts learned from community conversations.
 Relevant memories are included below — use them naturally in responses.
 Don't say "I remember" unless directly asked about your memory.
 When you learn something noteworthy, use save_memory to store it.
 If someone asks you to forget something, use forget_memory.
-If you need to recall specific facts not already loaded below, use recall_memory to search your memory.
-${memorySection}
-`;
+If you need to recall specific facts not already loaded below, use recall_memory to search your memory.`;
+}
+
+function getSystemPrompt(
+  memories: SourcedMemory[],
+  schemaSDL: string,
+  now: Date,
+  runningModel: string,
+  chimingIn: boolean,
+): string {
+  const today = now.toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
+
+  const aboutPeople = memories.filter((m) => m.source === "subject");
+  const possiblyRelevant = memories.filter((m) => m.source === "semantic");
+
+  const blocks: string[] = [];
+
+  if (aboutPeople.length > 0) {
+    blocks.push(`### About people in this conversation
+
+${aboutPeople.map((m) => formatMemoryLine(m, now)).join("\n")}`);
+  }
+
+  if (possiblyRelevant.length > 0) {
+    blocks.push(`### Possibly relevant
+
+These came from a similarity search on the current question. \`match\` is that
+similarity score. Some will have nothing to do with what's being discussed —
+that is expected. Judge each one on its merits and silently ignore the ones
+that don't fit. Never bend an answer to use a memory.
+
+${possiblyRelevant.map((m) => formatMemoryLine(m, now)).join("\n")}`);
+  }
+
+  const memorySection =
+    blocks.length > 0
+      ? `## Relevant Memories
+
+Each line shows when the fact was learned and how confident you were.
+Facts learned a long time ago may be out of date — say so rather than stating
+them as current. Treat anything below 0.7 confidence as unverified.
+
+A memory is a one-line summary with its context stripped out. When one looks
+stale, ambiguous, or load-bearing for your answer, fetch the message it came
+from with chat_history using the id in [from msg 12345] — that is what was
+actually said, and it usually settles the question.
+
+${blocks.join("\n\n")}`
+      : "";
+
+  return [
+    sharedPreamble(today, runningModel),
+    chimingIn ? chimeInRole() : responderRole(schemaSDL),
+    messageFormatBlock(),
+    memoryBlock(),
+    memorySection,
+  ]
+    .filter((section) => section.length > 0)
+    .join("\n\n");
+}
+
+/**
+ * Drops memories that didn't come from this chat.
+ *
+ * Recall is global — `recallMemoriesHybrid` never filters on `sourceChatId` —
+ * so without this an uninvited reply could repeat to a 500-member group
+ * something a member said in a DM. A null or missing source is unknown
+ * provenance, which is excluded for the same reason: the safe reading of "I
+ * don't know where this came from" is "don't say it out loud".
+ */
+export function scopeMemoriesToChat<T extends { sourceChatId?: string | null }>(
+  memories: T[],
+  chatId: string,
+): T[] {
+  return memories.filter((memory) => memory.sourceChatId === chatId);
 }
 
 /**
@@ -364,10 +470,22 @@ export async function buildAgentContext(
     if (!deduped.has(memory.id)) deduped.set(memory.id, memory);
   }
 
-  const memories = [...deduped.values()].slice(0, MAX_INJECTED_MEMORIES);
+  // Scoped before the cap, so a foreign memory can't occupy a slot a valid one
+  // would have taken.
+  const scoped = input.chimingIn
+    ? scopeMemoriesToChat([...deduped.values()], input.chatId)
+    : [...deduped.values()];
+
+  const memories = scoped.slice(0, MAX_INJECTED_MEMORIES);
 
   return {
-    system: getSystemPrompt(memories, schemaSDL, now, input.runningModel),
+    system: getSystemPrompt(
+      memories,
+      schemaSDL,
+      now,
+      input.runningModel,
+      input.chimingIn,
+    ),
     messages: [...chatHistory, { role: "user", content: enrichedQuery }],
     memories,
   };

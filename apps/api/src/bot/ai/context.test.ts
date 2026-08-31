@@ -11,6 +11,8 @@ import {
 
 const NOW = new Date("2026-08-20T09:00:00Z");
 const SDL = "type Query { events: [Event!]! }";
+/** Matches the chat_id in baseInput's enrichedQuery header. */
+const CHAT_ID = "-100123";
 
 function makeMemory(overrides: Partial<ContextMemory> = {}): ContextMemory {
   return {
@@ -70,6 +72,8 @@ function baseInput(overrides = {}) {
     schemaSDL: SDL,
     runningModel: "anthropic/haiku-4-5 (Haiku 4.5)",
     now: NOW,
+    chatId: CHAT_ID,
+    chimingIn: false,
     ...overrides,
   };
 }
@@ -466,5 +470,102 @@ describe("model identity", () => {
 
     expect(ctx.system).toContain("not whatever");
     expect(ctx.system).toContain("you always write the final reply");
+  });
+});
+
+// ─── chime-in scoping and prompt composition ─────────────────────────────────
+
+describe("memory scoping on a chime-in", () => {
+  test("drops memories from other chats when chiming in", async () => {
+    const { recaller } = makeRecaller({
+      semantic: [
+        makeMemory({ id: "here", content: "in this group", sourceChatId: CHAT_ID }),
+        makeMemory({ id: "dm", content: "from a DM", sourceChatId: "987654" }),
+        makeMemory({ id: "unknown", content: "no provenance", sourceChatId: null }),
+      ],
+    });
+
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: true, senderTelegramId: null }),
+      recaller,
+    );
+
+    expect(ctx.memories.map((m) => m.id)).toEqual(["here"]);
+  });
+
+  test("keeps every memory when directly addressed", async () => {
+    const { recaller } = makeRecaller({
+      semantic: [
+        makeMemory({ id: "here", sourceChatId: CHAT_ID }),
+        makeMemory({ id: "dm", sourceChatId: "987654" }),
+        makeMemory({ id: "unknown", sourceChatId: null }),
+      ],
+    });
+
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: false, senderTelegramId: null }),
+      recaller,
+    );
+
+    expect(ctx.memories.map((m) => m.id)).toEqual(["here", "dm", "unknown"]);
+  });
+
+  test("a dropped memory does not reach the system prompt", async () => {
+    const { recaller } = makeRecaller({
+      semantic: [
+        makeMemory({ id: "dm", content: "SECRET-FROM-A-DM", sourceChatId: "987654" }),
+      ],
+    });
+
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: true, senderTelegramId: null }),
+      recaller,
+    );
+
+    expect(ctx.system).not.toContain("SECRET-FROM-A-DM");
+  });
+});
+
+describe("system prompt composition", () => {
+  test("a direct turn gets the responder role and the schema", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(baseInput({ chimingIn: false }), recaller);
+
+    expect(ctx.system).toContain("You help members with");
+    expect(ctx.system).toContain(SDL);
+    expect(ctx.system).not.toContain("You were not addressed");
+  });
+
+  test("a chime-in gets the chime-in role and no schema", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(baseInput({ chimingIn: true }), recaller);
+
+    expect(ctx.system).toContain("You were not addressed");
+    expect(ctx.system).not.toContain(SDL);
+    expect(ctx.system).not.toContain("You help members with");
+  });
+
+  test("both roles share the preamble and the envelope format", async () => {
+    const { recaller } = makeRecaller();
+    const direct = await buildAgentContext(baseInput({ chimingIn: false }), recaller);
+    const chime = await buildAgentContext(baseInput({ chimingIn: true }), recaller);
+
+    for (const ctx of [direct, chime]) {
+      expect(ctx.system).toContain("MSOCIETY");
+      expect(ctx.system).toContain("<msg");
+      expect(ctx.system).toContain("anthropic/haiku-4-5 (Haiku 4.5)");
+      // The empty-lookup rule is global, not chime-in-only.
+      expect(ctx.system).toContain("came back empty");
+    }
+  });
+
+  test("the chime-in role states the tests that reject a padded reply", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(baseInput({ chimingIn: true }), recaller);
+
+    expect(ctx.system).toContain("stay_silent");
+    expect(ctx.system).toContain("name the specific thing");
+    expect(ctx.system).toContain("advice, considerations, suggestions");
+    expect(ctx.system).toContain("Never tell someone to ask the group");
   });
 });
