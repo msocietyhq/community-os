@@ -244,6 +244,32 @@ export async function setMessageEmbedding(
     );
 }
 
+/**
+ * Record that memory extraction has considered these messages.
+ *
+ * Stamped even when nothing was extracted — the backfill selects on
+ * `memory_extracted_at IS NULL`, so a message the live extractor has already
+ * read must be stamped or the backfill will pay a second model call to reach
+ * the same conclusion, and write a second, differently-worded copy of every
+ * fact it finds.
+ */
+export async function markMemoryExtracted(
+  chatId: string,
+  messageIds: number[],
+): Promise<void> {
+  if (!messageIds.length) return;
+
+  await db
+    .update(telegramMessages)
+    .set({ memoryExtractedAt: new Date() })
+    .where(
+      and(
+        eq(telegramMessages.chatId, chatId),
+        inArray(telegramMessages.messageId, messageIds),
+      ),
+    );
+}
+
 /** A member's most recent messages, newest first. Feeds profile generation. */
 export async function getRecentMessagesByUser(
   telegramUserId: number,

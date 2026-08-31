@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { saveMemories, resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
+import { markMemoryExtracted } from "../../services/messages.service";
 import { getMessageContext } from "../../services/messages.service";
 import { aiService } from "../../services/ai.service";
 
@@ -181,7 +182,10 @@ export async function extractMemories(
   // drops generateObject's generic), so re-parse to recover the type. The SDK
   // has already validated against this schema.
   const { facts } = extractionSchema.parse(result.object);
-  if (facts.length === 0) return;
+  if (facts.length === 0) {
+    await markMemoryExtracted(chatId, [messageId]);
+    return;
+  }
 
   const senderNameLower = senderName.toLowerCase();
   const senderUsernameLower = senderUsername?.toLowerCase() ?? "";
@@ -214,6 +218,7 @@ export async function extractMemories(
   }
 
   await saveMemories(memories);
+  await markMemoryExtracted(chatId, [messageId]);
   console.log(
     `[memory-extractor] extracted ${memories.length} memories from message ${messageId}`,
   );

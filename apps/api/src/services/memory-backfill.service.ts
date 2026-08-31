@@ -6,7 +6,7 @@
  * Processed in consecutive runs so each batch is its own context, at roughly a
  * tenth the calls of one-at-a-time.
  */
-import { and, asc, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { aiService } from "./ai.service";
@@ -21,6 +21,7 @@ import {
   clampConfidence,
   shouldExtractMemory,
 } from "../bot/lib/memory-extractor";
+import { markMemoryExtracted } from "./messages.service";
 import { withRetry } from "../lib/retry";
 import { truncate } from "../lib/text";
 
@@ -210,14 +211,6 @@ async function stampProcessed(
   }
 
   for (const [chatId, ids] of byChat) {
-    await db
-      .update(telegramMessages)
-      .set({ memoryExtractedAt: new Date() })
-      .where(
-        and(
-          sql`${telegramMessages.chatId} = ${chatId}`,
-          inArray(telegramMessages.messageId, ids),
-        ),
-      );
+    await markMemoryExtracted(chatId, ids);
   }
 }
