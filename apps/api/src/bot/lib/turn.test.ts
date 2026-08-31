@@ -2,28 +2,25 @@ import { describe, expect, test } from "bun:test";
 import {
   policyFor,
   permittedCallbacks,
+  classify,
   deliver,
-  type AgentOutcome,
   type ChatCallbacks,
+  type TurnResult,
 } from "./turn";
 
 const ADDRESSED = policyFor("addressed");
 const UNINVITED = policyFor("uninvited");
 
-const reply = (text: string): AgentOutcome => ({
-  kind: "reply",
-  text,
-  responseMessages: [],
-});
-const notice = (text: string): AgentOutcome => ({
-  kind: "notice",
-  text,
-  responseMessages: [],
-});
-const silent = (reason: string): AgentOutcome => ({
-  kind: "silent",
-  reason,
-  responseMessages: [],
+const reply = (text: string): TurnResult => ({ kind: "reply", text });
+const notice = (text: string): TurnResult => ({ kind: "notice", text });
+const silent = (reason: string): TurnResult => ({ kind: "silent", reason });
+
+/** A finished model call, with nothing produced unless a test says otherwise. */
+const product = (over: Partial<Parameters<typeof classify>[0]> = {}) => ({
+  text: undefined as string | undefined,
+  subagentResults: [] as string[],
+  silencedReason: null as string | null,
+  ...over,
 });
 
 describe("policyFor", () => {
@@ -69,11 +66,13 @@ describe("permittedCallbacks", () => {
   /**
    * Fail closed. A capability added to ChatCallbacks later is denied to an
    * uninvited turn without anyone remembering to deny it — which is the exact
-   * mistake that let ask_user through.
+   * mistake that let ask_user through. Asserted on the key set rather than with
+   * toEqual({}), which cannot tell "returns nothing" from "returns every key
+   * explicitly undefined".
    */
   test("a newly added callback is denied by default", () => {
     const withNewOne = { ...all, somethingNew: async () => {} } as ChatCallbacks;
-    expect(permittedCallbacks("uninvited", withNewOne)).toEqual({});
+    expect(Object.keys(permittedCallbacks("uninvited", withNewOne))).toEqual([]);
   });
 });
 
@@ -120,11 +119,11 @@ describe("deliver", () => {
   });
 
   /**
-   * Staying quiet must not burn the 30-minute cooldown that gates speaking —
-   * only a reply the room actually received counts as having chimed in.
+   * Staying quiet must not burn the cooldown that gates speaking — only a reply
+   * the room actually received counts as having chimed in.
    */
   test("only a delivered reply records a chime", () => {
-    const outcomes: AgentOutcome[] = [
+    const outcomes: TurnResult[] = [
       silent("nothing to add"),
       notice("Sorry, I encountered an error. Please try again later."),
     ];
@@ -143,5 +142,60 @@ describe("deliver", () => {
       expect(d.send).toBe(false);
       if (!d.send) expect(d.reason.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("classify", () => {
+  test("stay_silent wins over anything else the turn produced", () => {
+    const result = classify(
+      product({ text: "I was going to say this", silencedReason: "nothing to add" }),
+      UNINVITED,
+    );
+    expect(result).toEqual({ kind: "silent", reason: "nothing to add" });
+  });
+
+  test("the model's own text is a reply, on either kind of turn", () => {
+    expect(classify(product({ text: "next meetup is Saturday" }), ADDRESSED)).toEqual({
+      kind: "reply",
+      text: "next meetup is Saturday",
+    });
+    expect(classify(product({ text: "@nurul_h knows Rust" }), UNINVITED)).toEqual({
+      kind: "reply",
+      text: "@nurul_h knows Rust",
+    });
+  });
+
+  /**
+   * A turn that ends on a tool call leaves no text. When a member asked, the
+   * sub-agents' work beats a generic apology.
+   */
+  test("an addressed turn falls back to sub-agent output", () => {
+    expect(
+      classify(product({ subagentResults: ["Events — 3 found", "Members — 1"] }), ADDRESSED),
+    ).toEqual({ kind: "reply", text: "Events — 3 found\n\nMembers — 1" });
+  });
+
+  /**
+   * The invariant this function exists to make true: an uninvited turn can only
+   * produce a deliverable reply from the model's own text. Before it was
+   * extracted, this held only because the handler happened to withhold the
+   * progress sink, so no sub-agent output was ever collected — safe by wiring
+   * rather than by construction, and the next person to pass a sink on a
+   * chime-in would have posted a raw transcript into the group.
+   */
+  test("an uninvited turn never volunteers a sub-agent transcript", () => {
+    const result = classify(
+      product({ subagentResults: ["Members — searching for battery repair"] }),
+      UNINVITED,
+    );
+    expect(result.kind).toBe("notice");
+    expect(deliver(result, UNINVITED).send).toBe(false);
+  });
+
+  test("nothing at all is a notice, which an uninvited turn withholds", () => {
+    const result = classify(product(), UNINVITED);
+    expect(result.kind).toBe("notice");
+    expect(deliver(result, UNINVITED).send).toBe(false);
+    expect(deliver(classify(product(), ADDRESSED), ADDRESSED).send).toBe(true);
   });
 });

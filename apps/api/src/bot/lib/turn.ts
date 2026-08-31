@@ -59,11 +59,16 @@ export interface ChatCallbacks {
 /**
  * The callbacks a turn of this kind may hold.
  *
- * An uninvited turn gets none — not a filtered subset, none. Withholding the
- * callback is what removes the corresponding tool, so this is also what keeps
- * `ask_user` and the settings card out of a conversation the bot was not part
- * of. Granting nothing rather than denying case by case is the point: the next
- * capability someone adds is safe before anyone thinks about it.
+ * An uninvited turn gets none — not a filtered subset, none. Granting nothing
+ * rather than denying case by case is the point: the next capability someone
+ * adds is safe before anyone thinks about it.
+ *
+ * Withholding a callback does not always remove the tool. Only `stay_silent` is
+ * conditionally registered; `ask_user` and `propose_settings_change` are always
+ * in the tool list and decline at runtime when their callback is absent (see
+ * ai/tools.ts). So an uninvited turn can still *call* `ask_user` and burn a step
+ * on a refusal — it just cannot make it post anything. The safety is that the
+ * callback is the only route to the chat, not that the tool is gone.
  */
 export function permittedCallbacks(
   kind: TurnKind,
@@ -82,10 +87,57 @@ export function permittedCallbacks(
  * one rule ("a notice goes only to someone who asked") replace the checks that
  * used to be scattered through the agent.
  */
-export type AgentOutcome =
-  | { kind: "reply"; text: string; responseMessages: ModelMessage[] }
-  | { kind: "notice"; text: string; responseMessages: ModelMessage[] }
-  | { kind: "silent"; reason: string; responseMessages: ModelMessage[] };
+export type TurnResult =
+  | { kind: "reply"; text: string }
+  | { kind: "notice"; text: string }
+  | { kind: "silent"; reason: string };
+
+/** A result plus the transcript the session needs to replay the turn. */
+export type AgentOutcome = TurnResult & { responseMessages: ModelMessage[] };
+
+/** What a finished model call produced, before it is given a meaning. */
+export interface TurnProduct {
+  /** The model's own text for the turn. Empty when it ended on a tool call. */
+  text: string | undefined;
+  /** Output collected from sub-agents, when a progress reporter gathered any. */
+  subagentResults: string[];
+  /** Set when the agent called stay_silent. */
+  silencedReason: string | null;
+}
+
+/**
+ * What a turn amounts to.
+ *
+ * Pulled out of runAgent so the one decision that says what a chime-in is
+ * allowed to utter can actually be tested — runAgent imports `env` and cannot be
+ * imported by a test at all.
+ *
+ * The rule worth stating: an uninvited turn can only ever produce a deliverable
+ * reply from the model's own text. Sub-agent output stands in for an answer when
+ * a member asked, because discarding their work behind a generic apology is
+ * worse than a rough answer — but a raw transcript of what the bot just did is
+ * not something to volunteer to a room. Today that also happens to hold because
+ * the handler withholds the progress sink from uninvited turns, so no sub-agent
+ * output is ever collected; relying on that is how the next bug gets in.
+ */
+export function classify(product: TurnProduct, policy: TurnPolicy): TurnResult {
+  if (product.silencedReason !== null) {
+    return { kind: "silent", reason: product.silencedReason };
+  }
+
+  if (product.text) return { kind: "reply", text: product.text };
+
+  if (policy.kind === "addressed" && product.subagentResults.length > 0) {
+    return { kind: "reply", text: product.subagentResults.join("\n\n") };
+  }
+
+  // Nothing to say. A notice rather than a reply, so `deliver` keeps it out of
+  // a room that never asked.
+  return {
+    kind: "notice",
+    text: "I couldn't generate a response. Please try again.",
+  };
+}
 
 export type Delivery =
   | { send: true; text: string; recordChime: boolean }
@@ -95,10 +147,11 @@ export type Delivery =
  * The single decision about whether anything reaches the chat.
  *
  * `recordChime` rides along because it has to agree with the send: staying
- * quiet must not burn the 30-minute cooldown that gates speaking, and that
- * coupling was previously two statements apart in the handler.
+ * quiet must not burn the cooldown that gates speaking — `chimeIn.cooldownMinutes`
+ * from settings, defaulting to CHIME_IN_COOLDOWN_MS. That coupling was previously
+ * two statements apart in the handler.
  */
-export function deliver(outcome: AgentOutcome, policy: TurnPolicy): Delivery {
+export function deliver(outcome: TurnResult, policy: TurnPolicy): Delivery {
   switch (outcome.kind) {
     case "silent":
       return { send: false, reason: `stayed silent — ${outcome.reason}` };

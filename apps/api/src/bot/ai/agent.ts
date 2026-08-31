@@ -13,13 +13,12 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
-import type { AgentOutcome, TurnPolicy } from "../lib/turn";
+import { classify, type AgentOutcome, type ChatCallbacks, type TurnPolicy } from "../lib/turn";
 import { guardToolResult } from "./tool-result-guard";
 import {
   SubagentProgress,
   trackToolCalls,
   SUBAGENT_TOOLS,
-  type ProgressSink,
 } from "../lib/subagent-progress";
 
 /** Bridges the memory service into the framework-agnostic context builder. */
@@ -30,7 +29,12 @@ const memoryRecaller: MemoryRecaller = {
   resolveSubject: (name) => resolveSubjectTelegramId(name),
 };
 
-interface AgentParams {
+/**
+ * Extends ChatCallbacks rather than restating askUser/proposeSettings, so a new
+ * chat-posting capability cannot be added here without also appearing in the
+ * interface that permittedCallbacks strips for an uninvited turn.
+ */
+interface AgentParams extends ChatCallbacks {
   /** Raw user question — drives memory retrieval. */
   query: string;
   /** Question prefixed with the sender/timestamp header — sent to the model. */
@@ -40,10 +44,6 @@ interface AgentParams {
   chatHistory: ModelMessage[];
   chatId: string;
   senderTelegramId: number | null;
-  /** Posts and edits the sub-agent status message. Omit to run silently. */
-  progressSink?: ProgressSink;
-  /** Puts a clarifying question to the member. Omit to disable ask_user. */
-  askUser?: (question: string) => Promise<void>;
   /**
    * Log the main agent's own tool calls into the status message, not just its
    * sub-agents. DM-only: a group shouldn't get a running commentary of the
@@ -62,11 +62,6 @@ interface AgentParams {
    * chat. See lib/turn.ts.
    */
   policy: TurnPolicy;
-  /** Renders an AI-proposed settings change card. Omit to disable the tool. */
-  proposeSettings?: (input: {
-    changes: { key: string; from: unknown; to: unknown }[];
-    rationale?: string;
-  }) => Promise<void>;
 }
 
 export async function runAgent({
@@ -226,33 +221,28 @@ export async function runAgent({
     );
 
     const responseMessages = result.response.messages as ModelMessage[];
-
-    // Fire-and-forget: track which memories were used
-    if (memories.length > 0) {
-      incrementAccessCount(memories.map((m) => m.id));
-    }
+    const subagentResults = progress?.completedResults() ?? [];
 
     await progress?.finish().catch(() => {});
 
-    if (silencedReason !== null) {
-      console.log(`[main-agent] staying silent — ${silencedReason}`);
-      return { kind: "silent", reason: silencedReason, responseMessages };
+    const outcome = classify(
+      { text: result.text, subagentResults, silencedReason },
+      policy,
+    );
+
+    // Fire-and-forget: track which memories were used. Skipped on a silent turn
+    // to match the behaviour before this was extracted — access counts feed
+    // memory ranking, and a chime-in that decided to say nothing should not
+    // promote whatever it happened to recall.
+    if (outcome.kind !== "silent" && memories.length > 0) {
+      incrementAccessCount(memories.map((m) => m.id));
     }
 
-    // The model sometimes ends its turn on a tool call, or hits the step cap,
-    // leaving no text. Surfacing the sub-agents' own output beats discarding
-    // their work.
-    const answer = result.text || progress?.completedResults().join("\n\n");
-    if (answer) return { kind: "reply", text: answer, responseMessages };
+    if (outcome.kind === "silent") {
+      console.log(`[main-agent] staying silent — ${outcome.reason}`);
+    }
 
-    // Nothing to say. A notice rather than a reply, which is what keeps it out
-    // of a group that never asked — an uninvited turn with no answer is silent,
-    // and `deliver` is the one place that decides so.
-    return {
-      kind: "notice",
-      text: "I couldn't generate a response. Please try again.",
-      responseMessages,
-    };
+    return { ...outcome, responseMessages };
   } catch (error) {
     await progress?.finish().catch(() => {});
     if (error instanceof Error && error.message.includes("rate limit")) {

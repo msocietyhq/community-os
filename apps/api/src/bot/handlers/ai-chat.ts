@@ -286,7 +286,10 @@ aiChatHandler.on("message:text", async (ctx) => {
   try {
     await ctx.replyWithChatAction("typing");
     // Every one of these puts something in the chat, so an uninvited turn is
-    // handed none of them — withholding the callback is what removes the tool.
+    // handed none of them. Note only stay_silent is actually removed from the
+    // tool list by this; ask_user and propose_settings_change stay registered
+    // and decline at runtime — the callback is the route to the chat, not the
+    // tool's existence.
     const permitted = permittedCallbacks(policy.kind, {
       progressSink,
       askUser,
@@ -339,11 +342,7 @@ aiChatHandler.on("message:text", async (ctx) => {
     // breaks. The member asked the room, not the bot, and has no idea what an
     // apology would even be for.
     const delivery = deliver(
-      {
-        kind: "notice",
-        text: "Sorry, I encountered an error. Please try again later.",
-        responseMessages: [],
-      },
+      { kind: "notice", text: "Sorry, I encountered an error. Please try again later." },
       policy,
     );
     if (!delivery.send) return;
