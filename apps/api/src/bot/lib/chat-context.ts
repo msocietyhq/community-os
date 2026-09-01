@@ -47,13 +47,11 @@ interface RawFrom {
 
 /**
  * Builds a TelegramMeta object from a raw grammY message and sender.
- * `meId` is the bot's own Telegram user ID — used to tag replies to the bot.
  */
 export function buildTelegramMeta(
   msg: RawMessage,
   from: RawFrom,
   chatType: "private" | "group" | "supergroup",
-  meId: number,
 ): TelegramMeta {
   const meta: TelegramMeta = {
     messageId: msg.message_id,
@@ -68,7 +66,7 @@ export function buildTelegramMeta(
   };
 
   const replyMsg = msg.reply_to_message;
-  if (replyMsg && replyMsg.from) {
+  if (replyMsg?.from) {
     meta.replyTo = {
       messageId: replyMsg.message_id,
       date: replyMsg.date,

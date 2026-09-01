@@ -150,7 +150,7 @@ export const eventRoutes = new Elysia({ prefix: "/api/v1/events" })
       )
       .post(
         "/:id/pledges",
-        async ({ params: { id }, body, user }) => {
+        async () => {
           // TODO: Implement pledge creation
           return { message: "Pledge created" };
         },

@@ -297,7 +297,6 @@ describe("SubagentProgress", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
-    const { start } = rooted(progress);
     return { ...sink, ...clock, progress, ...rooted(progress) };
   }
 
@@ -313,7 +312,7 @@ describe("SubagentProgress", () => {
   });
 
   test("a slow sub-agent posts once the reveal timer fires", async () => {
-    const { progress, sent, fire, start } = setup();
+    const { sent, fire, start } = setup();
 
     start("Events", "upcoming meetups");
     expect(sent).toEqual([]);
@@ -366,7 +365,7 @@ describe("SubagentProgress", () => {
   });
 
   test("settling twice is ignored", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -449,7 +448,7 @@ describe("SubagentProgress", () => {
   // ── nested tool calls ─────────────────────────────────────────────────────
 
   test("a running sub-agent shows the tool it is calling", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -464,7 +463,7 @@ describe("SubagentProgress", () => {
   });
 
   test("the last tool stays on screen after it finishes", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -481,7 +480,7 @@ describe("SubagentProgress", () => {
   });
 
   test("parallel tool calls are listed together", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -495,7 +494,7 @@ describe("SubagentProgress", () => {
   });
 
   test("ending one of two parallel tools leaves the other", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -513,7 +512,7 @@ describe("SubagentProgress", () => {
   });
 
   test("consecutive calls to the same tool collapse into a count", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -529,7 +528,7 @@ describe("SubagentProgress", () => {
   });
 
   test("the stack grows in call order", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "plan it");
     fire();
@@ -548,7 +547,7 @@ describe("SubagentProgress", () => {
   });
 
   test("a long stack folds the oldest entries away", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "plan it");
     fire();
@@ -608,7 +607,7 @@ describe("SubagentProgress", () => {
   });
 
   test("ending a tool twice is harmless", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -625,7 +624,7 @@ describe("SubagentProgress", () => {
   });
 
   test("tool names go out verbatim, with no markup to neutralise", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -651,12 +650,11 @@ describe("nested sub-agents", () => {
       scheduler: clock.scheduler,
       minEditIntervalMs: 0,
     });
-    const { start } = rooted(progress);
     return { ...sink, ...clock, progress, ...rooted(progress) };
   }
 
   test("a sub-agent's children are indented beneath it", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const parent = start("Events", "plan the meetup");
     fire();
@@ -673,7 +671,7 @@ describe("nested sub-agents", () => {
   });
 
   test("nesting is not limited to one level", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const a = start("Events", "plan the meetup");
     fire();
@@ -692,7 +690,7 @@ describe("nested sub-agents", () => {
   });
 
   test("a child's tools indent under the child", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const parent = start("Events", "plan the meetup");
     fire();
@@ -707,7 +705,7 @@ describe("nested sub-agents", () => {
   });
 
   test("children settle independently of their parent", async () => {
-    const { progress, current, fire, start } = setup();
+    const { current, fire, start } = setup();
 
     const parent = start("Events", "plan the meetup");
     fire();
@@ -785,7 +783,6 @@ describe("edit throttling", () => {
       scheduler: clock.scheduler,
       now: () => time,
     });
-    const { start } = rooted(progress);
     return {
       ...sink,
       ...clock,
@@ -798,7 +795,7 @@ describe("edit throttling", () => {
   }
 
   test("the first post is never delayed", async () => {
-    const { progress, sent, fire, start } = setup();
+    const { sent, fire, start } = setup();
     start("Events", "meetups");
     fire();
     await settle();
@@ -806,7 +803,7 @@ describe("edit throttling", () => {
   });
 
   test("edits inside the interval are deferred, not dropped", async () => {
-    const { progress, edits, fire, advance, current, start } = setup();
+    const { edits, fire, advance, current, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -827,7 +824,7 @@ describe("edit throttling", () => {
   });
 
   test("only the latest state is sent when several updates are coalesced", async () => {
-    const { progress, edits, fire, advance, current, start } = setup();
+    const { edits, fire, advance, current, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();
@@ -850,7 +847,7 @@ describe("edit throttling", () => {
   });
 
   test("an edit past the interval goes straight out", async () => {
-    const { progress, edits, fire, advance, start } = setup();
+    const { edits, fire, advance, start } = setup();
 
     const handle = start("Events", "meetups");
     fire();

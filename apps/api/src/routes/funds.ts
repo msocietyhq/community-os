@@ -44,7 +44,7 @@ export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
   )
   .post(
     "/transactions",
-    async ({ body, user }) => {
+    async () => {
       // TODO: Implement create transaction
       return { message: "Transaction created" };
     },

@@ -21,7 +21,7 @@ export const infraRoutes = new Elysia({ prefix: "/api/v1/infra" })
   )
   .post(
     "/provision",
-    async ({ body, user }) => {
+    async () => {
       // TODO: Implement resource provisioning
       return { message: "Provisioning started" };
     },
@@ -33,7 +33,7 @@ export const infraRoutes = new Elysia({ prefix: "/api/v1/infra" })
   )
   .post(
     "/subdomains",
-    async ({ body, user }) => {
+    async () => {
       // TODO: Implement subdomain creation
       return { message: "Subdomain created" };
     },

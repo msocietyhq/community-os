@@ -394,7 +394,7 @@ export async function forgetMemoriesBySubject(
 
   if (contentHint) {
     conditions.push(
-      sql`lower(${botMemories.content}) LIKE lower(${"%" + contentHint + "%"})`,
+      sql`lower(${botMemories.content}) LIKE lower(${`%${contentHint}%`})`,
     );
   }
 

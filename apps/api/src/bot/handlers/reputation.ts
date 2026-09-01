@@ -107,7 +107,7 @@ reputationHandler.command("reputation", async (ctx) => {
       );
       if (mentionEntity?.type === "text_mention" && mentionEntity.user) {
         targetTelegramId = String(mentionEntity.user.id);
-        targetLabel = mentionEntity.user.first_name + "'s";
+        targetLabel = `${mentionEntity.user.first_name}'s`;
       } else if (mentionEntity?.type === "mention") {
         const username = ctx
           .message!.text!.slice(

@@ -172,7 +172,6 @@ aiChatHandler.on("message:text", async (ctx) => {
     ctx.message,
     ctx.from!,
     chatType as "private" | "group" | "supergroup",
-    ctx.me.id,
   );
 
   const enrichedQuery = buildEnrichedQuery(

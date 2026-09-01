@@ -44,7 +44,7 @@ const cleanup = setInterval(() => {
 cleanup.unref();
 
 export const authRateLimit = new Elysia({ name: "auth-rate-limit" }).onRequest(
-  ({ request, set }) => {
+  ({ request }) => {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/auth")) return;
 

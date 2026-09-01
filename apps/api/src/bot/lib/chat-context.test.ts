@@ -23,7 +23,7 @@ describe("buildTelegramMeta", () => {
   };
 
   test("plain message (no reply) → replyTo is undefined", () => {
-    const meta = buildTelegramMeta(baseMsg, baseFrom, "private", BOT_ID);
+    const meta = buildTelegramMeta(baseMsg, baseFrom, "private");
     expect(meta.replyTo).toBeUndefined();
     expect(meta.from.username).toBe("aziz_sg");
     expect(meta.chatType).toBe("private");
@@ -39,7 +39,7 @@ describe("buildTelegramMeta", () => {
         text: "Hello world",
       },
     };
-    const meta = buildTelegramMeta(msg, baseFrom, "group", BOT_ID);
+    const meta = buildTelegramMeta(msg, baseFrom, "group");
     expect(meta.replyTo).toBeDefined();
     expect(meta.replyTo?.from?.id).toBe(77);
     expect(meta.replyTo?.text).toBe("Hello world");
@@ -55,7 +55,7 @@ describe("buildTelegramMeta", () => {
         text: "I can help you with that.",
       },
     };
-    const meta = buildTelegramMeta(msg, baseFrom, "group", BOT_ID);
+    const meta = buildTelegramMeta(msg, baseFrom, "group");
     expect(meta.replyTo).toBeDefined();
     expect(meta.replyTo?.from?.id).toBe(BOT_ID);
     expect(meta.replyTo?.text).toBe("I can help you with that.");
@@ -63,7 +63,7 @@ describe("buildTelegramMeta", () => {
 
   test("no username → firstName is accessible via from.firstName", () => {
     const from = { id: 55, first_name: "Bilal" };
-    const meta = buildTelegramMeta(baseMsg, from, "private", BOT_ID);
+    const meta = buildTelegramMeta(baseMsg, from, "private");
     expect(meta.from.username).toBeUndefined();
     expect(meta.from.firstName).toBe("Bilal");
   });
@@ -81,7 +81,6 @@ describe("buildEnrichedQuery", () => {
       { message_id: 1, date: baseDate },
       { id: 1, first_name: "Aziz", username: "aziz_sg" },
       "private",
-      0,
     );
     const result = buildEnrichedQuery("What is the next event?", meta);
     expect(result).toContain("@aziz_sg");
@@ -103,7 +102,6 @@ describe("buildEnrichedQuery", () => {
       },
       { id: 1, first_name: "Aziz", username: "aziz_sg" },
       "group",
-      0,
     );
     const result = buildEnrichedQuery("@bot sure", meta);
     expect(result).toContain("replying to");
@@ -126,7 +124,6 @@ describe("buildEnrichedQuery", () => {
       },
       { id: 1, first_name: "Aziz" },
       "group",
-      0,
     );
     const result = buildEnrichedQuery("ok", meta);
     // Should contain truncated text with ellipsis
@@ -143,7 +140,6 @@ describe("buildEnrichedQuery", () => {
       { message_id: 1, date: baseDate },
       { id: 1, first_name: "Bilal" },
       "private",
-      0,
     );
     const result = buildEnrichedQuery("hi", meta);
     expect(result).toContain("Bilal");

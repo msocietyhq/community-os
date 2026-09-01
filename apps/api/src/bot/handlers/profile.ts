@@ -315,7 +315,7 @@ function formatProfile(
     linkedinUrl?: string | null;
   },
 ): string {
-  const header = `*${esc(name)}*` + (username ? ` (@${esc(username)})` : "");
+  const header = `*${esc(name)}*${username ? ` (@${esc(username)})` : ""}`;
 
   const titleCompany = [member.currentTitle, member.currentCompany]
     .filter(Boolean)
