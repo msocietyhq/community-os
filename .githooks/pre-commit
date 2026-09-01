@@ -1,0 +1,22 @@
+#!/bin/sh
+# Blocks a commit whose staged files fail Biome. There is no CI on this repo,
+# so this hook is the only thing holding the lint bar.
+#
+# Bypass with `git commit --no-verify` when you need to.
+
+BIOME="./node_modules/.bin/biome"
+
+if [ ! -x "$BIOME" ]; then
+  echo "pre-commit: Biome not found at $BIOME — run 'bun install'." >&2
+  exit 1
+fi
+
+# --staged limits the check to what is actually being committed.
+# --no-errors-on-unmatched keeps doc-only commits from failing.
+if ! "$BIOME" check --staged --error-on-warnings --no-errors-on-unmatched; then
+  echo >&2
+  echo "pre-commit: Biome found issues in staged files." >&2
+  echo "  Fix them with:  bun lint:fix" >&2
+  echo "  Then re-stage:  git add -u" >&2
+  exit 1
+fi

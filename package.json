@@ -11,10 +11,11 @@
     "zod": "^4.3.6"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "dev": "concurrently -n api,web -c blue,cyan --kill-others-on-fail \"bun run --cwd apps/api dev\" \"wait-on tcp:3000 && bun run --cwd apps/web dev\"",
     "build": "bun run --filter '*' build",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
+    "lint": "biome check --error-on-warnings .",
+    "lint:fix": "biome check --write --error-on-warnings .",
     "type-check": "bun run --filter '*' type-check",
     "db:generate": "bun run --filter @community-os/api db:generate",
     "db:migrate": "bun run --filter @community-os/api db:migrate",
