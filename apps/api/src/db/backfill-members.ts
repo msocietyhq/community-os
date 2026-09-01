@@ -110,7 +110,10 @@ export async function backfillMissingMembers(): Promise<void> {
       .select({ date: min(telegramMessages.date) })
       .from(telegramMessages)
       .where(
-        and(eq(telegramMessages.fromUserId, sender.fromUserId!), inCommunityGroup),
+        and(
+          eq(telegramMessages.fromUserId, sender.fromUserId!),
+          inCommunityGroup,
+        ),
       );
 
     const { created } = await membersService.createIfNotExists(userId, {

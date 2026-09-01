@@ -34,19 +34,29 @@ describe("shouldResume", () => {
 
   /** Sessions are per-chat, so without this anyone could consume the slot. */
   test("a different member answering does not resume", () => {
-    expect(shouldResume(question(), incoming({ fromTelegramId: 77 }))).toBe(false);
+    expect(shouldResume(question(), incoming({ fromTelegramId: 77 }))).toBe(
+      false,
+    );
   });
 
   test("an unidentifiable sender does not resume", () => {
-    expect(shouldResume(question(), incoming({ fromTelegramId: null }))).toBe(false);
+    expect(shouldResume(question(), incoming({ fromTelegramId: null }))).toBe(
+      false,
+    );
   });
 
   test("an answer in a different forum topic does not resume", () => {
     expect(
-      shouldResume(question({ messageThreadId: 112892 }), incoming({ messageThreadId: null })),
+      shouldResume(
+        question({ messageThreadId: 112892 }),
+        incoming({ messageThreadId: null }),
+      ),
     ).toBe(false);
     expect(
-      shouldResume(question({ messageThreadId: null }), incoming({ messageThreadId: 112892 })),
+      shouldResume(
+        question({ messageThreadId: null }),
+        incoming({ messageThreadId: 112892 }),
+      ),
     ).toBe(false);
   });
 
@@ -61,7 +71,10 @@ describe("shouldResume", () => {
 
   test("an answer past the window does not resume", () => {
     expect(
-      shouldResume(question(), incoming({ at: NOW + PENDING_QUESTION_TTL_MS + 1 })),
+      shouldResume(
+        question(),
+        incoming({ at: NOW + PENDING_QUESTION_TTL_MS + 1 }),
+      ),
     ).toBe(false);
   });
 
@@ -81,7 +94,9 @@ describe("shouldResume", () => {
   });
 
   test("the window is configurable", () => {
-    expect(shouldResume(question(), incoming({ at: NOW + 50 }), 10)).toBe(false);
+    expect(shouldResume(question(), incoming({ at: NOW + 50 }), 10)).toBe(
+      false,
+    );
     expect(shouldResume(question(), incoming({ at: NOW + 5 }), 10)).toBe(true);
   });
 });

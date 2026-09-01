@@ -23,19 +23,31 @@ describe("decideAccess", () => {
   });
 
   test("the cheap tier is not activity-gated", () => {
-    const result = decideAccess({ ...base, tier: "big", isRecentlyActive: false });
+    const result = decideAccess({
+      ...base,
+      tier: "big",
+      isRecentlyActive: false,
+    });
     expect(result.allowed).toBe(true);
   });
 
   test("the deep tier requires recent activity", () => {
-    const result = decideAccess({ ...base, tier: "bigger", isRecentlyActive: false });
+    const result = decideAccess({
+      ...base,
+      tier: "bigger",
+      isRecentlyActive: false,
+    });
     expect(result.allowed).toBe(false);
     expect(denied(result).reason).toBe("inactive");
   });
 
   test("budget applies to both tiers", () => {
     for (const tier of ["big", "bigger"] as const) {
-      const result = decideAccess({ ...base, tier, spentTodayUsd: ADVISOR_DAILY_BUDGET_USD });
+      const result = decideAccess({
+        ...base,
+        tier,
+        spentTodayUsd: ADVISOR_DAILY_BUDGET_USD,
+      });
       expect(result.allowed).toBe(false);
       expect(denied(result).reason).toBe("budget");
     }
@@ -83,7 +95,9 @@ describe("decideAccess", () => {
   });
 
   test("the budget message says when it resets", () => {
-    const message = denied(decideAccess({ ...base, tier: "big", spentTodayUsd: 5 })).tellUser;
+    const message = denied(
+      decideAccess({ ...base, tier: "big", spentTodayUsd: 5 }),
+    ).tellUser;
     expect(message).toContain("midnight UTC");
   });
 
@@ -96,7 +110,9 @@ describe("decideAccess", () => {
   });
 
   test("denials still promise a best-effort answer rather than stopping", () => {
-    const message = denied(decideAccess({ ...base, tier: "big", spentTodayUsd: 5 })).tellUser;
+    const message = denied(
+      decideAccess({ ...base, tier: "big", spentTodayUsd: 5 }),
+    ).tellUser;
     expect(message.toLowerCase()).toContain("i'll");
   });
 });

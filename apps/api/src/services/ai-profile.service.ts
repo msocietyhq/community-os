@@ -1,11 +1,3 @@
-/**
- * AI-derived member profiles.
- *
- * A member's `ai_*` columns are a derived cache: regenerated wholesale from bot
- * memories and recent messages, overwritten each run, never authoritative. The
- * hand-authored `members` row always wins — see the design spec.
- */
-import { z } from "zod";
 import { eq, and, sql, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { members } from "../db/schema/members";
@@ -25,14 +17,8 @@ import {
   type VisibleSuggestions,
   type SuggestionEntry,
 } from "./ai-profile-suggestions";
-import {
-  aiSuggestedSchema,
-  type DismissedEntry,
-} from "@community-os/shared/validators";
-import {
-  generationSchema,
-  unwrapCollapsedProfile,
-} from "./ai-profile-unwrap";
+import type { DismissedEntry } from "@community-os/shared/validators";
+import { generationSchema, unwrapCollapsedProfile } from "./ai-profile-unwrap";
 
 // Re-exported so the service stays the single import surface for callers.
 export { generationSchema, unwrapCollapsedProfile };

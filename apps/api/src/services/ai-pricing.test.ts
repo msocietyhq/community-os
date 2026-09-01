@@ -38,7 +38,8 @@ describe("estimateCost", () => {
 
   test("treats the cache counts as slices of input, not additions", () => {
     // 1M prompt = 600k uncached + 300k read + 100k write.
-    const expected = (600_000 + 300_000 * 0.1 + 100_000 * 1.25) * 3 / 1_000_000;
+    const expected =
+      ((600_000 + 300_000 * 0.1 + 100_000 * 1.25) * 3) / 1_000_000;
     expect(estimateCost(SONNET, 1_000_000, 0, 300_000, 100_000)).toBeCloseTo(
       expected,
       10,
@@ -64,10 +65,9 @@ describe("estimateCost", () => {
   });
 
   test("retired model ids still price, so history is not rewritten", () => {
-    expect(estimateCost("claude-sonnet-4-5-20250929", 1_000_000, 0)).toBeCloseTo(
-      3,
-      10,
-    );
+    expect(
+      estimateCost("claude-sonnet-4-5-20250929", 1_000_000, 0),
+    ).toBeCloseTo(3, 10);
   });
 });
 
@@ -75,14 +75,16 @@ describe("catalog-keyed pricing", () => {
   test("prices a catalog key", () => {
     // Sonnet 5: $3 in / $15 out per 1M.
     expect(estimateCost("anthropic/sonnet-5", 1_000_000, 0)).toBeCloseTo(3, 10);
-    expect(estimateCost("anthropic/sonnet-5", 0, 1_000_000)).toBeCloseTo(15, 10);
+    expect(estimateCost("anthropic/sonnet-5", 0, 1_000_000)).toBeCloseTo(
+      15,
+      10,
+    );
   });
 
   test("still prices a retired raw id, so historical rows are not zeroed", () => {
-    expect(estimateCost("claude-sonnet-4-5-20250929", 1_000_000, 0)).toBeCloseTo(
-      3,
-      10,
-    );
+    expect(
+      estimateCost("claude-sonnet-4-5-20250929", 1_000_000, 0),
+    ).toBeCloseTo(3, 10);
   });
 
   test("applies the catalog's cache multipliers, not a hardcoded pair", () => {

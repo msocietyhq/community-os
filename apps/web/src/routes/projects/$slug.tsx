@@ -54,8 +54,7 @@ function ProjectDetailPage() {
     if (!data) return;
 
     const title = `${data.name} — MSOCIETY`;
-    const description =
-      data.description ?? `${data.name} on MSOCIETY`;
+    const description = data.description ?? `${data.name} on MSOCIETY`;
     const ogImage = `${apiBase}/api/v1/projects/${slug}/og-image`;
     const pageUrl = `${window.location.origin}/projects/${slug}`;
 
@@ -245,7 +244,9 @@ function ProjectContent({ project }: { project: ProjectData }) {
             {NATURE_LABELS[project.nature] ?? project.nature}
           </span>
           <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-gray-300">
-            {project.status ? (STATUS_LABELS[project.status] ?? project.status) : "Unknown"}
+            {project.status
+              ? (STATUS_LABELS[project.status] ?? project.status)
+              : "Unknown"}
           </span>
         </div>
 

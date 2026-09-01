@@ -13,7 +13,10 @@ import { z } from "zod";
 import { aiService } from "../services/ai.service";
 import { db } from "../db";
 import { events } from "../db/schema/events";
-import { searchMessagesHybrid, type MessageSearchResult } from "../services/messages.service";
+import {
+  searchMessagesHybrid,
+  type MessageSearchResult,
+} from "../services/messages.service";
 
 const DRY_RUN = process.env.DRY_RUN === "true";
 const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID;
@@ -93,22 +96,35 @@ async function searchMessages(): Promise<MessageSearchResult[]> {
   const seen = new Map<number, MessageSearchResult>();
 
   for (const query of SEARCH_QUERIES) {
-    const results = await searchMessagesHybrid(TELEGRAM_GROUP_ID!, query, RESULTS_PER_QUERY);
+    const results = await searchMessagesHybrid(
+      TELEGRAM_GROUP_ID!,
+      query,
+      RESULTS_PER_QUERY,
+    );
     for (const msg of results) {
-      if (!seen.has(msg.messageId) && getMessageContent(msg).length >= MIN_TEXT_LENGTH) {
+      if (
+        !seen.has(msg.messageId) &&
+        getMessageContent(msg).length >= MIN_TEXT_LENGTH
+      ) {
         seen.set(msg.messageId, msg);
       }
     }
-    console.log(`  "${query}" -> ${results.length} results (${seen.size} unique total)`);
+    console.log(
+      `  "${query}" -> ${results.length} results (${seen.size} unique total)`,
+    );
   }
 
-  const messages = [...seen.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const messages = [...seen.values()].sort(
+    (a, b) => a.date.getTime() - b.date.getTime(),
+  );
   console.log(`\nCandidate messages after dedup + filter: ${messages.length}`);
   return messages;
 }
 
 // Step 2: Extract events via Claude
-async function extractEvents(messages: MessageSearchResult[]): Promise<ExtractedEvent[]> {
+async function extractEvents(
+  messages: MessageSearchResult[],
+): Promise<ExtractedEvent[]> {
   console.log("\n=== Step 2: Extracting events via Claude ===");
   const allEvents: ExtractedEvent[] = [];
 
@@ -119,7 +135,9 @@ async function extractEvents(messages: MessageSearchResult[]): Promise<Extracted
 
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i]!;
-    console.log(`  Processing batch ${i + 1}/${batches.length} (${batch.length} messages)...`);
+    console.log(
+      `  Processing batch ${i + 1}/${batches.length} (${batch.length} messages)...`,
+    );
 
     const formattedMessages = batch
       .map(
@@ -128,9 +146,10 @@ async function extractEvents(messages: MessageSearchResult[]): Promise<Extracted
       )
       .join("\n\n---\n\n");
 
-    const result = await aiService.generateObject({
-      schema: extractedEventSchema,
-      system: `You are analyzing Telegram group chat messages from a Muslim tech professionals community (MSOCIETY) to extract information about past events.
+    const result = await aiService.generateObject(
+      {
+        schema: extractedEventSchema,
+        system: `You are analyzing Telegram group chat messages from a Muslim tech professionals community (MSOCIETY) to extract information about past events.
 
 Instructions:
 - Only extract ACTUAL events (meetups, workshops, talks, socials, etc.), not general discussion about events
@@ -139,8 +158,10 @@ Instructions:
 - For event titles, create a clear descriptive title (e.g. "MSOCIETY Monthly Meetup - March 2025")
 - Assess your confidence: "high" = clear event with date/time, "medium" = likely event but some details inferred, "low" = uncertain
 - If no events are found in the messages, return an empty events array`,
-      prompt: `Extract structured event data from these Telegram messages:\n\n${formattedMessages}`,
-    }, { caller: "backfill-events", tier: "smart", class: "background" });
+        prompt: `Extract structured event data from these Telegram messages:\n\n${formattedMessages}`,
+      },
+      { caller: "backfill-events", tier: "smart", class: "background" },
+    );
 
     const object = result.object as z.infer<typeof extractedEventSchema>;
     allEvents.push(...object.events);
@@ -152,9 +173,11 @@ Instructions:
 }
 
 // Step 3: Deduplicate
-async function deduplicateEvents(
-  extracted: ExtractedEvent[],
-): Promise<{ events: ExtractedEvent[]; crossBatchDupes: number; existingSkipped: number }> {
+async function deduplicateEvents(extracted: ExtractedEvent[]): Promise<{
+  events: ExtractedEvent[];
+  crossBatchDupes: number;
+  existingSkipped: number;
+}> {
   console.log("\n=== Step 3: Deduplicating ===");
 
   // Cross-batch dedup: same date + normalized title
@@ -167,7 +190,9 @@ async function deduplicateEvents(
     if (existing) {
       crossBatchDupes++;
       const confidenceRank = { high: 3, medium: 2, low: 1 };
-      if (confidenceRank[evt.confidence] > confidenceRank[existing.confidence]) {
+      if (
+        confidenceRank[evt.confidence] > confidenceRank[existing.confidence]
+      ) {
         uniqueMap.set(key, evt);
       }
     } else {
@@ -190,7 +215,9 @@ async function deduplicateEvents(
       (existing) =>
         existing.startsAt &&
         sameDate(existing.startsAt.toISOString(), evt.startsAt) &&
-        normalizeTitle(existing.title).includes(normalizeTitle(evt.title).slice(0, 20)),
+        normalizeTitle(existing.title).includes(
+          normalizeTitle(evt.title).slice(0, 20),
+        ),
     );
     if (isDuplicate) {
       existingSkipped++;
@@ -206,9 +233,12 @@ async function deduplicateEvents(
 }
 
 // Step 4: Insert events
-async function insertEvents(
-  extracted: ExtractedEvent[],
-): Promise<{ created: number; completed: number; published: number; errors: number }> {
+async function insertEvents(extracted: ExtractedEvent[]): Promise<{
+  created: number;
+  completed: number;
+  published: number;
+  errors: number;
+}> {
   console.log("\n=== Step 4: Inserting events ===");
   const now = new Date();
   let created = 0;
@@ -259,7 +289,9 @@ async function insertEvents(
 
 // Main
 async function main() {
-  console.log(DRY_RUN ? "*** DRY RUN MODE — no events will be inserted ***\n" : "");
+  console.log(
+    DRY_RUN ? "*** DRY RUN MODE — no events will be inserted ***\n" : "",
+  );
 
   const messages = await searchMessages();
   if (messages.length === 0) {
@@ -272,12 +304,18 @@ async function main() {
   // Filter to high + medium confidence only
   const highMedium = allExtracted.filter((e) => e.confidence !== "low");
   const lowCount = allExtracted.length - highMedium.length;
-  console.log(`\nFiltered: ${highMedium.length} high/medium confidence, ${lowCount} low (skipped)`);
+  console.log(
+    `\nFiltered: ${highMedium.length} high/medium confidence, ${lowCount} low (skipped)`,
+  );
 
-  const { events: toInsert, crossBatchDupes, existingSkipped } =
-    await deduplicateEvents(highMedium);
+  const {
+    events: toInsert,
+    crossBatchDupes,
+    existingSkipped,
+  } = await deduplicateEvents(highMedium);
 
-  const { created, completed, published, errors } = await insertEvents(toInsert);
+  const { created, completed, published, errors } =
+    await insertEvents(toInsert);
 
   // Step 5: Summary
   const highCount = allExtracted.filter((e) => e.confidence === "high").length;

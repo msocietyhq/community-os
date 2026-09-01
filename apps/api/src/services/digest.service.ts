@@ -39,7 +39,8 @@ export interface Period {
 function sgtMonthStart(at: Date, delta: number): Date {
   const sgt = new Date(at.getTime() + SGT_OFFSET_MS);
   return new Date(
-    Date.UTC(sgt.getUTCFullYear(), sgt.getUTCMonth() + delta, 1) - SGT_OFFSET_MS,
+    Date.UTC(sgt.getUTCFullYear(), sgt.getUTCMonth() + delta, 1) -
+      SGT_OFFSET_MS,
   );
 }
 
@@ -135,7 +136,9 @@ export const digestService = {
    * show. The scheduled run passes the previous calendar month instead, so the
    * 1st-of-the-month post is a clean "July in review".
    */
-  async generateMonthlyDigest(period: Period = monthToDate()): Promise<MonthlyDigest> {
+  async generateMonthlyDigest(
+    period: Period = monthToDate(),
+  ): Promise<MonthlyDigest> {
     const { start, end } = period;
     const groupId = env.TELEGRAM_GROUP_ID;
 
@@ -147,7 +150,10 @@ export const digestService = {
     const [messageStats] = await db
       .select({
         totalMessages: count(),
-        uniqueActiveMembers: sql<number>`count(distinct ${telegramMessages.fromUserId})`.mapWith(Number),
+        uniqueActiveMembers:
+          sql<number>`count(distinct ${telegramMessages.fromUserId})`.mapWith(
+            Number,
+          ),
       })
       .from(telegramMessages)
       .where(
@@ -406,7 +412,9 @@ export const digestService = {
         const messageSample = best.messages
           .slice(0, 40)
           .map((m) => {
-            const author = m.fromUsername ? `@${m.fromUsername}` : m.fromFirstName ?? "unknown";
+            const author = m.fromUsername
+              ? `@${m.fromUsername}`
+              : (m.fromFirstName ?? "unknown");
             return `[${m.messageId}] ${author}: ${m.text}`;
           })
           .join("\n");
@@ -466,7 +474,7 @@ If worthPosting is true:
           highlightedMessageAuthor: quoted
             ? quoted.fromUsername
               ? `@${quoted.fromUsername}`
-              : quoted.fromFirstName ?? undefined
+              : (quoted.fromFirstName ?? undefined)
             : undefined,
         };
       } catch (err) {
@@ -512,8 +520,7 @@ If worthPosting is true:
       });
 
       return {
-        year:
-          anniversaryMembers[0]!.joinedAt?.getFullYear() ?? currentYear - 1,
+        year: anniversaryMembers[0]!.joinedAt?.getFullYear() ?? currentYear - 1,
         summary: lines.join("\n"),
         type: "anniversary",
       };

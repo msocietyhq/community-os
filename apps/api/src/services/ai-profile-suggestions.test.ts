@@ -55,7 +55,12 @@ describe("visibleSuggestions — source of truth", () => {
   });
 
   test("an empty field is suggested for", () => {
-    const result = visibleSuggestions({ bio: "AI-written bio" }, EMPTY, [], NOW);
+    const result = visibleSuggestions(
+      { bio: "AI-written bio" },
+      EMPTY,
+      [],
+      NOW,
+    );
     expect(result.bio).toBe("AI-written bio");
   });
 

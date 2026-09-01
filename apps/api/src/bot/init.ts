@@ -6,7 +6,10 @@ import { eventsHandler } from "./handlers/events";
 import { projectsHandler } from "./handlers/projects";
 import { reputationHandler } from "./handlers/reputation";
 import { digestHandler } from "./handlers/digest";
-import { startDigestScheduler, stopDigestScheduler } from "./lib/digest-scheduler";
+import {
+  startDigestScheduler,
+  stopDigestScheduler,
+} from "./lib/digest-scheduler";
 import { flushAllConversations } from "./lib/memory-batch";
 import { aiChatHandler } from "./handlers/ai-chat";
 import { tokenHandler } from "./handlers/token";
@@ -77,7 +80,9 @@ export async function initBot(): Promise<void> {
   bot.use(photoSyncMiddleware);
 
   // Session must be registered before conversations and handlers
-  bot.use(session({ initial: () => ({}), storage: new PostgresSessionStorage() }));
+  bot.use(
+    session({ initial: () => ({}), storage: new PostgresSessionStorage() }),
+  );
   // Conversations plugin must be registered before conversation handlers
   bot.use(conversations());
 

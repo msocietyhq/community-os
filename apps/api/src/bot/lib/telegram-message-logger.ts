@@ -64,7 +64,9 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
     const from = msg.from;
     const senderChat = msg.sender_chat;
     const forwardOrigin =
-      "forward_origin" in msg ? (msg.forward_origin as Record<string, unknown> | undefined) : undefined;
+      "forward_origin" in msg
+        ? (msg.forward_origin as Record<string, unknown> | undefined)
+        : undefined;
     const mediaType = detectMediaType(msg);
 
     const row: typeof telegramMessages.$inferInsert = {
@@ -80,24 +82,39 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
       fromLastName: from?.last_name ?? null,
       fromUsername: from?.username ?? null,
       fromIsBot: from?.is_bot ?? false,
-      fromIsPremium: ("is_premium" in (from ?? {}) ? ((from as unknown as Record<string, unknown>)?.is_premium) : null) as boolean | null,
+      fromIsPremium: ("is_premium" in (from ?? {})
+        ? (from as unknown as Record<string, unknown>)?.is_premium
+        : null) as boolean | null,
       fromLanguageCode: from?.language_code ?? null,
 
       senderChatId: senderChat?.id ?? null,
-      senderChatUsername: senderChat && "username" in senderChat ? (senderChat.username as string) : null,
-      senderChatTitle: senderChat && "title" in senderChat ? (senderChat.title as string) : null,
-      authorSignature: "author_signature" in msg ? (msg.author_signature as string) : null,
+      senderChatUsername:
+        senderChat && "username" in senderChat
+          ? (senderChat.username as string)
+          : null,
+      senderChatTitle:
+        senderChat && "title" in senderChat
+          ? (senderChat.title as string)
+          : null,
+      authorSignature:
+        "author_signature" in msg ? (msg.author_signature as string) : null,
 
       text: msg.text ?? null,
       caption: msg.caption ?? null,
       mediaType,
-      entities: msg.entities ? (msg.entities as unknown as Record<string, unknown>[]) : null,
-      captionEntities: msg.caption_entities ? (msg.caption_entities as unknown as Record<string, unknown>[]) : null,
+      entities: msg.entities
+        ? (msg.entities as unknown as Record<string, unknown>[])
+        : null,
+      captionEntities: msg.caption_entities
+        ? (msg.caption_entities as unknown as Record<string, unknown>[])
+        : null,
 
       replyToMessageId: msg.reply_to_message?.message_id ?? null,
       externalReplyChatId:
         "external_reply" in msg && msg.external_reply
-          ? String((msg.external_reply as { chat?: { id: number } }).chat?.id ?? "")
+          ? String(
+              (msg.external_reply as { chat?: { id: number } }).chat?.id ?? "",
+            )
           : null,
 
       forwardOriginType: forwardOrigin ? (forwardOrigin.type as string) : null,
@@ -107,13 +124,15 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
           : null,
       forwardFromFirstName:
         forwardOrigin?.type === "user"
-          ? ((forwardOrigin.sender_user as { first_name: string })?.first_name ?? null)
+          ? ((forwardOrigin.sender_user as { first_name: string })
+              ?.first_name ?? null)
           : forwardOrigin?.type === "hidden_user"
-            ? (forwardOrigin.sender_user_name as string ?? null)
+            ? ((forwardOrigin.sender_user_name as string) ?? null)
             : null,
       forwardFromUsername:
         forwardOrigin?.type === "user"
-          ? ((forwardOrigin.sender_user as { username?: string })?.username ?? null)
+          ? ((forwardOrigin.sender_user as { username?: string })?.username ??
+            null)
           : null,
       forwardFromChatId:
         forwardOrigin?.type === "chat" || forwardOrigin?.type === "channel"
@@ -139,7 +158,10 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
       editDate: msg.edit_date ? new Date(msg.edit_date * 1000) : null,
 
       newChatMemberIds: msg.new_chat_members
-        ? (msg.new_chat_members.map((m) => m.id) as unknown as Record<string, unknown>[])
+        ? (msg.new_chat_members.map((m) => m.id) as unknown as Record<
+            string,
+            unknown
+          >[])
         : null,
       leftChatMemberUserId: msg.left_chat_member?.id ?? null,
       newChatTitle: msg.new_chat_title ?? null,
@@ -162,7 +184,9 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
     const content = row.text ?? row.caption;
     if (content) {
       generateEmbedding(content)
-        .then((embedding) => setMessageEmbedding(row.chatId, row.messageId, embedding))
+        .then((embedding) =>
+          setMessageEmbedding(row.chatId, row.messageId, embedding),
+        )
         .catch((err: unknown) => {
           console.error("[message-logger] embedding failed:", err);
         });

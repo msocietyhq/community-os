@@ -76,7 +76,7 @@ export const eventAttendees = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [unique().on(table.eventId, table.userId)]
+  (table) => [unique().on(table.eventId, table.userId)],
 );
 
 export const eventPledges = pgTable("event_pledges", {

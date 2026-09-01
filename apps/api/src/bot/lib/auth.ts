@@ -83,13 +83,15 @@ export interface TelegramSignInWithHeadersResult {
 // The better-auth-telegram plugin types signInWithTelegram as conditional,
 // so direct calls lose type info. This typed wrapper avoids `any`.
 // Validated against better-auth@1.5.5 / better-auth-telegram@1.5.0.
-const signInWithTelegram = auth.api.signInWithTelegram as unknown as (
-  opts: { body: Record<string, string | number> },
-) => Promise<TelegramSignInResult>;
+const signInWithTelegram = auth.api.signInWithTelegram as unknown as (opts: {
+  body: Record<string, string | number>;
+}) => Promise<TelegramSignInResult>;
 
-const signInWithTelegramHeaders = auth.api.signInWithTelegram as unknown as (
-  opts: { body: Record<string, string | number>; returnHeaders: true },
-) => Promise<TelegramSignInWithHeadersResult>;
+const signInWithTelegramHeaders = auth.api
+  .signInWithTelegram as unknown as (opts: {
+  body: Record<string, string | number>;
+  returnHeaders: true;
+}) => Promise<TelegramSignInWithHeadersResult>;
 
 export { signInWithTelegramHeaders };
 

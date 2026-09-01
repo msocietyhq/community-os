@@ -24,7 +24,10 @@ export interface OversizedResult {
   hint: string;
 }
 
-export function isOversized(value: unknown, max = MAX_TOOL_RESULT_CHARS): boolean {
+export function isOversized(
+  value: unknown,
+  max = MAX_TOOL_RESULT_CHARS,
+): boolean {
   return measure(value) > max;
 }
 

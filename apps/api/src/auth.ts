@@ -1,3 +1,4 @@
+import type { openapi as elysiaOpenAPI } from "@elysiajs/openapi";
 import { betterAuth } from "better-auth";
 import { bearer, openAPI } from "better-auth/plugins";
 import { telegram } from "better-auth-telegram";
@@ -89,7 +90,27 @@ export const auth = betterAuth({
 let _schema: ReturnType<typeof auth.api.generateOpenAPISchema>;
 const getSchema = async () => (_schema ??= auth.api.generateOpenAPISchema());
 
-export const authOpenAPI = {
+/** The slice of an OpenAPI operation object this module rewrites. */
+type OpenAPIOperation = { tags?: string[] };
+
+/**
+ * Better Auth generates its own OpenAPI shapes, which are structurally looser
+ * than what the Elysia plugin accepts (e.g. it emits a "date" schema type).
+ * Borrow the plugin's own types so the bridge is an explicit, checked cast
+ * rather than an `any` hole.
+ */
+export type Documentation = NonNullable<
+  Parameters<typeof elysiaOpenAPI>[0]
+>["documentation"];
+export type OpenAPIPaths = NonNullable<NonNullable<Documentation>["paths"]>;
+export type OpenAPIComponents = NonNullable<
+  NonNullable<Documentation>["components"]
+>;
+
+export const authOpenAPI: {
+  getPaths: (prefix?: string) => Promise<OpenAPIPaths>;
+  components: Promise<OpenAPIComponents>;
+} = {
   getPaths: (prefix = "/api/auth") =>
     getSchema().then(({ paths }) => {
       const reference: typeof paths = Object.create(null);
@@ -99,11 +120,14 @@ export const authOpenAPI = {
         const key = prefix + path;
         reference[key] = entry;
         for (const method of Object.keys(entry)) {
-          const operation = (reference[key] as any)[method];
+          const operation = (entry as Record<string, OpenAPIOperation>)[method];
+          if (!operation) continue;
           operation.tags = ["Auth"];
         }
       }
-      return reference;
-    }) as Promise<any>,
-  components: getSchema().then(({ components }) => components) as Promise<any>,
-} as const;
+      return reference as unknown as OpenAPIPaths;
+    }),
+  components: getSchema().then(
+    ({ components }) => components as unknown as OpenAPIComponents,
+  ),
+};

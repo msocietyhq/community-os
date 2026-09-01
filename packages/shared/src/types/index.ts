@@ -17,9 +17,7 @@ export type {
   AuditEntityType,
 } from "../constants";
 
-export type {
-  UpdateMemberInput,
-} from "../validators/members";
+export type { UpdateMemberInput } from "../validators/members";
 
 export type {
   CreateEventInput,

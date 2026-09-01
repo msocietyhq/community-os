@@ -62,7 +62,9 @@ export const membersService = {
       .map((s) => s.trim())
       .filter(Boolean);
     if (interestsArr?.length) {
-      conditions.push(sql`${members.interests} @@@ ${interestsArr.join(" ")}::text`);
+      conditions.push(
+        sql`${members.interests} @@@ ${interestsArr.join(" ")}::text`,
+      );
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
@@ -105,7 +107,13 @@ export const membersService = {
         .where(where),
     ]);
 
-    return paginatedResult("members", memberList, query.page, query.limit, totalResult[0]?.total ?? 0);
+    return paginatedResult(
+      "members",
+      memberList,
+      query.page,
+      query.limit,
+      totalResult[0]?.total ?? 0,
+    );
   },
 
   async update(
@@ -150,7 +158,10 @@ export const membersService = {
   ): Promise<{ created: boolean }> {
     const [member] = await db
       .insert(members)
-      .values({ userId, ...(opts?.joinedAt ? { joinedAt: opts.joinedAt } : {}) })
+      .values({
+        userId,
+        ...(opts?.joinedAt ? { joinedAt: opts.joinedAt } : {}),
+      })
       .onConflictDoNothing({ target: members.userId })
       .returning();
 

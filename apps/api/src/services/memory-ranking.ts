@@ -67,8 +67,11 @@ interface Dated {
  * correction win. This decays confidence rather than replacing it.
  */
 export function memoryWeight(memory: Dated, now: Date): number {
-  const ageDays = Math.max(0, (now.getTime() - memory.createdAt.getTime()) / DAY_MS);
-  return memory.confidence * Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
+  const ageDays = Math.max(
+    0,
+    (now.getTime() - memory.createdAt.getTime()) / DAY_MS,
+  );
+  return memory.confidence * 0.5 ** (ageDays / RECENCY_HALF_LIFE_DAYS);
 }
 
 /**

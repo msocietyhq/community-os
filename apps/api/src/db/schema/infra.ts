@@ -55,7 +55,7 @@ export const resourceTypes = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [unique().on(table.infraServiceId, table.name)]
+  (table) => [unique().on(table.infraServiceId, table.name)],
 );
 
 export const provisionedResources = pgTable("provisioned_resources", {
@@ -86,7 +86,7 @@ export const subdomains = pgTable("subdomains", {
     .notNull()
     .references(() => projects.id),
   provisionedResourceId: uuid("provisioned_resource_id").references(
-    () => provisionedResources.id
+    () => provisionedResources.id,
   ),
   subdomain: text("subdomain").notNull().unique(),
   fullDomain: text("full_domain").notNull(),

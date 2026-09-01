@@ -236,13 +236,7 @@ function PublicEventsPage() {
   );
 }
 
-function EventCard({
-  event,
-  isPast,
-}: {
-  event: Event;
-  isPast: boolean;
-}) {
+function EventCard({ event, isPast }: { event: Event; isPast: boolean }) {
   const date = new Date(event.startsAt);
   const endDate = event.endsAt ? new Date(event.endsAt) : null;
 

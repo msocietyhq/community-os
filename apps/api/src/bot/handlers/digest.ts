@@ -27,7 +27,9 @@ digestHandler.command("digest", async (ctx) => {
 digestHandler.command("digest_history", async (ctx) => {
   const history = await digestService.getThisMonthInHistory();
   if (!history) {
-    await ctx.reply("Nothing from this month in past years is worth resurfacing.");
+    await ctx.reply(
+      "Nothing from this month in past years is worth resurfacing.",
+    );
     return;
   }
 

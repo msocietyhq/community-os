@@ -1,7 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission } from "../middleware/permissions";
-import { createAuditEntry } from "../middleware/audit";
 import { fundModel } from "./models/fund";
 
 export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
@@ -17,7 +16,7 @@ export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
       auth: true,
       beforeHandle: checkPermission("read", "Fund"),
       detail: { tags: ["Funds"], summary: "Get fund overview" },
-    }
+    },
   )
   .get(
     "/balances",
@@ -29,7 +28,7 @@ export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
       auth: true,
       beforeHandle: checkPermission("read", "Fund"),
       detail: { tags: ["Funds"], summary: "Get member balances" },
-    }
+    },
   )
   .get(
     "/transactions",
@@ -41,7 +40,7 @@ export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
       auth: true,
       beforeHandle: checkPermission("read", "Fund"),
       detail: { tags: ["Funds"], summary: "List transactions" },
-    }
+    },
   )
   .post(
     "/transactions",
@@ -54,5 +53,5 @@ export const fundRoutes = new Elysia({ prefix: "/api/v1/funds" })
       beforeHandle: checkPermission("create", "Fund"),
       body: "fund.transaction.create",
       detail: { tags: ["Funds"], summary: "Create transaction" },
-    }
+    },
   );

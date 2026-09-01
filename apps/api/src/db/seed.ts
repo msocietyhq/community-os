@@ -9,9 +9,21 @@ async function seed() {
   await db
     .insert(spendCategories)
     .values([
-      { name: "event", displayName: "Event Expenses", description: "Costs related to community events" },
-      { name: "infra", displayName: "Infrastructure", description: "Cloud infrastructure and hosting costs" },
-      { name: "misc", displayName: "Miscellaneous", description: "Other community expenses" },
+      {
+        name: "event",
+        displayName: "Event Expenses",
+        description: "Costs related to community events",
+      },
+      {
+        name: "infra",
+        displayName: "Infrastructure",
+        description: "Cloud infrastructure and hosting costs",
+      },
+      {
+        name: "misc",
+        displayName: "Miscellaneous",
+        description: "Other community expenses",
+      },
     ])
     .onConflictDoNothing();
 
@@ -23,7 +35,7 @@ async function seed() {
         triggerType: t.type,
         triggerValue: t.value,
         reputationValue: t.points,
-      }))
+      })),
     )
     .onConflictDoNothing();
 

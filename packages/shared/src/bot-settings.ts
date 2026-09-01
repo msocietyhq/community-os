@@ -107,8 +107,7 @@ export const ADVISOR_TIER_LIMITS = ["off", "big", "bigger"] as const;
 export type AdvisorTierLimit = (typeof ADVISOR_TIER_LIMITS)[number];
 
 /** `$5`, but `$0.50` rather than `$0.5` for fractional amounts. */
-const usd = (v: number) =>
-  Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
+const usd = (v: number) => (Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`);
 
 const onOff = (v: boolean) => (v ? "on" : "off");
 

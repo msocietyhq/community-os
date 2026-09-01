@@ -110,7 +110,9 @@ export async function notifyAdminsOfProviderOutage(
   const keyboard = new InlineKeyboard();
   for (const tier of tiers) {
     if (!isConfigurableTier(tier)) continue;
-    keyboard.text(`Choose model for ${tier}`, `set:view:ai.model.${tier}`).row();
+    keyboard
+      .text(`Choose model for ${tier}`, `set:view:ai.model.${tier}`)
+      .row();
   }
   keyboard.text("I topped up — retry now", `prov:probe:${provider}`);
 

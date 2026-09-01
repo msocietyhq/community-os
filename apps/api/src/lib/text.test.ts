@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { clip, formatCompact, truncate } from "./text";
 
-const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const LONE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 describe("truncate", () => {
   test("returns short strings unchanged", () => {
@@ -54,8 +55,11 @@ describe("truncate", () => {
       const out = truncate(text, i);
       expect(LONE.test(out)).toBe(false);
       // Round-tripping through the segmenter must not change it.
-      expect([...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(out)]
-        .map((s) => s.segment).join("")).toBe(out);
+      expect(
+        [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(out)]
+          .map((s) => s.segment)
+          .join(""),
+      ).toBe(out);
     }
   });
 });

@@ -10,7 +10,12 @@ import {
 const toolCall = (id: string, name: string) =>
   ({ type: "tool-call", toolCallId: id, toolName: name, input: {} }) as never;
 const toolResult = (id: string, name: string) =>
-  ({ type: "tool-result", toolCallId: id, toolName: name, output: "ok" }) as never;
+  ({
+    type: "tool-result",
+    toolCallId: id,
+    toolName: name,
+    output: "ok",
+  }) as never;
 
 describe("sanitizeForHandoff", () => {
   test("leaves a plain conversation untouched", () => {
@@ -37,7 +42,10 @@ describe("sanitizeForHandoff", () => {
   test("drops the in-flight advisor call that triggered the handoff", () => {
     const messages: ModelMessage[] = [
       { role: "user", content: "hard question" },
-      { role: "assistant", content: [toolCall("pending", "big_brain_advisor")] },
+      {
+        role: "assistant",
+        content: [toolCall("pending", "big_brain_advisor")],
+      },
     ];
     expect(sanitizeForHandoff(messages)).toHaveLength(1);
     expect(sanitizeForHandoff(messages)[0]?.role).toBe("user");
@@ -56,7 +64,7 @@ describe("sanitizeForHandoff", () => {
     ];
     const out = sanitizeForHandoff(messages);
     expect(out).toHaveLength(2);
-    expect((out[1]?.content as unknown[])).toHaveLength(1);
+    expect(out[1]?.content as unknown[]).toHaveLength(1);
   });
 
   test("resolved calls survive alongside an unresolved one", () => {
@@ -64,7 +72,10 @@ describe("sanitizeForHandoff", () => {
       { role: "user", content: "q" },
       { role: "assistant", content: [toolCall("done", "graphql_query")] },
       { role: "tool", content: [toolResult("done", "graphql_query")] },
-      { role: "assistant", content: [toolCall("pending", "big_brain_advisor")] },
+      {
+        role: "assistant",
+        content: [toolCall("pending", "big_brain_advisor")],
+      },
     ];
     const out = sanitizeForHandoff(messages);
     expect(out).toHaveLength(3);
@@ -86,7 +97,10 @@ describe("sanitizeForHandoff", () => {
 
 describe("buildAdvisorMessages", () => {
   test("appends the problem as the final user turn", () => {
-    const out = buildAdvisorMessages([{ role: "user", content: "hi" }], "I'm stuck on X");
+    const out = buildAdvisorMessages(
+      [{ role: "user", content: "hi" }],
+      "I'm stuck on X",
+    );
     expect(out).toHaveLength(2);
     expect(out.at(-1)?.role).toBe("user");
     expect(out.at(-1)?.content).toContain("I'm stuck on X");
@@ -101,7 +115,10 @@ describe("buildAdvisorMessages", () => {
     const out = buildAdvisorMessages(
       [
         { role: "user", content: "q" },
-        { role: "assistant", content: [toolCall("pending", "big_brain_advisor")] },
+        {
+          role: "assistant",
+          content: [toolCall("pending", "big_brain_advisor")],
+        },
       ],
       "stuck",
     );

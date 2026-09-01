@@ -13,7 +13,12 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
-import { classify, type AgentOutcome, type ChatCallbacks, type TurnPolicy } from "../lib/turn";
+import {
+  classify,
+  type AgentOutcome,
+  type ChatCallbacks,
+  type TurnPolicy,
+} from "../lib/turn";
 import { guardToolResult } from "./tool-result-guard";
 import {
   SubagentProgress,
@@ -24,7 +29,10 @@ import {
 /** Bridges the memory service into the framework-agnostic context builder. */
 const memoryRecaller: MemoryRecaller = {
   semantic: (query, limit) =>
-    recallMemoriesHybrid(query, { limit, relativeCutoff: DEFAULT_RELATIVE_CUTOFF }),
+    recallMemoriesHybrid(query, {
+      limit,
+      relativeCutoff: DEFAULT_RELATIVE_CUTOFF,
+    }),
   bySubject: (telegramId, limit) => recallMemoriesForSubject(telegramId, limit),
   resolveSubject: (name) => resolveSubjectTelegramId(name),
 };
@@ -99,7 +107,9 @@ export async function runAgent({
   // Create a bearer token for this user's session
   const token = await getBotToken(telegramUser);
   if (!token) {
-    return notice("I'm having trouble authenticating you. Please try again later.");
+    return notice(
+      "I'm having trouble authenticating you. Please try again later.",
+    );
   }
 
   // In-process API client with the user's auth token

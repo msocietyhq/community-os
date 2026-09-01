@@ -44,7 +44,9 @@ describe("deriveFloor", () => {
 
   test("NaN falls back rather than poisoning every comparison", () => {
     expect(deriveFloor(profile(Number.NaN))).toBe(FALLBACK_SIMILARITY_FLOOR);
-    expect(deriveFloor(profile(Number.POSITIVE_INFINITY))).toBe(FALLBACK_SIMILARITY_FLOOR);
+    expect(deriveFloor(profile(Number.POSITIVE_INFINITY))).toBe(
+      FALLBACK_SIMILARITY_FLOOR,
+    );
   });
 
   test("an explicit fallback is honoured", () => {
@@ -74,11 +76,15 @@ describe("needsCalibration", () => {
   });
 
   test("a stale profile triggers a refresh", () => {
-    expect(needsCalibration(profile(0.47, now - CALIBRATION_TTL_MS - 1), now)).toBe(true);
+    expect(
+      needsCalibration(profile(0.47, now - CALIBRATION_TTL_MS - 1), now),
+    ).toBe(true);
   });
 
   test("exactly at the TTL refreshes", () => {
-    expect(needsCalibration(profile(0.47, now - CALIBRATION_TTL_MS), now)).toBe(true);
+    expect(needsCalibration(profile(0.47, now - CALIBRATION_TTL_MS), now)).toBe(
+      true,
+    );
   });
 
   test("the TTL is configurable", () => {

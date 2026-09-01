@@ -9,6 +9,7 @@ const Label = React.forwardRef<
   HTMLLabelElement,
   React.LabelHTMLAttributes<HTMLLabelElement>
 >(({ className, ...props }, ref) => (
+  // biome-ignore lint/a11y/noLabelWithoutControl: generic primitive; htmlFor and children come from the call site
   <label
     ref={ref}
     className={cn("text-sm font-medium text-foreground", className)}

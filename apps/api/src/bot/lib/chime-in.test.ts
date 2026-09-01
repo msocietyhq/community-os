@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { ModelMessage } from "ai";
 import {
   preFilter,
@@ -8,9 +8,6 @@ import {
   hasAttemptedSilence,
   applyConfidenceGate,
   chimeDecisionSchema,
-  recordChime,
-  lastChimeAt,
-  resetChimeHistory,
   CHIME_IN_COOLDOWN_MS,
   CHIME_IN_MIN_CONFIDENCE,
   inQuietHours,
@@ -18,16 +15,27 @@ import {
 
 describe("preFilter", () => {
   test("lets a plausible unanswered question through", () => {
-    expect(preFilter({ text: "does anyone know when the next meetup is?", isBot: false })).toBeNull();
-    expect(preFilter({ text: "where is the venue for saturday", isBot: false })).toBeNull();
+    expect(
+      preFilter({
+        text: "does anyone know when the next meetup is?",
+        isBot: false,
+      }),
+    ).toBeNull();
+    expect(
+      preFilter({ text: "where is the venue for saturday", isBot: false }),
+    ).toBeNull();
   });
 
   test("never judges the bot's own messages", () => {
-    expect(preFilter({ text: "anyone know when the meetup is?", isBot: true })).toBe("from_bot");
+    expect(
+      preFilter({ text: "anyone know when the meetup is?", isBot: true }),
+    ).toBe("from_bot");
   });
 
   test("skips commands", () => {
-    expect(preFilter({ text: "/help me find the next event", isBot: false })).toBe("command");
+    expect(
+      preFilter({ text: "/help me find the next event", isBot: false }),
+    ).toBe("command");
   });
 
   test("skips reactions too short to be a real question", () => {
@@ -59,11 +67,18 @@ describe("preFilter", () => {
   });
 
   test("a bare question mark is enough shape to consider", () => {
-    expect(preFilter({ text: "is the hackathon still happening?", isBot: false })).toBeNull();
+    expect(
+      preFilter({ text: "is the hackathon still happening?", isBot: false }),
+    ).toBeNull();
   });
 
   test("recognises question shape without a question mark", () => {
-    expect(preFilter({ text: "anyone got the link to the projects page", isBot: false })).toBeNull();
+    expect(
+      preFilter({
+        text: "anyone got the link to the projects page",
+        isBot: false,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -108,11 +123,17 @@ describe("applyConfidenceGate", () => {
   });
 
   test("exactly at the floor is accepted", () => {
-    expect(applyConfidenceGate(yes(CHIME_IN_MIN_CONFIDENCE)).respond).toBe(true);
+    expect(applyConfidenceGate(yes(CHIME_IN_MIN_CONFIDENCE)).respond).toBe(
+      true,
+    );
   });
 
   test("an explicit no stays no regardless of confidence", () => {
-    const d = applyConfidenceGate({ respond: false, confidence: 1, reason: "banter" });
+    const d = applyConfidenceGate({
+      respond: false,
+      confidence: 1,
+      reason: "banter",
+    });
     expect(d.respond).toBe(false);
   });
 
@@ -136,12 +157,27 @@ describe("chimeDecisionSchema", () => {
   });
 
   test("rejects a non-boolean respond rather than truthy-coercing", () => {
-    expect(chimeDecisionSchema.safeParse({ respond: "true", confidence: 1, reason: "x" }).success).toBe(false);
-    expect(chimeDecisionSchema.safeParse({ respond: 1, confidence: 1, reason: "x" }).success).toBe(false);
+    expect(
+      chimeDecisionSchema.safeParse({
+        respond: "true",
+        confidence: 1,
+        reason: "x",
+      }).success,
+    ).toBe(false);
+    expect(
+      chimeDecisionSchema.safeParse({ respond: 1, confidence: 1, reason: "x" })
+        .success,
+    ).toBe(false);
   });
 
   test("accepts a well-formed decision", () => {
-    expect(chimeDecisionSchema.safeParse({ respond: true, confidence: 0.9, reason: "ok" }).success).toBe(true);
+    expect(
+      chimeDecisionSchema.safeParse({
+        respond: true,
+        confidence: 0.9,
+        reason: "ok",
+      }).success,
+    ).toBe(true);
   });
 });
 
@@ -153,23 +189,33 @@ describe("inQuietHours", () => {
   });
 
   test("inside a same-day window", () => {
-    expect(inQuietHours({ start: "13:00", end: "15:00" }, at("14:00"))).toBe(true);
+    expect(inQuietHours({ start: "13:00", end: "15:00" }, at("14:00"))).toBe(
+      true,
+    );
   });
 
   test("outside a same-day window", () => {
-    expect(inQuietHours({ start: "13:00", end: "15:00" }, at("16:00"))).toBe(false);
+    expect(inQuietHours({ start: "13:00", end: "15:00" }, at("16:00"))).toBe(
+      false,
+    );
   });
 
   test("a window wrapping midnight covers the late evening", () => {
-    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("23:30"))).toBe(true);
+    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("23:30"))).toBe(
+      true,
+    );
   });
 
   test("a window wrapping midnight covers the early morning", () => {
-    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("02:00"))).toBe(true);
+    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("02:00"))).toBe(
+      true,
+    );
   });
 
   test("a window wrapping midnight excludes the afternoon", () => {
-    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("14:00"))).toBe(false);
+    expect(inQuietHours({ start: "23:00", end: "07:00" }, at("14:00"))).toBe(
+      false,
+    );
   });
 
   test("the start minute is inside, the end minute is outside", () => {
@@ -182,13 +228,13 @@ describe("inQuietHours", () => {
 describe("hasLookedUp", () => {
   const call = (toolName: string): ModelMessage => ({
     role: "assistant",
-    content: [
-      { type: "tool-call", toolCallId: "1", toolName, input: {} },
-    ],
+    content: [{ type: "tool-call", toolCallId: "1", toolName, input: {} }],
   });
 
   test("no tool calls at all — has not looked", () => {
-    expect(hasLookedUp([{ role: "user", content: "anyone tried X?" }])).toBe(false);
+    expect(hasLookedUp([{ role: "user", content: "anyone tried X?" }])).toBe(
+      false,
+    );
   });
 
   test("searching the chat counts", () => {
@@ -216,7 +262,9 @@ describe("hasLookedUp", () => {
   });
 
   test("a plain-text assistant turn is not a tool call", () => {
-    expect(hasLookedUp([{ role: "assistant", content: "let me check" }])).toBe(false);
+    expect(hasLookedUp([{ role: "assistant", content: "let me check" }])).toBe(
+      false,
+    );
   });
 
   test("finds the lookup anywhere in the conversation", () => {

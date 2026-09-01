@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import type { TelegramUser } from "../bot/lib/auth";
-import { computeTelegramHash, signInWithTelegramHeaders } from "../bot/lib/auth";
+import {
+  computeTelegramHash,
+  signInWithTelegramHeaders,
+} from "../bot/lib/auth";
 import { env } from "../env";
 
 interface LoginCodeEntry {
@@ -71,7 +74,10 @@ export const loginLinkService = {
         returnHeaders: true,
       });
     } catch (err) {
-      console.error("signInWithTelegram failed during login link exchange:", err);
+      console.error(
+        "signInWithTelegram failed during login link exchange:",
+        err,
+      );
       return null;
     }
 

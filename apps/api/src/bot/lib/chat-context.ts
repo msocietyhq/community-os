@@ -98,17 +98,16 @@ function formatTelegramDateFull(unixSecs: number): string {
   });
 }
 
-function displayName(from: {
-  firstName: string;
-  username?: string;
-}): string {
+function displayName(from: { firstName: string; username?: string }): string {
   return from.username ? `@${from.username}` : from.firstName;
 }
 
 type TelegramMessageRow = typeof telegramMessages.$inferSelect;
 
 function rowDisplayName(row: TelegramMessageRow): string {
-  return row.fromUsername ? `@${row.fromUsername}` : (row.fromFirstName ?? "someone");
+  return row.fromUsername
+    ? `@${row.fromUsername}`
+    : (row.fromFirstName ?? "someone");
 }
 
 /** Snippet length for a quoted parent in history. Shorter than REPLY_TEXT_MAX
@@ -224,7 +223,8 @@ function buildReplyAttrs(
 
   // Telegram sets reply_to_message_id to the topic root for messages that are
   // merely posted in a forum topic rather than replying to anything.
-  if (row.messageThreadId !== null && parentId === row.messageThreadId) return none;
+  if (row.messageThreadId !== null && parentId === row.messageThreadId)
+    return none;
 
   const inWindow = byMessageId.get(parentId);
   if (inWindow) {
@@ -266,7 +266,9 @@ export function formatGroupHistory(messages: TelegramMessageRow[]): string {
       ? `@${msg.fromUsername}`
       : (msg.fromFirstName ?? "unknown");
     const content =
-      msg.text ?? msg.caption ?? (msg.mediaType ? `[${msg.mediaType}]` : "[message]");
+      msg.text ??
+      msg.caption ??
+      (msg.mediaType ? `[${msg.mediaType}]` : "[message]");
     return `${time} ${name}: ${content}`;
   });
   return `[Recent group conversation:]\n${lines.join("\n")}\n---`;
@@ -344,7 +346,8 @@ export function buildMessagesFromHistory(
       const dateStr = getDateString(row.date);
       const datePart = dateStr !== lastDateStr ? `${dateStr} ` : "";
       const { attrs, quoted } = buildReplyAttrs(row, byMessageId);
-      const content = row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : "");
+      const content =
+        row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : "");
       if (content) {
         const quotedLine = quoted ? `<quoted>${quoted}</quoted>\n` : "";
         messages.push({

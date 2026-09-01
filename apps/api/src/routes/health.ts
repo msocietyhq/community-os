@@ -12,5 +12,5 @@ export const healthRoutes = new Elysia({ prefix: "/api/v1" }).get(
       tags: ["Health"],
       summary: "Health check",
     },
-  }
+  },
 );

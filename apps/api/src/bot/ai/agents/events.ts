@@ -32,9 +32,7 @@ export function createEventsTools(ctx: ToolContext) {
         event_id: z
           .string()
           .describe("The event slug (preferred — readable) or ID (UUID)"),
-        status: z
-          .enum(["going", "maybe", "not_going"])
-          .describe("RSVP status"),
+        status: z.enum(["going", "maybe", "not_going"]).describe("RSVP status"),
       }),
       execute: async ({ event_id, status }) => {
         console.log("[events-agent:rsvp_event]", { event_id, status });
@@ -42,7 +40,11 @@ export function createEventsTools(ctx: ToolContext) {
           .events({ id: event_id })
           .rsvp.post({ rsvpStatus: status });
         if (error) {
-          console.error("[events-agent:rsvp_event] error:", error.status, error.value);
+          console.error(
+            "[events-agent:rsvp_event] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -57,25 +59,58 @@ export function createEventsTools(ctx: ToolContext) {
         event_type: z
           .enum(["meetup", "workshop", "hackathon", "talk", "social", "other"])
           .describe("Type of event"),
-        venue_id: z.string().optional().describe("Venue ID to host the event at"),
-        is_online: z.boolean().default(false).describe("Whether the event is online"),
+        venue_id: z
+          .string()
+          .optional()
+          .describe("Venue ID to host the event at"),
+        is_online: z
+          .boolean()
+          .default(false)
+          .describe("Whether the event is online"),
         online_url: z.string().optional().describe("URL for online event"),
         starts_at: z.string().describe("Start date/time in ISO 8601 format"),
-        ends_at: z.string().optional().describe("End date/time in ISO 8601 format"),
-        max_attendees: z.number().optional().describe("Maximum number of attendees"),
+        ends_at: z
+          .string()
+          .optional()
+          .describe("End date/time in ISO 8601 format"),
+        max_attendees: z
+          .number()
+          .optional()
+          .describe("Maximum number of attendees"),
       }),
       execute: async ({
-        title, description, event_type, venue_id, is_online, online_url,
-        starts_at, ends_at, max_attendees,
+        title,
+        description,
+        event_type,
+        venue_id,
+        is_online,
+        online_url,
+        starts_at,
+        ends_at,
+        max_attendees,
       }) => {
-        console.log("[events-agent:create_event]", { title, event_type, starts_at });
+        console.log("[events-agent:create_event]", {
+          title,
+          event_type,
+          starts_at,
+        });
         const { data, error } = await ctx.api.api.v1.events.post({
-          title, description, eventType: event_type, venueId: venue_id,
-          isOnline: is_online, onlineUrl: online_url, startsAt: starts_at,
-          endsAt: ends_at, maxAttendees: max_attendees,
+          title,
+          description,
+          eventType: event_type,
+          venueId: venue_id,
+          isOnline: is_online,
+          onlineUrl: online_url,
+          startsAt: starts_at,
+          endsAt: ends_at,
+          maxAttendees: max_attendees,
         });
         if (error) {
-          console.error("[events-agent:create_event] error:", error.status, error.value);
+          console.error(
+            "[events-agent:create_event] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -85,7 +120,9 @@ export function createEventsTools(ctx: ToolContext) {
     update_event: tool({
       description: "Update an existing event. Only available to admins.",
       inputSchema: z.object({
-        event_id: z.string().describe("The event slug (preferred — readable) or ID (UUID)"),
+        event_id: z
+          .string()
+          .describe("The event slug (preferred — readable) or ID (UUID)"),
         title: z.string().optional().describe("Event title"),
         description: z.string().optional().describe("Event description"),
         event_type: z
@@ -93,30 +130,62 @@ export function createEventsTools(ctx: ToolContext) {
           .optional()
           .describe("Type of event"),
         venue_id: z.string().optional().describe("Venue ID"),
-        is_online: z.boolean().optional().describe("Whether the event is online"),
+        is_online: z
+          .boolean()
+          .optional()
+          .describe("Whether the event is online"),
         online_url: z.string().optional().describe("URL for online event"),
-        starts_at: z.string().optional().describe("Start date/time in ISO 8601 format"),
-        ends_at: z.string().optional().describe("End date/time in ISO 8601 format"),
-        max_attendees: z.number().optional().describe("Maximum number of attendees"),
+        starts_at: z
+          .string()
+          .optional()
+          .describe("Start date/time in ISO 8601 format"),
+        ends_at: z
+          .string()
+          .optional()
+          .describe("End date/time in ISO 8601 format"),
+        max_attendees: z
+          .number()
+          .optional()
+          .describe("Maximum number of attendees"),
         status: z
           .enum(["draft", "published", "cancelled", "completed"])
           .optional()
           .describe("Event status"),
       }),
       execute: async ({
-        event_id, title, description, event_type, venue_id, is_online,
-        online_url, starts_at, ends_at, max_attendees, status,
+        event_id,
+        title,
+        description,
+        event_type,
+        venue_id,
+        is_online,
+        online_url,
+        starts_at,
+        ends_at,
+        max_attendees,
+        status,
       }) => {
         console.log("[events-agent:update_event]", { event_id, title, status });
         const { data, error } = await ctx.api.api.v1
           .events({ id: event_id })
           .patch({
-            title, description, eventType: event_type, venueId: venue_id,
-            isOnline: is_online, onlineUrl: online_url, startsAt: starts_at,
-            endsAt: ends_at, maxAttendees: max_attendees, status,
+            title,
+            description,
+            eventType: event_type,
+            venueId: venue_id,
+            isOnline: is_online,
+            onlineUrl: online_url,
+            startsAt: starts_at,
+            endsAt: ends_at,
+            maxAttendees: max_attendees,
+            status,
           });
         if (error) {
-          console.error("[events-agent:update_event] error:", error.status, error.value);
+          console.error(
+            "[events-agent:update_event] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -126,7 +195,9 @@ export function createEventsTools(ctx: ToolContext) {
     delete_event: tool({
       description: "Cancel/delete an event. Only available to admins.",
       inputSchema: z.object({
-        event_id: z.string().describe("The event slug (preferred — readable) or ID (UUID)"),
+        event_id: z
+          .string()
+          .describe("The event slug (preferred — readable) or ID (UUID)"),
       }),
       execute: async ({ event_id }) => {
         console.log("[events-agent:delete_event]", { event_id });
@@ -134,7 +205,11 @@ export function createEventsTools(ctx: ToolContext) {
           .events({ id: event_id })
           .delete();
         if (error) {
-          console.error("[events-agent:delete_event] error:", error.status, error.value);
+          console.error(
+            "[events-agent:delete_event] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -154,7 +229,9 @@ export function createEventsAgent(ctx: ToolContext) {
     activity?: SubagentActivity,
   ): Promise<string> {
     console.log("[events-agent] query:", query);
-    const today = new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
+    const today = new Date().toLocaleDateString("en-SG", {
+      timeZone: "Asia/Singapore",
+    });
     const result = await aiService.generateText(
       {
         system: `You are an events assistant for the MSOCIETY community. Help with listing, viewing, RSVPing to, and managing events. Today's date is ${today}. Use ISO 8601 for dates. Only perform write operations (create/update/delete) when explicitly asked. Never repeat a write. Be concise, format for Telegram Markdown.
@@ -169,10 +246,20 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "events-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      {
+        caller: "events-agent",
+        tier: "fast",
+        telegramUserId: ctx.senderTelegramId,
+        chatId: ctx.chatId,
+      },
     );
 
-    console.log("[events-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
+    console.log(
+      "[events-agent] steps:",
+      result.steps.length,
+      "| response:",
+      result.text?.slice(0, 120),
+    );
     return result.text || "No event information found.";
   };
 }

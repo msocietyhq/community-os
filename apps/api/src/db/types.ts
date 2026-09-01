@@ -18,9 +18,6 @@ export const vector = customType<{
     return `[${value.join(",")}]`;
   },
   fromDriver(value: string): number[] {
-    return value
-      .slice(1, -1)
-      .split(",")
-      .map(Number);
+    return value.slice(1, -1).split(",").map(Number);
   },
 });

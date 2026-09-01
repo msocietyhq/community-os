@@ -6,15 +6,10 @@
  * Processed in consecutive runs so each batch is its own context, at roughly a
  * tenth the calls of one-at-a-time.
  */
-import { and, asc, isNull, sql } from "drizzle-orm";
+import { asc, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
-import { aiService } from "./ai.service";
-import {
-  saveMemories,
-  resolveSubjectTelegramId,
-  type MemoryInput,
-} from "./memory.service";
+import { saveMemories } from "./memory.service";
 import {
   BATCH_SIZE,
   extractBatch,
@@ -33,7 +28,6 @@ const INTER_BATCH_DELAY_MS = 250;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 
 export interface MemoryBackfillResult {
   scanned: number;
@@ -104,12 +98,15 @@ export async function backfillMemories(): Promise<MemoryBackfillResult> {
       const batch = eligible.slice(i, i + BATCH_SIZE);
       batches++;
       try {
-        const memories = await withRetry(() => extractBatch(batch, "memory-backfill"), {
-          onRetry: ({ attempt, delayMs }) =>
-            console.warn(
-              `[memory-backfill] batch attempt ${attempt} failed, retrying in ${Math.round(delayMs / 1000)}s`,
-            ),
-        });
+        const memories = await withRetry(
+          () => extractBatch(batch, "memory-backfill"),
+          {
+            onRetry: ({ attempt, delayMs }) =>
+              console.warn(
+                `[memory-backfill] batch attempt ${attempt} failed, retrying in ${Math.round(delayMs / 1000)}s`,
+              ),
+          },
+        );
         if (memories.length) {
           await saveMemories(memories);
           extracted += memories.length;

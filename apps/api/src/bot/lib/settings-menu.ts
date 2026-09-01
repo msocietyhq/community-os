@@ -86,7 +86,6 @@ function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   return value === def.default ? "default" : "custom";
 }
 
-
 /**
  * A date as an admin reads it, in the community's timezone.
  *
@@ -114,7 +113,9 @@ export function renderIndexPage(
 ): RenderedPage {
   const index = SETTING_GROUPS.indexOf(group);
   const prev =
-    SETTING_GROUPS[(index - 1 + SETTING_GROUPS.length) % SETTING_GROUPS.length]!;
+    SETTING_GROUPS[
+      (index - 1 + SETTING_GROUPS.length) % SETTING_GROUPS.length
+    ]!;
   const next = SETTING_GROUPS[(index + 1) % SETTING_GROUPS.length]!;
 
   const keys = keysInGroup(group);
@@ -626,10 +627,7 @@ export function renderHistoryPage(
   // COUNT query on every tap, and "11–20" answers the same question.
   const range = paginated ? `  <i>${offset + 1}–${offset + shown}</i>` : "";
 
-  return page(
-    `${HISTORY_HEADING}${range}\n\n${blocks.join("\n\n")}`,
-    keyboard,
-  );
+  return page(`${HISTORY_HEADING}${range}\n\n${blocks.join("\n\n")}`, keyboard);
 }
 
 function backButton(keyboard: InlineKeyboard, key: SettingKey | null): void {

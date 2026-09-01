@@ -17,5 +17,9 @@ export const createReputationTriggerSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-export type CreateReputationEventInput = z.infer<typeof createReputationEventSchema>;
-export type CreateReputationTriggerInput = z.infer<typeof createReputationTriggerSchema>;
+export type CreateReputationEventInput = z.infer<
+  typeof createReputationEventSchema
+>;
+export type CreateReputationTriggerInput = z.infer<
+  typeof createReputationTriggerSchema
+>;

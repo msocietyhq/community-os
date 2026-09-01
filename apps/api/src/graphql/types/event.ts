@@ -63,10 +63,26 @@ export const eventResolvers = {
 
       const result = await eventsService.list(
         {
-          status: args.status as "published" | "completed" | "cancelled" | "draft" | undefined,
-          eventType: args.eventType as "meetup" | "workshop" | "hackathon" | "talk" | "social" | "other" | undefined,
-          startsAfter: args.startsAfter ? new Date(args.startsAfter) : undefined,
-          startsBefore: args.startsBefore ? new Date(args.startsBefore) : undefined,
+          status: args.status as
+            | "published"
+            | "completed"
+            | "cancelled"
+            | "draft"
+            | undefined,
+          eventType: args.eventType as
+            | "meetup"
+            | "workshop"
+            | "hackathon"
+            | "talk"
+            | "social"
+            | "other"
+            | undefined,
+          startsAfter: args.startsAfter
+            ? new Date(args.startsAfter)
+            : undefined,
+          startsBefore: args.startsBefore
+            ? new Date(args.startsBefore)
+            : undefined,
           page,
           limit,
         },

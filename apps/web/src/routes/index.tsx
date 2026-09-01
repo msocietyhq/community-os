@@ -57,7 +57,6 @@ function HeroSection() {
         A community where Muslim tech professionals come together to build
         projects, share knowledge, and grow their careers.
       </p>
-
     </section>
   );
 }
@@ -261,6 +260,14 @@ function ProjectsShowcase() {
 
 /* ─── Membership Growth ──────────────────────────────────────── */
 
+// Fixed chart geometry. Module-scoped so the memo hooks below can depend on
+// these without a new object identity on every render.
+const padding = { top: 60, right: 20, bottom: 40, left: 50 };
+const width = 800;
+const height = 340;
+const chartW = width - padding.left - padding.right;
+const chartH = height - padding.top - padding.bottom;
+
 function MembershipGrowth() {
   const { data, isLoading } = useQuery({
     queryKey: ["membership-growth"],
@@ -274,28 +281,25 @@ function MembershipGrowth() {
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const padding = { top: 60, right: 20, bottom: 40, left: 50 };
-  const width = 800;
-  const height = 340;
-  const chartW = width - padding.left - padding.right;
-  const chartH = height - padding.top - padding.bottom;
-
   const maxVal = Math.max(...points.map((p) => p.cumulative_members), 1);
   const yMax = Math.ceil(maxVal / 50) * 50;
 
   const getX = useCallback(
     (i: number) => padding.left + (i / Math.max(points.length - 1, 1)) * chartW,
-    [points.length, chartW],
+    [points.length],
   );
   const getY = useCallback(
     (val: number) => padding.top + chartH - (val / yMax) * chartH,
-    [chartH, yMax],
+    [yMax],
   );
 
   const linePath = useMemo(() => {
     if (points.length === 0) return "";
     return points
-      .map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(p.cumulative_members)}`)
+      .map(
+        (p, i) =>
+          `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(p.cumulative_members)}`,
+      )
       .join(" ");
   }, [points, getX, getY]);
 
@@ -303,7 +307,7 @@ function MembershipGrowth() {
     if (points.length === 0) return "";
     const bottom = padding.top + chartH;
     return `${linePath} L ${getX(points.length - 1)} ${bottom} L ${getX(0)} ${bottom} Z`;
-  }, [linePath, points.length, getX, chartH]);
+  }, [linePath, points.length, getX]);
 
   // Year labels for X axis
   const yearLabels = useMemo(() => {
@@ -367,7 +371,7 @@ function MembershipGrowth() {
               {hovered.cumulative_members.toLocaleString()} members
             </div>
             <div className="text-sm text-gray-400">
-              {new Date(hovered.month + "-01").toLocaleDateString("en-SG", {
+              {new Date(`${hovered.month}-01`).toLocaleDateString("en-SG", {
                 month: "long",
                 year: "numeric",
               })}
@@ -469,9 +473,10 @@ function MembershipGrowth() {
           )}
 
           {/* Invisible hover zones */}
-          {points.map((_, i) => (
+          {points.map((p, i) => (
+            // biome-ignore lint/a11y/noStaticElementInteractions: pointer-only affordance over data the chart already renders visually
             <rect
-              key={i}
+              key={p.month}
               x={getX(i) - chartW / points.length / 2}
               y={padding.top}
               width={chartW / points.length}

@@ -6,7 +6,9 @@ import type { ThisMonthInHistory } from "../../services/digest.service";
  * words and model output, so anything could be in them. With no parse mode
  * there is nothing for a stray `<` or `&` to break.
  */
-export function formatHistoryDigest(history: ThisMonthInHistory): FormattedString {
+export function formatHistoryDigest(
+  history: ThisMonthInHistory,
+): FormattedString {
   const parts: FormattedString[] = [
     FormattedString.b("📰 This Month in MSOCIETY History"),
     new FormattedString(""),

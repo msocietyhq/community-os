@@ -38,9 +38,7 @@ export async function processKeyword(
   const lowerText = event.text.toLowerCase();
 
   const keywords = await reputationService.getKeywordValues();
-  const matchedKeyword = keywords.find((kw) =>
-    lowerText.includes(kw),
-  );
+  const matchedKeyword = keywords.find((kw) => lowerText.includes(kw));
   if (!matchedKeyword) return { status: "no_trigger" };
 
   try {
@@ -50,9 +48,7 @@ export async function processKeyword(
     const fromUser = await resolveUser(event.fromTelegramId);
     if (!fromUser) return { status: "user_not_found" };
 
-    const toUser =
-      event.toResolved ??
-      (await resolveUser(event.toUserId));
+    const toUser = event.toResolved ?? (await resolveUser(event.toUserId));
     if (!toUser) return { status: "user_not_found" };
 
     // Prevent self-reputation

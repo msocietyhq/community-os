@@ -81,8 +81,10 @@ export const generationSchema = z.preprocess(
       ),
     // Defaulted: the model omits the key when there's nothing to suggest, and a
     // hard requirement turns that correct answer into a NoObjectGeneratedError.
-    suggested: aiSuggestedSchema.default({}).describe(
-      "Candidate profile field values. Omit entirely when nothing is supported.",
-    ),
+    suggested: aiSuggestedSchema
+      .default({})
+      .describe(
+        "Candidate profile field values. Omit entirely when nothing is supported.",
+      ),
   }),
 );

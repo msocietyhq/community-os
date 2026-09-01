@@ -47,7 +47,9 @@ interface ExportData {
 function flattenText(text: string | ExportTextEntity[]): string | null {
   if (typeof text === "string") return text || null;
   if (Array.isArray(text)) {
-    const joined = text.map((t) => (typeof t === "string" ? t : t.text)).join("");
+    const joined = text
+      .map((t) => (typeof t === "string" ? t : t.text))
+      .join("");
     return joined || null;
   }
   return null;
@@ -83,7 +85,9 @@ function toRow(msg: ExportMessage): typeof telegramMessages.$inferInsert {
     forwardFromFirstName: msg.forwarded_from ?? null,
     forwardFromUserId: parseUserId(msg.forwarded_from_id),
     mediaType: normalizeMediaType(msg.media_type),
-    editDate: msg.edited_unixtime ? new Date(parseInt(msg.edited_unixtime, 10) * 1000) : null,
+    editDate: msg.edited_unixtime
+      ? new Date(parseInt(msg.edited_unixtime, 10) * 1000)
+      : null,
     raw: msg as unknown as Record<string, unknown>,
   };
 }
@@ -95,7 +99,9 @@ async function backfill() {
   const messages = data.messages.filter((m) => m.type === "message");
   const total = messages.length;
   const batches = Math.ceil(total / BATCH_SIZE);
-  console.log(`Found ${total} regular messages (${data.messages.length} total). Inserting in ${batches} batches...`);
+  console.log(
+    `Found ${total} regular messages (${data.messages.length} total). Inserting in ${batches} batches...`,
+  );
 
   let inserted = 0;
   for (let i = 0; i < total; i += BATCH_SIZE) {
@@ -103,7 +109,9 @@ async function backfill() {
     await db.insert(telegramMessages).values(batch).onConflictDoNothing();
     inserted += batch.length;
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    console.log(`Batch ${batchNum}/${batches} — ${inserted}/${total} messages processed`);
+    console.log(
+      `Batch ${batchNum}/${batches} — ${inserted}/${total} messages processed`,
+    );
   }
 
   console.log("Backfill complete.");

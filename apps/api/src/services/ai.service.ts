@@ -465,7 +465,8 @@ async function trackUsage(input: TrackUsageInput): Promise<void> {
 
 async function getUsageStats(params: UsageQueryParams) {
   const conditions = [];
-  if (params.from) conditions.push(gte(aiUsage.createdAt, new Date(params.from)));
+  if (params.from)
+    conditions.push(gte(aiUsage.createdAt, new Date(params.from)));
   if (params.to) conditions.push(lte(aiUsage.createdAt, new Date(params.to)));
   if (params.caller) conditions.push(eq(aiUsage.caller, params.caller));
   if (params.model) conditions.push(eq(aiUsage.model, params.model));
@@ -561,10 +562,7 @@ async function getUsageStats(params: UsageQueryParams) {
 }
 
 async function getUsageSummary(since: Date, telegramUserId?: number) {
-  const conditions = [
-    gte(aiUsage.createdAt, since),
-    eq(aiUsage.success, true),
-  ];
+  const conditions = [gte(aiUsage.createdAt, since), eq(aiUsage.success, true)];
   if (telegramUserId) {
     conditions.push(eq(aiUsage.telegramUserId, telegramUserId));
   }
@@ -672,12 +670,28 @@ async function getUsageByUser(since: Date, limit: number) {
     })
     .from(aiUsage)
     .leftJoin(user, eq(sql`${aiUsage.telegramUserId}::text`, user.telegramId))
-    .where(and(gte(aiUsage.createdAt, since), sql`${aiUsage.telegramUserId} is not null`))
-    .groupBy(aiUsage.telegramUserId, user.telegramUsername, user.name, aiUsage.model);
+    .where(
+      and(
+        gte(aiUsage.createdAt, since),
+        sql`${aiUsage.telegramUserId} is not null`,
+      ),
+    )
+    .groupBy(
+      aiUsage.telegramUserId,
+      user.telegramUsername,
+      user.name,
+      aiUsage.model,
+    );
 
   const byUser = new Map<
     number,
-    { username: string | null; name: string | null; inputTokens: number; outputTokens: number; estimatedCost: number }
+    {
+      username: string | null;
+      name: string | null;
+      inputTokens: number;
+      outputTokens: number;
+      estimatedCost: number;
+    }
   >();
 
   for (const row of rows) {
@@ -728,10 +742,7 @@ async function getTopUsersByTokens(since: Date, limit: number, until?: Date) {
       totalTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens} + ${aiUsage.outputTokens}), 0)::int`,
     })
     .from(aiUsage)
-    .innerJoin(
-      user,
-      eq(sql`${aiUsage.telegramUserId}::text`, user.telegramId),
-    )
+    .innerJoin(user, eq(sql`${aiUsage.telegramUserId}::text`, user.telegramId))
     .where(
       and(
         gte(aiUsage.createdAt, since),

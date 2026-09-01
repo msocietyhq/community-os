@@ -11,7 +11,9 @@ import {
  * Asks the judge. Errors resolve to silence rather than propagating — this
  * runs on ordinary chat traffic and must never disrupt it.
  */
-export async function judgeChimeIn(input: ChimeInInput): Promise<ChimeDecision> {
+export async function judgeChimeIn(
+  input: ChimeInInput,
+): Promise<ChimeDecision> {
   try {
     const result = await aiService.generateObject(
       {

@@ -27,7 +27,10 @@ describe("unwrapCollapsedProfile", () => {
   });
 
   test("leaves a well-formed response untouched", () => {
-    const good = { summary: "A backend engineer.", suggested: { skills: ["Go"] } };
+    const good = {
+      summary: "A backend engineer.",
+      suggested: { skills: ["Go"] },
+    };
     expect(unwrapCollapsedProfile(good)).toEqual(good);
   });
 
@@ -82,13 +85,18 @@ describe("generationSchema", () => {
   });
 
   test("still rejects a genuinely unusable response", () => {
-    expect(() => generationSchema.parse({ suggested: { skills: ["Go"] } })).toThrow();
+    expect(() =>
+      generationSchema.parse({ suggested: { skills: ["Go"] } }),
+    ).toThrow();
   });
 
   test("the model-facing JSON Schema is unchanged by the preprocess", () => {
     const json = z.toJSONSchema(generationSchema, { io: "input" }) as {
       properties?: Record<string, unknown>;
     };
-    expect(Object.keys(json.properties ?? {}).sort()).toEqual(["suggested", "summary"]);
+    expect(Object.keys(json.properties ?? {}).sort()).toEqual([
+      "suggested",
+      "summary",
+    ]);
   });
 });

@@ -126,6 +126,7 @@ function AuthenticatedLayout() {
   }, [user, isLoading, navigate]);
 
   // Close mobile sidebar on route change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentPath is the trigger, not a value the effect reads
   useEffect(() => {
     setSidebarOpen(false);
   }, [currentPath]);
@@ -156,7 +157,9 @@ function AuthenticatedLayout() {
     <div className="min-h-screen bg-background">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
-        <div
+        <button
+          type="button"
+          aria-label="Close sidebar"
           className="fixed inset-0 bg-black/30 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
           onKeyDown={(e) => {

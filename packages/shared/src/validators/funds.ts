@@ -7,7 +7,9 @@ export const createTransactionSchema = z.object({
   currency: z.string().default("SGD"),
   description: z.string().min(1),
   categoryId: z.string().uuid(),
-  referenceType: z.enum(["event", "project", "provisioned_resource"]).optional(),
+  referenceType: z
+    .enum(["event", "project", "provisioned_resource"])
+    .optional(),
   referenceId: z.string().uuid().optional(),
   pledgeId: z.string().uuid().optional(),
   paidBy: z.string().optional(),

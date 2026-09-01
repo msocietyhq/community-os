@@ -103,9 +103,9 @@ describe("decideGroupAccess", () => {
     } satisfies ChatMember;
 
     expect(decide({ botMember: restricted }).leave).toBe(false);
-    expect(decide({ botMember: { ...restricted, is_member: true } }).leave).toBe(
-      true,
-    );
+    expect(
+      decide({ botMember: { ...restricted, is_member: true } }).leave,
+    ).toBe(true);
   });
 });
 

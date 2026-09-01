@@ -1,4 +1,4 @@
-import { FormattedString } from "@grammyjs/parse-mode";
+import type { FormattedString } from "@grammyjs/parse-mode";
 import { Cron } from "croner";
 import { bot } from "../bot";
 import {

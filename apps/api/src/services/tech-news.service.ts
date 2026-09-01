@@ -252,7 +252,8 @@ async function fetchStories(
         .filter((r): r is typeof r & { url: string } => !!r.url)
         .filter(
           (r) =>
-            !r.publishedDate || new Date(r.publishedDate).getTime() <= notFuture,
+            !r.publishedDate ||
+            new Date(r.publishedDate).getTime() <= notFuture,
         )
         .map((r) => {
           const key = normaliseUrl(r.url);
@@ -275,9 +276,25 @@ async function fetchStories(
 
 /** First-level github.com paths that are site features, not accounts. */
 const GITHUB_RESERVED_PATHS = new Set([
-  "about", "apps", "collections", "enterprise", "explore", "features",
-  "issues", "join", "login", "marketplace", "notifications", "orgs",
-  "pricing", "pulls", "search", "settings", "sponsors", "topics", "trending",
+  "about",
+  "apps",
+  "collections",
+  "enterprise",
+  "explore",
+  "features",
+  "issues",
+  "join",
+  "login",
+  "marketplace",
+  "notifications",
+  "orgs",
+  "pricing",
+  "pulls",
+  "search",
+  "settings",
+  "sponsors",
+  "topics",
+  "trending",
 ]);
 
 /**
@@ -347,7 +364,10 @@ const repoSchema = z.object({
 
 type Repo = Omit<RepoCandidate, "id">;
 
-function keepRepo(repo: z.infer<typeof repoSchema>, oldestAllowed: Date): boolean {
+function keepRepo(
+  repo: z.infer<typeof repoSchema>,
+  oldestAllowed: Date,
+): boolean {
   if (repo.fork || repo.archived) return false;
   if (repo.stargazers_count < MIN_REPO_STARS) return false;
   // No description means nobody can tell what it is from the post either.
@@ -533,7 +553,11 @@ ${renderCandidates(bySection("islamic"))}`,
 
     // A section's picks are drawn from that section's candidates only — the
     // model occasionally reaches across, and an id collides across sections.
-    const resolve = (picks: { id: number; why: string }[], section: Section, cap: number) =>
+    const resolve = (
+      picks: { id: number; why: string }[],
+      section: Section,
+      cap: number,
+    ) =>
       picks
         .flatMap(({ id, why }) => {
           const item = byId.get(id);

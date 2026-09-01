@@ -38,7 +38,9 @@ export interface AdvisorDenied {
 export type AdvisorAccess = { allowed: true } | AdvisorDenied;
 
 export function startOfDayUtc(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 }
 
 export function activeSince(now: Date): Date {
@@ -99,8 +101,7 @@ export function decideAccess(input: {
     return {
       allowed: false,
       reason: "inactive",
-      tellUser:
-        `The deepest reasoning is reserved for members who've been active in the last ${ACTIVE_WINDOW_DAYS} days — say salam in the group and it'll open up. I'll do my best with what I have.`,
+      tellUser: `The deepest reasoning is reserved for members who've been active in the last ${ACTIVE_WINDOW_DAYS} days — say salam in the group and it'll open up. I'll do my best with what I have.`,
     };
   }
 

@@ -119,7 +119,9 @@ async function runJudge(): Promise<void> {
   }
 
   const asserted = JUDGE_CASES.filter((c) => c.expectSpeak !== null).length;
-  console.log(`judge: ${passed}/${asserted} asserted (${JUDGE_CASES.length - asserted} marginal)\n`);
+  console.log(
+    `judge: ${passed}/${asserted} asserted (${JUDGE_CASES.length - asserted} marginal)\n`,
+  );
 }
 
 // ─── suite 2: the chime-in prompt ────────────────────────────────────────────
@@ -292,7 +294,12 @@ async function runAgent(): Promise<void> {
         stopWhen: stepCountIs(10),
         maxOutputTokens: 1024,
       },
-      { caller: "chime-in-eval", tier: "smart", telegramUserId: null, chatId: CHAT_ID },
+      {
+        caller: "chime-in-eval",
+        tier: "smart",
+        telegramUserId: null,
+        chatId: CHAT_ID,
+      },
     );
 
     const wasSilent = silenced !== null;

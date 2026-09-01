@@ -45,7 +45,12 @@ describe("policyFor", () => {
 
 describe("permittedCallbacks", () => {
   const all: ChatCallbacks = {
-    progressSink: { async send() { return 1; }, async edit() {} },
+    progressSink: {
+      async send() {
+        return 1;
+      },
+      async edit() {},
+    },
     askUser: async () => {},
     proposeSettings: async () => {},
   };
@@ -71,8 +76,13 @@ describe("permittedCallbacks", () => {
    * explicitly undefined".
    */
   test("a newly added callback is denied by default", () => {
-    const withNewOne = { ...all, somethingNew: async () => {} } as ChatCallbacks;
-    expect(Object.keys(permittedCallbacks("uninvited", withNewOne))).toEqual([]);
+    const withNewOne = {
+      ...all,
+      somethingNew: async () => {},
+    } as ChatCallbacks;
+    expect(Object.keys(permittedCallbacks("uninvited", withNewOne))).toEqual(
+      [],
+    );
   });
 });
 
@@ -148,18 +158,25 @@ describe("deliver", () => {
 describe("classify", () => {
   test("stay_silent wins over anything else the turn produced", () => {
     const result = classify(
-      product({ text: "I was going to say this", silencedReason: "nothing to add" }),
+      product({
+        text: "I was going to say this",
+        silencedReason: "nothing to add",
+      }),
       UNINVITED,
     );
     expect(result).toEqual({ kind: "silent", reason: "nothing to add" });
   });
 
   test("the model's own text is a reply, on either kind of turn", () => {
-    expect(classify(product({ text: "next meetup is Saturday" }), ADDRESSED)).toEqual({
+    expect(
+      classify(product({ text: "next meetup is Saturday" }), ADDRESSED),
+    ).toEqual({
       kind: "reply",
       text: "next meetup is Saturday",
     });
-    expect(classify(product({ text: "@nurul_h knows Rust" }), UNINVITED)).toEqual({
+    expect(
+      classify(product({ text: "@nurul_h knows Rust" }), UNINVITED),
+    ).toEqual({
       kind: "reply",
       text: "@nurul_h knows Rust",
     });
@@ -171,7 +188,10 @@ describe("classify", () => {
    */
   test("an addressed turn falls back to sub-agent output", () => {
     expect(
-      classify(product({ subagentResults: ["Events — 3 found", "Members — 1"] }), ADDRESSED),
+      classify(
+        product({ subagentResults: ["Events — 3 found", "Members — 1"] }),
+        ADDRESSED,
+      ),
     ).toEqual({ kind: "reply", text: "Events — 3 found\n\nMembers — 1" });
   });
 

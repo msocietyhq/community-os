@@ -111,11 +111,15 @@ function formatMemoryLine(memory: SourcedMemory, now: Date): string {
   const confidence = memory.confidence.toFixed(2);
   const about = memory.subject ? ` (about: ${memory.subject})` : "";
   // The way back to what was actually said, fetchable via chat_history.
-  const source = memory.sourceMessageId ? ` [from msg ${memory.sourceMessageId}]` : "";
+  const source = memory.sourceMessageId
+    ? ` [from msg ${memory.sourceMessageId}]`
+    : "";
   // Subject recalls have no meaningful similarity — they're selected by who
   // they're about, so showing a score would be noise.
   const match =
-    memory.source === "semantic" ? ` · match ${memory.similarity.toFixed(2)}` : "";
+    memory.source === "semantic"
+      ? ` · match ${memory.similarity.toFixed(2)}`
+      : "";
   return `- [${memory.category} · learned ${age} · confidence ${confidence}${match}] ${memory.content}${about}${source}`;
 }
 
@@ -146,7 +150,9 @@ export function extractMentionedSubjects(
     currentQuery,
     ...chatHistory
       .filter((m) => m.role === "user")
-      .map((m) => (typeof m.content === "string" ? stripEnvelope(m.content) : "")),
+      .map((m) =>
+        typeof m.content === "string" ? stripEnvelope(m.content) : "",
+      ),
   ].join(" ");
 
   const atMentions = allText.match(/@(\w+)/g);
@@ -430,8 +436,14 @@ export async function buildAgentContext(
   input: AgentContextInput,
   recaller: MemoryRecaller,
 ): Promise<AgentContext> {
-  const { query, enrichedQuery, chatHistory, senderTelegramId, schemaSDL, now } =
-    input;
+  const {
+    query,
+    enrichedQuery,
+    chatHistory,
+    senderTelegramId,
+    schemaSDL,
+    now,
+  } = input;
 
   const semanticHits = recaller.semantic(query, SEMANTIC_LIMIT).catch((err) => {
     console.error("[agent-context] semantic recall failed:", err);
@@ -447,7 +459,9 @@ export async function buildAgentContext(
 
   const mentioned = extractMentionedSubjects(chatHistory, query);
   if (mentioned.length > 0) {
-    subjectSources.push(recallForMentionedSubjects(mentioned, recaller).catch(() => []));
+    subjectSources.push(
+      recallForMentionedSubjects(mentioned, recaller).catch(() => []),
+    );
   }
 
   const [semantic, subjectGroups] = await Promise.all([

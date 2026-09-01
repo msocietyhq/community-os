@@ -277,8 +277,7 @@ export async function getHistory(
       from: readBag(row.oldValue).value,
       to: newBag.value,
       source: typeof newBag.source === "string" ? newBag.source : null,
-      rationale:
-        typeof newBag.rationale === "string" ? newBag.rationale : null,
+      rationale: typeof newBag.rationale === "string" ? newBag.rationale : null,
       actor: readActor(row.performedBy, row.actorName, row.actorUsername),
       at: row.createdAt,
     };

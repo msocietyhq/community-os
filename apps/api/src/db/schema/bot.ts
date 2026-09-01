@@ -80,7 +80,9 @@ export const telegramMessages = pgTable(
 
     // --- Service messages ---
     newChatMemberIds: jsonb("new_chat_member_ids"), // number[]
-    leftChatMemberUserId: bigint("left_chat_member_user_id", { mode: "number" }),
+    leftChatMemberUserId: bigint("left_chat_member_user_id", {
+      mode: "number",
+    }),
     newChatTitle: text("new_chat_title"),
     pinnedMessageId: integer("pinned_message_id"),
 
@@ -95,9 +97,9 @@ export const telegramMessages = pgTable(
     embedding: vector("embedding", { dimensions: 512 }),
 
     /**
-      * When extraction last considered this message — set even if no fact came
-      * out of it, so the backfill can select unstamped rows and stay idempotent.
-      */
+     * When extraction last considered this message — set even if no fact came
+     * out of it, so the backfill can select unstamped rows and stay idempotent.
+     */
     memoryExtractedAt: timestamp("memory_extracted_at"),
   },
   (table) => [
@@ -179,7 +181,10 @@ export const botMemories = pgTable(
     index("bot_memories_active_idx")
       .on(table.id)
       .where(sql`superseded_by IS NULL`),
-    index("bot_memories_source_idx").on(table.sourceChatId, table.sourceMessageId),
+    index("bot_memories_source_idx").on(
+      table.sourceChatId,
+      table.sourceMessageId,
+    ),
   ],
 );
 

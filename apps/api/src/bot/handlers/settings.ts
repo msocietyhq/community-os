@@ -9,10 +9,7 @@ import {
   type SettingValue,
 } from "@community-os/shared/bot-settings";
 import { defineAbilityFor } from "@community-os/shared/abilities";
-import {
-  AI_PROVIDERS,
-  type AiProvider,
-} from "@community-os/shared/ai-catalog";
+import { AI_PROVIDERS, type AiProvider } from "@community-os/shared/ai-catalog";
 import {
   isRole,
   ROLE_HIERARCHY,
@@ -200,7 +197,9 @@ settingsHandler.callbackQuery(/^set:edit:([^:]+):(.+)$/, async (ctx) => {
   }
 
   if (!canChangeSetting(key, actor.role)) {
-    await ctx.answerCallbackQuery({ text: "That setting needs a higher role." });
+    await ctx.answerCallbackQuery({
+      text: "That setting needs a higher role.",
+    });
     return;
   }
 
@@ -227,7 +226,9 @@ settingsHandler.callbackQuery(/^set:reset:(.+)$/, async (ctx) => {
   }
 
   if (!canChangeSetting(key, actor.role)) {
-    await ctx.answerCallbackQuery({ text: "That setting needs a higher role." });
+    await ctx.answerCallbackQuery({
+      text: "That setting needs a higher role.",
+    });
     return;
   }
 
@@ -246,7 +247,9 @@ settingsHandler.callbackQuery(/^set:undo:(.+)$/, async (ctx) => {
   }
 
   if (!canChangeSetting(key, actor.role)) {
-    await ctx.answerCallbackQuery({ text: "That setting needs a higher role." });
+    await ctx.answerCallbackQuery({
+      text: "That setting needs a higher role.",
+    });
     return;
   }
 
@@ -329,7 +332,9 @@ settingsHandler.callbackQuery("set:draft:confirm", async (ctx) => {
     (c) => isSettingKey(c.key) && !canChangeSetting(c.key, admin.role),
   );
   if (blocked.length > 0) {
-    await ctx.answerCallbackQuery({ text: "Some of these need a higher role." });
+    await ctx.answerCallbackQuery({
+      text: "Some of these need a higher role.",
+    });
     return;
   }
 
@@ -422,7 +427,9 @@ async function settingsTextConversation(
 
   const parsed = BOT_SETTINGS[key].schema.safeParse(text);
   if (!parsed.success) {
-    await ctx.reply("That value isn't valid for this setting. Nothing changed.");
+    await ctx.reply(
+      "That value isn't valid for this setting. Nothing changed.",
+    );
     return;
   }
 
@@ -469,17 +476,14 @@ async function settingsTextConversation(
 }
 
 settingsHandler.use(
-  createConversation(
-    async (conversation: BotConversation, ctx: BotContext) => {
-      const key = ctx.session.pendingTextSetting;
-      if (!key || !isSettingKey(key)) {
-        await ctx.reply("I've lost track of which setting that was — try again.");
-        return;
-      }
-      await settingsTextConversation(conversation, ctx, key);
-    },
-    SETTINGS_TEXT_CONVERSATION,
-  ),
+  createConversation(async (conversation: BotConversation, ctx: BotContext) => {
+    const key = ctx.session.pendingTextSetting;
+    if (!key || !isSettingKey(key)) {
+      await ctx.reply("I've lost track of which setting that was — try again.");
+      return;
+    }
+    await settingsTextConversation(conversation, ctx, key);
+  }, SETTINGS_TEXT_CONVERSATION),
 );
 
 settingsHandler.callbackQuery(/^set:text:(.+)$/, async (ctx) => {

@@ -28,14 +28,23 @@ function formatEventDate(date: Date): string {
   return `${SG_DATE.format(date)} · ${SG_TIME.format(date)}`;
 }
 
-function formatVenue(event: { isOnline: boolean | null; venueName?: string | null }): string {
+function formatVenue(event: {
+  isOnline: boolean | null;
+  venueName?: string | null;
+}): string {
   if (event.isOnline) return "🌐 Online";
   if (event.venueName) return `📍 ${event.venueName}`;
   return "📍 TBD";
 }
 
-function formatCapacity(attendeeCount: number, maxAttendees: number | null, maybeCount?: number): string {
-  const going = maxAttendees ? `${attendeeCount} / ${maxAttendees} going` : `${attendeeCount} going`;
+function formatCapacity(
+  attendeeCount: number,
+  maxAttendees: number | null,
+  maybeCount?: number,
+): string {
+  const going = maxAttendees
+    ? `${attendeeCount} / ${maxAttendees} going`
+    : `${attendeeCount} going`;
   if (maybeCount) return `${going} · ${maybeCount} maybe`;
   return going;
 }
@@ -116,69 +125,83 @@ eventsHandler.callbackQuery(/^rsvp:(.+)$/, async (ctx) => {
 });
 
 // Callback: RSVP status selected — perform the RSVP
-eventsHandler.callbackQuery(/^rsvp_status:(.+):(going|maybe|not_going)$/, async (ctx) => {
-  const telegramId = ctx.from?.id;
-  if (!telegramId) {
-    await ctx.answerCallbackQuery({ text: "Could not identify you.", show_alert: true });
-    return;
-  }
-
-  const resolved = await resolveUser(String(telegramId));
-  if (!resolved) {
-    await ctx.answerCallbackQuery({
-      text: "You need to set up your profile first. Send /profile in a private chat.",
-      show_alert: true,
-    });
-    return;
-  }
-
-  const eventId = ctx.match?.[1];
-  const status = ctx.match?.[2];
-  if (!eventId || !status) {
-    await ctx.answerCallbackQuery({ text: "Invalid selection.", show_alert: true });
-    return;
-  }
-
-  try {
-    await eventsService.rsvp(eventId, resolved.user.id, status);
-    const fresh = await eventsService.getById(eventId);
-
-    const statusLabels: Record<string, string> = {
-      going: "going to",
-      maybe: "a maybe for",
-      not_going: "not going to",
-    };
-    const statusEmojis: Record<string, string> = {
-      going: "✅",
-      maybe: "🤔",
-      not_going: "❌",
-    };
-
-    await ctx.answerCallbackQuery({ text: `You're ${statusLabels[status]} ${fresh.title}!` });
-    await replyWith(
-      ctx,
-      new FormattedString(`${statusEmojis[status]} `)
-        .b(resolved.user.name ?? "You")
-        .plain(` is ${statusLabels[status]} `)
-        .b(fresh.title)
-        .plain(
-          `\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
-        ),
-    );
-  } catch (err) {
-    if (isAppError(err)) {
-      const messages: Record<string, string> = {
-        EVENT_NOT_FOUND: "Event not found.",
-        EVENT_NOT_PUBLISHED: "This event is not open for RSVPs yet.",
-        EVENT_FULL: "Sorry, this event is full!",
-      };
+eventsHandler.callbackQuery(
+  /^rsvp_status:(.+):(going|maybe|not_going)$/,
+  async (ctx) => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) {
       await ctx.answerCallbackQuery({
-        text: messages[err.code] ?? err.message,
+        text: "Could not identify you.",
         show_alert: true,
       });
       return;
     }
-    await ctx.answerCallbackQuery({ text: "Something went wrong.", show_alert: true });
-    throw err;
-  }
-});
+
+    const resolved = await resolveUser(String(telegramId));
+    if (!resolved) {
+      await ctx.answerCallbackQuery({
+        text: "You need to set up your profile first. Send /profile in a private chat.",
+        show_alert: true,
+      });
+      return;
+    }
+
+    const eventId = ctx.match?.[1];
+    const status = ctx.match?.[2];
+    if (!eventId || !status) {
+      await ctx.answerCallbackQuery({
+        text: "Invalid selection.",
+        show_alert: true,
+      });
+      return;
+    }
+
+    try {
+      await eventsService.rsvp(eventId, resolved.user.id, status);
+      const fresh = await eventsService.getById(eventId);
+
+      const statusLabels: Record<string, string> = {
+        going: "going to",
+        maybe: "a maybe for",
+        not_going: "not going to",
+      };
+      const statusEmojis: Record<string, string> = {
+        going: "✅",
+        maybe: "🤔",
+        not_going: "❌",
+      };
+
+      await ctx.answerCallbackQuery({
+        text: `You're ${statusLabels[status]} ${fresh.title}!`,
+      });
+      await replyWith(
+        ctx,
+        new FormattedString(`${statusEmojis[status]} `)
+          .b(resolved.user.name ?? "You")
+          .plain(` is ${statusLabels[status]} `)
+          .b(fresh.title)
+          .plain(
+            `\n👥 ${formatCapacity(fresh.attendeeCount, fresh.maxAttendees)}`,
+          ),
+      );
+    } catch (err) {
+      if (isAppError(err)) {
+        const messages: Record<string, string> = {
+          EVENT_NOT_FOUND: "Event not found.",
+          EVENT_NOT_PUBLISHED: "This event is not open for RSVPs yet.",
+          EVENT_FULL: "Sorry, this event is full!",
+        };
+        await ctx.answerCallbackQuery({
+          text: messages[err.code] ?? err.message,
+          show_alert: true,
+        });
+        return;
+      }
+      await ctx.answerCallbackQuery({
+        text: "Something went wrong.",
+        show_alert: true,
+      });
+      throw err;
+    }
+  },
+);

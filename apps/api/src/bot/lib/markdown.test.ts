@@ -68,9 +68,7 @@ describe("toTelegramMarkdown", () => {
   });
 
   test("leaves no unescaped reserved characters in prose", () => {
-    const out = must(
-      "Costs $5.00 (roughly) — see item #3! Ratio is 1+2=3.",
-    );
+    const out = must("Costs $5.00 (roughly) — see item #3! Ratio is 1+2=3.");
     expect(unescapedReserved(out)).toEqual([]);
   });
 
@@ -78,4 +76,3 @@ describe("toTelegramMarkdown", () => {
     expect(toTelegramMarkdown("")).not.toBeNull();
   });
 });
-

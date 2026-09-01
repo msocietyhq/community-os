@@ -57,14 +57,17 @@ export const venuesService = {
       db.select({ total: count() }).from(venues).where(where),
     ]);
 
-    return paginatedResult("venues", venueList, query.page, query.limit, totalResult[0]?.total ?? 0);
+    return paginatedResult(
+      "venues",
+      venueList,
+      query.page,
+      query.limit,
+      totalResult[0]?.total ?? 0,
+    );
   },
 
   async getById(id: string) {
-    const [venue] = await db
-      .select()
-      .from(venues)
-      .where(eq(venues.id, id));
+    const [venue] = await db.select().from(venues).where(eq(venues.id, id));
 
     if (!venue) {
       throw new AppError(404, "VENUE_NOT_FOUND", "Venue not found");
@@ -89,7 +92,8 @@ export const venuesService = {
     if (input.address !== undefined) updateData.address = input.address;
     if (input.city !== undefined) updateData.city = input.city;
     if (input.country !== undefined) updateData.country = input.country;
-    if (input.postalCode !== undefined) updateData.postalCode = input.postalCode;
+    if (input.postalCode !== undefined)
+      updateData.postalCode = input.postalCode;
     if (input.mapsUrl !== undefined) updateData.mapsUrl = input.mapsUrl;
     if (input.capacity !== undefined) updateData.capacity = input.capacity;
     if (input.costPerDay !== undefined)

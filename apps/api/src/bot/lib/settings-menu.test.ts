@@ -6,10 +6,7 @@ import {
   keysInGroup,
   type SettingsSnapshot,
 } from "@community-os/shared/bot-settings";
-import {
-  AI_CATALOG,
-  modelKeysForTier,
-} from "@community-os/shared/ai-catalog";
+import { AI_CATALOG, modelKeysForTier } from "@community-os/shared/ai-catalog";
 import {
   PAUSE_PRESETS,
   renderConfirmation,
@@ -29,9 +26,7 @@ const snapshot = Object.fromEntries(
 ) as SettingsSnapshot;
 
 const labels = (page: { keyboard: { inline_keyboard: unknown[][] } }) =>
-  page.keyboard.inline_keyboard
-    .flat()
-    .map((b) => (b as { text: string }).text);
+  page.keyboard.inline_keyboard.flat().map((b) => (b as { text: string }).text);
 
 describe("renderIndexPage", () => {
   test("packs settings two per row, then navigation and history", () => {
@@ -61,9 +56,7 @@ describe("renderIndexPage", () => {
   // settings collapse to a one-word state. The content is one tap away.
   test("text settings show a state word, not their content", () => {
     const page = renderIndexPage("welcome", snapshot);
-    expect(page.text).toContain(
-      "New member welcome — <code>default</code>",
-    );
+    expect(page.text).toContain("New member welcome — <code>default</code>");
     expect(page.text).not.toContain("MSOCIETY");
   });
 
@@ -109,9 +102,9 @@ describe("renderSettingPage", () => {
   });
 
   test("a toggle offers the opposite value", () => {
-    expect(labels(renderSettingPage("chimeIn.enabled", snapshot, null))).toContain(
-      "Turn off",
-    );
+    expect(
+      labels(renderSettingPage("chimeIn.enabled", snapshot, null)),
+    ).toContain("Turn off");
   });
 
   test("a pause control offers every preset", () => {
@@ -298,7 +291,9 @@ describe("renderHistoryPage", () => {
       [row({ key: "welcome.newMemberText", from: "<b>hi</b> & bye", to: "x" })],
       null,
     );
-    expect(hostile.text).toContain("<code>&lt;b&gt;hi&lt;/b&gt; &amp; bye</code>");
+    expect(hostile.text).toContain(
+      "<code>&lt;b&gt;hi&lt;/b&gt; &amp; bye</code>",
+    );
     expect(hostile.text).not.toContain("<b>hi</b>");
   });
 
@@ -539,7 +534,6 @@ describe("renderHistoryPage", () => {
   test("declares HTML parse mode like every other renderer", () => {
     expect(renderHistoryPage([row()], null).parseMode).toBe("HTML");
   });
-
 });
 
 describe("renderSettingPage attribution", () => {
@@ -561,8 +555,8 @@ describe("renderSettingPage attribution", () => {
   });
 
   test("never changed still reads as never", () => {
-    expect(renderSettingPage("cost.dailyCapUsd", snapshot, null).text).toContain(
-      "never",
-    );
+    expect(
+      renderSettingPage("cost.dailyCapUsd", snapshot, null).text,
+    ).toContain("never");
   });
 });

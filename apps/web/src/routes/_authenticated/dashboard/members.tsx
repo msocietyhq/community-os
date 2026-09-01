@@ -231,7 +231,7 @@ function MemberRow({
   member: Member;
   onClick: () => void;
 }) {
-  const initials = getInitials(member.user.name);
+  const _initials = getInitials(member.user.name);
   const joinedDate = formatJoinedDate(member.joinedAt);
 
   return (

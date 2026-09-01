@@ -20,7 +20,9 @@ modelsHandler.command("models", async (ctx) => {
   // Resolved through the service so pinned tiers (which have no settings row)
   // and configurable ones are read the same way.
   const resolved = await Promise.all(
-    AI_TIERS.map(async (tier) => [tier, (await currentModelFor(tier)).key] as const),
+    AI_TIERS.map(
+      async (tier) => [tier, (await currentModelFor(tier)).key] as const,
+    ),
   );
   const tierModels = Object.fromEntries(resolved) as Record<AiTier, AiModelKey>;
 

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { hasLookedUp, hasAttemptedSilence } from "../lib/chime-in";
 import type { treaty } from "@elysiajs/eden";
 import type { App } from "../../app";
-import { env } from "../../env";
 import {
   defineAbilityFor,
   type Actions,
@@ -17,10 +16,7 @@ import {
   isSettingKey,
   type SettingKey,
 } from "@community-os/shared/bot-settings";
-import {
-  getHistory,
-  getSettings,
-} from "../../services/bot-settings.service";
+import { getHistory, getSettings } from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
@@ -51,18 +47,19 @@ import { formatGroupHistory } from "../lib/chat-context";
 import {
   saveMemory,
   resolveSubjectTelegramId,
-  recallMemories,
   recallMemoriesHybrid,
   type RecalledMemory,
   recallMemoriesForSubject,
   forgetMemoriesBySubject,
-  forgetMemory,
   incrementAccessCount,
 } from "../../services/memory.service";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
-  graphql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
+  graphql: (
+    query: string,
+    variables?: Record<string, unknown>,
+  ) => Promise<unknown>;
   chatId: string;
   senderTelegramId: number | null;
   /**
@@ -490,7 +487,8 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       }),
       execute: async ({ key, limit }) => {
         const allowed = await can(ctx, "update", "Settings");
-        if (!allowed) return { error: "Only admins can view settings history." };
+        if (!allowed)
+          return { error: "Only admins can view settings history." };
 
         const scoped = key && isSettingKey(key) ? key : null;
         return { history: await getHistory(scoped, limit ?? 20) };
@@ -557,24 +555,37 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
         caller: z
           .string()
           .optional()
-          .describe("Restrict to one feature, e.g. 'main-agent' or 'bigger_brain_advisor'"),
+          .describe(
+            "Restrict to one feature, e.g. 'main-agent' or 'bigger_brain_advisor'",
+          ),
         model: z.string().optional().describe("Restrict to one model id"),
         username: z
           .string()
           .optional()
-          .describe("Restrict to one member's usage, by telegram username without the @"),
+          .describe(
+            "Restrict to one member's usage, by telegram username without the @",
+          ),
         limit: z.number().min(1).max(30).optional().default(10),
       }),
       execute: async ({ period, group_by, caller, model, username, limit }) => {
         const window = resolveWindow(period);
         const take = limit ?? 10;
-        console.log("[main-agent:ai_usage]", { period, group_by, caller, model, username });
+        console.log("[main-agent:ai_usage]", {
+          period,
+          group_by,
+          caller,
+          model,
+          username,
+        });
 
         // One member's usage is a different question from a breakdown.
         if (username) {
           const resolved = await aiService.resolveUserByUsername(username);
           if (!resolved?.telegramId) {
-            return { period: window.label, error: `No member found with username @${username}.` };
+            return {
+              period: window.label,
+              error: `No member found with username @${username}.`,
+            };
           }
           const summary = await aiService.getUsageSummary(
             window.since,
@@ -593,7 +604,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           return {
             period: window.label,
             byUser: users.map((u) => ({
-              member: u.username ? `@${u.username}` : (u.name ?? `id:${u.telegramUserId}`),
+              member: u.username
+                ? `@${u.username}`
+                : (u.name ?? `id:${u.telegramUserId}`),
               inputTokens: u.inputTokens,
               outputTokens: u.outputTokens,
               estimatedCost: u.estimatedCost,
@@ -629,7 +642,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       inputSchema: z.object({
         question: z
           .string()
-          .describe("The single question to put to the member, in plain language"),
+          .describe(
+            "The single question to put to the member, in plain language",
+          ),
       }),
       execute: async ({ question }) => {
         if (!ctx.askUser) {
@@ -680,7 +695,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
               // honoured, since refusing again would spend the step budget
               // arguing and silence is the safe outcome either way.
               if (!hasLookedUp(messages) && !hasAttemptedSilence(messages)) {
-                console.log("[main-agent:stay_silent] refused — nothing searched yet");
+                console.log(
+                  "[main-agent:stay_silent] refused — nothing searched yet",
+                );
                 return {
                   silent: false,
                   note: "You haven't looked yet. Search chat_history for this topic — and members, if the question is about who would know — then decide.",
@@ -841,9 +858,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
             "general",
           ])
           .describe("Category of the memory"),
-        subject: z
-          .string()
-          .describe("Who or what this fact is about"),
+        subject: z.string().describe("Who or what this fact is about"),
         confidence: z
           .number()
           .min(0)
@@ -879,9 +894,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       description:
         "Forget memories about a subject. Use when someone asks you to forget something about them or a topic.",
       inputSchema: z.object({
-        subject: z
-          .string()
-          .describe("Who or what to forget about"),
+        subject: z.string().describe("Who or what to forget about"),
         content_hint: z
           .string()
           .optional()

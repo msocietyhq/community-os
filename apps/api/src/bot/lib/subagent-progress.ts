@@ -115,9 +115,7 @@ export const THINKING_VERBS = [
   "Cogitating",
 ] as const;
 
-export function pickThinkingVerb(
-  random: () => number = Math.random,
-): string {
+export function pickThinkingVerb(random: () => number = Math.random): string {
   const index = Math.floor(random() * THINKING_VERBS.length);
   return THINKING_VERBS[index] ?? THINKING_VERBS[0];
 }
@@ -175,7 +173,11 @@ function oneLine(text: string, max: number): string {
  * agents (which import back into this module).
  */
 /** Advisors are reachable from every sub-agent toolset, so they're labelled too. */
-type AdvisorToolName = "big_brain_advisor" | "bigger_brain_advisor" | "ask_user" | "ai_usage";
+type AdvisorToolName =
+  | "big_brain_advisor"
+  | "bigger_brain_advisor"
+  | "ask_user"
+  | "ai_usage";
 
 export type TrackedToolName =
   | AdvisorToolName
@@ -268,7 +270,8 @@ export function graphqlRootField(query: unknown): string | undefined {
   return match?.[1];
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * A human-meaningful identifier, or nothing.
@@ -289,7 +292,9 @@ type Args = Record<string, unknown>;
  * Turns a tool call into a phrase naming what it is acting on. Returning
  * undefined falls back to the tool's static label.
  */
-const TOOL_PHRASES: Partial<Record<TrackedToolName, (args: Args) => string | undefined>> = {
+const TOOL_PHRASES: Partial<
+  Record<TrackedToolName, (args: Args) => string | undefined>
+> = {
   graphql_query: (a) => {
     const field = graphqlRootField(a.query);
     return field ? `looking up ${field.replace(/_/g, " ")}` : undefined;
@@ -322,7 +327,10 @@ const TOOL_PHRASES: Partial<Record<TrackedToolName, (args: Args) => string | und
 
   web_search: (a) => wrap("searching for", short(a.query)),
   hacker_news_search: (a) =>
-    wrap(a.kind === "comment" ? "reading HN opinions on" : "searching HN for", short(a.query)),
+    wrap(
+      a.kind === "comment" ? "reading HN opinions on" : "searching HN for",
+      short(a.query),
+    ),
   github_search_repos: (a) => wrap("searching GitHub for", short(a.query)),
   fetch_url: (a) => {
     const raw = short(a.url);
@@ -455,7 +463,9 @@ export function renderProgress(
   root: SubagentEntry | null,
   modelLabel?: string,
 ): FormattedString {
-  const rendered = root ? renderRoot(root, modelLabel) : new FormattedString("");
+  const rendered = root
+    ? renderRoot(root, modelLabel)
+    : new FormattedString("");
 
   if (rendered.text.length <= MAX_MESSAGE_CHARS) return rendered;
   // `slice` carries the entities and trims any that straddle the cut.
@@ -735,7 +745,14 @@ export class SubagentProgress {
 }
 
 function newEntry(name: string, query: string): SubagentEntry {
-  return { name, query, state: "running", activeTools: [], toolLog: [], children: [] };
+  return {
+    name,
+    query,
+    state: "running",
+    activeTools: [],
+    toolLog: [],
+    children: [],
+  };
 }
 
 /**

@@ -1,7 +1,10 @@
 {
   "name": "community-os",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "catalog": {
     "better-auth": "^1.5.5",
     "better-auth-telegram": "^1.5.0",
@@ -18,6 +21,7 @@
     "db:seed": "bun run --filter @community-os/api db:seed"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
     "@typescript/native-preview": "^7.0.0-dev.20260313.1",
     "bun-types": "^1.3.10",
     "concurrently": "^9.2.1",

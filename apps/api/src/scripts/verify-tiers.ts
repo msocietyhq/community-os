@@ -42,7 +42,9 @@ for (const tier of AI_TIERS) {
 }
 const keyOf = (tier: AiTier): AiModelKey => tierKeys.get(tier) as AiModelKey;
 
-console.log("\ntier    catalog key            provider model      in/out $/1M  settable  key?");
+console.log(
+  "\ntier    catalog key            provider model      in/out $/1M  settable  key?",
+);
 console.log("─".repeat(88));
 
 for (const tier of AI_TIERS) {
@@ -107,7 +109,9 @@ if (live) {
 // ── Direct probe of every catalog model ─────────────────────
 
 if (probe) {
-  console.log("\nprobing every catalog model directly (no budget gate, no ai_usage):");
+  console.log(
+    "\nprobing every catalog model directly (no budget gate, no ai_usage):",
+  );
   for (const key of Object.keys(AI_CATALOG) as AiModelKey[]) {
     const def = AI_CATALOG[key];
 

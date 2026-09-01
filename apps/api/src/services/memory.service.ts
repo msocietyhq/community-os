@@ -125,7 +125,9 @@ export interface SaveMemoryResult {
  * Save a single memory with embedding generation and deduplication.
  * If a duplicate exists, supersedes it.
  */
-export async function saveMemory(memory: MemoryInput): Promise<SaveMemoryResult> {
+export async function saveMemory(
+  memory: MemoryInput,
+): Promise<SaveMemoryResult> {
   const embedding = await generateEmbedding(memory.content);
 
   const duplicate = await findDuplicate(
@@ -177,7 +179,11 @@ export async function saveMemory(memory: MemoryInput): Promise<SaveMemoryResult>
   });
 
   if (duplicate && inserted) {
-    return { id: inserted.id, status: "superseded", supersededId: duplicate.id };
+    return {
+      id: inserted.id,
+      status: "superseded",
+      supersededId: duplicate.id,
+    };
   }
 
   return { id: inserted?.id ?? null, status: "inserted" };

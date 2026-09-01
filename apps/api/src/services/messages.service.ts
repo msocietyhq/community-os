@@ -98,7 +98,8 @@ export async function getMessagesByIds(
     from: row.fromUsername
       ? `@${row.fromUsername}`
       : (row.fromFirstName ?? "unknown"),
-    text: row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : null),
+    text:
+      row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : null),
     date: row.date,
     replyToMessageId: row.replyToMessageId,
   }));
@@ -171,9 +172,10 @@ export async function searchMessagesSemantic(
       fromFirstName: telegramMessages.fromFirstName,
       fromUsername: telegramMessages.fromUsername,
       date: telegramMessages.date,
-      score: sql<number>`1 - (${telegramMessages.embedding} <=> ${vectorLiteral}::vector)`.as(
-        "score",
-      ),
+      score:
+        sql<number>`1 - (${telegramMessages.embedding} <=> ${vectorLiteral}::vector)`.as(
+          "score",
+        ),
     })
     .from(telegramMessages)
     .where(

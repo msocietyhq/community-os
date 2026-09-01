@@ -1,5 +1,4 @@
 import { auth } from "../auth";
-import { defineAbilityFor, isRole } from "@community-os/shared";
 
 export interface GraphQLContext {
   user: {

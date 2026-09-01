@@ -61,7 +61,11 @@ export const projectResolvers = {
 
       const result = await projectsService.list({
         status: args.status as "active" | "paused" | "archived" | undefined,
-        nature: args.nature as "startup" | "community" | "side_project" | undefined,
+        nature: args.nature as
+          | "startup"
+          | "community"
+          | "side_project"
+          | undefined,
         search: args.q,
         page,
         limit,

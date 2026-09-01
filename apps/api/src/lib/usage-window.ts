@@ -20,7 +20,9 @@ function daysAgo(now: Date, days: number): Date {
 }
 
 function startOfDay(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 }
 
 function monthsAgo(now: Date, months: number): Date {
@@ -68,25 +70,40 @@ export function resolveWindow(
     return { since: monthsAgo(now, 12), label: "the last 12 months" };
   }
 
-  const match = /^(\d+)\s*(d|w|m|y|day|days|week|weeks|month|months|year|years)?$/.exec(raw);
+  const match =
+    /^(\d+)\s*(d|w|m|y|day|days|week|weeks|month|months|year|years)?$/.exec(
+      raw,
+    );
   if (match) {
     const n = Number(match[1]);
     const unit = match[2] ?? "d";
 
     if (n > 0) {
       if (unit.startsWith("w")) {
-        return { since: daysAgo(now, n * 7), label: `the last ${plural(n, "week")}` };
+        return {
+          since: daysAgo(now, n * 7),
+          label: `the last ${plural(n, "week")}`,
+        };
       }
       if (unit.startsWith("m")) {
-        return { since: monthsAgo(now, n), label: `the last ${plural(n, "month")}` };
+        return {
+          since: monthsAgo(now, n),
+          label: `the last ${plural(n, "month")}`,
+        };
       }
       if (unit.startsWith("y")) {
-        return { since: monthsAgo(now, n * 12), label: `the last ${plural(n, "year")}` };
+        return {
+          since: monthsAgo(now, n * 12),
+          label: `the last ${plural(n, "year")}`,
+        };
       }
       return { since: daysAgo(now, n), label: `the last ${plural(n, "day")}` };
     }
   }
 
   // Unrecognised — measure something sensible rather than failing the call.
-  return { since: daysAgo(now, 30), label: "the last 30 days (unrecognised window)" };
+  return {
+    since: daysAgo(now, 30),
+    label: "the last 30 days (unrecognised window)",
+  };
 }

@@ -26,7 +26,9 @@ export function photoPath(userId: string): string {
  * where `user.image` is a column reference rather than a value.
  */
 export function photoUrlSql() {
-  return sql<string | null>`case when ${user.image} like '/%' then ${env.API_URL} || ${user.image} else ${user.image} end`;
+  return sql<
+    string | null
+  >`case when ${user.image} like '/%' then ${env.API_URL} || ${user.image} else ${user.image} end`;
 }
 
 /** Resolves a stored image value to something a browser can load. */
@@ -55,7 +57,10 @@ export async function savePhoto(
         set: { data, contentType, updatedAt: new Date() },
       });
 
-    await tx.update(user).set({ image: photoPath(userId) }).where(eq(user.id, userId));
+    await tx
+      .update(user)
+      .set({ image: photoPath(userId) })
+      .where(eq(user.id, userId));
   });
 
   return photoPath(userId);

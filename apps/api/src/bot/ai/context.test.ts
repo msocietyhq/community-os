@@ -40,7 +40,11 @@ function makeRecaller(
     resolveSubject?: Record<string, number>;
   } = {},
 ): { recaller: MemoryRecaller; calls: RecallerCalls } {
-  const calls: RecallerCalls = { semantic: [], bySubject: [], resolveSubject: [] };
+  const calls: RecallerCalls = {
+    semantic: [],
+    bySubject: [],
+    resolveSubject: [],
+  };
 
   const recaller: MemoryRecaller = {
     async semantic(query, limit) {
@@ -109,16 +113,17 @@ describe("formatMemoryAge", () => {
 
 describe("extractMentionedSubjects", () => {
   test("finds @mentions in the current query", () => {
-    expect(extractMentionedSubjects([], "does @hafiz_dev know about this?")).toEqual(
-      ["hafiz_dev"],
-    );
+    expect(
+      extractMentionedSubjects([], "does @hafiz_dev know about this?"),
+    ).toEqual(["hafiz_dev"]);
   });
 
   test("finds @mentions in the body of history messages", () => {
     const history: ModelMessage[] = [
       {
         role: "user",
-        content: '<msg from="@aziz_sg" at="18 Mar 2026 14:30">\nhas @hafiz_dev seen this?\n</msg>',
+        content:
+          '<msg from="@aziz_sg" at="18 Mar 2026 14:30">\nhas @hafiz_dev seen this?\n</msg>',
       },
     ];
     expect(extractMentionedSubjects(history, "hello")).toEqual(["hafiz_dev"]);
@@ -131,8 +136,15 @@ describe("extractMentionedSubjects", () => {
    */
   test("ignores the sender name in the envelope attributes", () => {
     const history: ModelMessage[] = [
-      { role: "user", content: '<msg from="@aziz_sg" at="18 Mar 2026 14:30">\nhello everyone\n</msg>' },
-      { role: "user", content: '<msg from="@hafiz_dev" at="14:31">\nsalam\n</msg>' },
+      {
+        role: "user",
+        content:
+          '<msg from="@aziz_sg" at="18 Mar 2026 14:30">\nhello everyone\n</msg>',
+      },
+      {
+        role: "user",
+        content: '<msg from="@hafiz_dev" at="14:31">\nsalam\n</msg>',
+      },
     ];
     expect(extractMentionedSubjects(history, "who is around?")).toEqual([]);
   });
@@ -170,7 +182,10 @@ describe("extractMentionedSubjects", () => {
 
   test("lowercases and de-duplicates repeated mentions", () => {
     const history: ModelMessage[] = [
-      { role: "user", content: '<msg from="@a" at="14:30">\nping @Hafiz_Dev\n</msg>' },
+      {
+        role: "user",
+        content: '<msg from="@a" at="14:30">\nping @Hafiz_Dev\n</msg>',
+      },
     ];
     expect(extractMentionedSubjects(history, "@hafiz_dev again")).toEqual([
       "hafiz_dev",
@@ -183,7 +198,9 @@ describe("extractMentionedSubjects", () => {
   });
 
   test("no mentions → empty array", () => {
-    expect(extractMentionedSubjects([], "what time is the meetup?")).toEqual([]);
+    expect(extractMentionedSubjects([], "what time is the meetup?")).toEqual(
+      [],
+    );
   });
 });
 
@@ -192,7 +209,10 @@ describe("extractMentionedSubjects", () => {
 describe("buildAgentContext", () => {
   test("cold start — no memories, no history", async () => {
     const { recaller } = makeRecaller();
-    const ctx = await buildAgentContext(baseInput({ senderTelegramId: null }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ senderTelegramId: null }),
+      recaller,
+    );
 
     expect(ctx.memories).toEqual([]);
     expect(ctx.system).not.toContain("## Relevant Memories");
@@ -231,7 +251,10 @@ describe("buildAgentContext", () => {
       { role: "assistant", content: "Wa'alaikumussalam!" },
     ];
     const { recaller } = makeRecaller();
-    const ctx = await buildAgentContext(baseInput({ chatHistory: history }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ chatHistory: history }),
+      recaller,
+    );
 
     expect(ctx.messages).toHaveLength(3);
     expect(ctx.messages[0]?.content).toBe("[14:30 @aziz_sg]\nsalam");
@@ -251,7 +274,10 @@ describe("buildAgentContext", () => {
         }),
       ],
     });
-    const ctx = await buildAgentContext(baseInput({ senderTelegramId: null }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ senderTelegramId: null }),
+      recaller,
+    );
 
     expect(ctx.system).toContain("## Relevant Memories");
     expect(ctx.system).toContain(
@@ -265,7 +291,10 @@ describe("buildAgentContext", () => {
    */
   test("semantic hits are labelled as possibly irrelevant", async () => {
     const { recaller } = makeRecaller({ semantic: [makeMemory()] });
-    const ctx = await buildAgentContext(baseInput({ senderTelegramId: null }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ senderTelegramId: null }),
+      recaller,
+    );
 
     expect(ctx.system).toContain("### Possibly relevant");
     expect(ctx.system).toContain("silently ignore the ones");
@@ -274,9 +303,14 @@ describe("buildAgentContext", () => {
 
   test("subject memories are listed separately and carry no match score", async () => {
     const { recaller } = makeRecaller({
-      bySubject: [makeMemory({ id: "s1", content: "Aziz organises the meetups" })],
+      bySubject: [
+        makeMemory({ id: "s1", content: "Aziz organises the meetups" }),
+      ],
     });
-    const ctx = await buildAgentContext(baseInput({ senderTelegramId: 42 }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ senderTelegramId: 42 }),
+      recaller,
+    );
 
     expect(ctx.system).toContain("### About people in this conversation");
     expect(ctx.system).toContain("Aziz organises the meetups");
@@ -286,8 +320,14 @@ describe("buildAgentContext", () => {
 
   test("a memory found by both paths is filed under the subject section", async () => {
     const shared = makeMemory({ id: "shared" });
-    const { recaller } = makeRecaller({ semantic: [shared], bySubject: [shared] });
-    const ctx = await buildAgentContext(baseInput({ senderTelegramId: 42 }), recaller);
+    const { recaller } = makeRecaller({
+      semantic: [shared],
+      bySubject: [shared],
+    });
+    const ctx = await buildAgentContext(
+      baseInput({ senderTelegramId: 42 }),
+      recaller,
+    );
 
     expect(ctx.memories).toHaveLength(1);
     expect(ctx.memories[0]?.source).toBe("subject");
@@ -304,7 +344,9 @@ describe("buildAgentContext", () => {
 
   test("a memory with no subject omits the 'about' suffix", async () => {
     const { recaller } = makeRecaller({
-      semantic: [makeMemory({ subject: null, content: "The venue has free parking" })],
+      semantic: [
+        makeMemory({ subject: null, content: "The venue has free parking" }),
+      ],
     });
     const ctx = await buildAgentContext(baseInput(), recaller);
 
@@ -329,7 +371,9 @@ describe("buildAgentContext", () => {
   test("@mentioned members are resolved and their memories recalled", async () => {
     const { recaller, calls } = makeRecaller({
       resolveSubject: { hafiz_dev: 77 },
-      bySubject: [makeMemory({ id: "mem-hafiz", content: "Hafiz runs the study circle" })],
+      bySubject: [
+        makeMemory({ id: "mem-hafiz", content: "Hafiz runs the study circle" }),
+      ],
     });
     const ctx = await buildAgentContext(
       baseInput({ query: "is @hafiz_dev coming?", senderTelegramId: null }),
@@ -355,7 +399,10 @@ describe("buildAgentContext", () => {
 
   test("the same memory from two sources appears once", async () => {
     const shared = makeMemory({ id: "shared" });
-    const { recaller } = makeRecaller({ semantic: [shared], bySubject: [shared] });
+    const { recaller } = makeRecaller({
+      semantic: [shared],
+      bySubject: [shared],
+    });
     const ctx = await buildAgentContext(baseInput(), recaller);
 
     expect(ctx.memories).toHaveLength(1);
@@ -378,7 +425,10 @@ describe("buildAgentContext", () => {
       semantic: () => Promise.reject(new Error("voyage timeout")),
     });
 
-    const ctx = await buildAgentContext(baseInput({ senderTelegramId: null }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ senderTelegramId: null }),
+      recaller,
+    );
 
     expect(ctx.memories).toEqual([]);
     expect(ctx.system).not.toContain("## Relevant Memories");
@@ -437,7 +487,10 @@ describe("buildAgentContext", () => {
     const ctx = await buildAgentContext(
       baseInput({
         chatHistory: [
-          { role: "user", content: "[20 Aug 2026 16:58 @hafiz_dev]\nanyone going this week?" },
+          {
+            role: "user",
+            content: "[20 Aug 2026 16:58 @hafiz_dev]\nanyone going this week?",
+          },
         ],
       }),
       recaller,
@@ -479,9 +532,17 @@ describe("memory scoping on a chime-in", () => {
   test("drops memories from other chats when chiming in", async () => {
     const { recaller } = makeRecaller({
       semantic: [
-        makeMemory({ id: "here", content: "in this group", sourceChatId: CHAT_ID }),
+        makeMemory({
+          id: "here",
+          content: "in this group",
+          sourceChatId: CHAT_ID,
+        }),
         makeMemory({ id: "dm", content: "from a DM", sourceChatId: "987654" }),
-        makeMemory({ id: "unknown", content: "no provenance", sourceChatId: null }),
+        makeMemory({
+          id: "unknown",
+          content: "no provenance",
+          sourceChatId: null,
+        }),
       ],
     });
 
@@ -513,7 +574,11 @@ describe("memory scoping on a chime-in", () => {
   test("a dropped memory does not reach the system prompt", async () => {
     const { recaller } = makeRecaller({
       semantic: [
-        makeMemory({ id: "dm", content: "SECRET-FROM-A-DM", sourceChatId: "987654" }),
+        makeMemory({
+          id: "dm",
+          content: "SECRET-FROM-A-DM",
+          sourceChatId: "987654",
+        }),
       ],
     });
 
@@ -529,7 +594,10 @@ describe("memory scoping on a chime-in", () => {
 describe("system prompt composition", () => {
   test("a direct turn gets the responder role and the schema", async () => {
     const { recaller } = makeRecaller();
-    const ctx = await buildAgentContext(baseInput({ chimingIn: false }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: false }),
+      recaller,
+    );
 
     expect(ctx.system).toContain("You help members with");
     expect(ctx.system).toContain(SDL);
@@ -538,7 +606,10 @@ describe("system prompt composition", () => {
 
   test("a chime-in gets the chime-in role and no schema", async () => {
     const { recaller } = makeRecaller();
-    const ctx = await buildAgentContext(baseInput({ chimingIn: true }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: true }),
+      recaller,
+    );
 
     expect(ctx.system).toContain("You were not addressed");
     expect(ctx.system).not.toContain(SDL);
@@ -547,8 +618,14 @@ describe("system prompt composition", () => {
 
   test("both roles share the preamble and the envelope format", async () => {
     const { recaller } = makeRecaller();
-    const direct = await buildAgentContext(baseInput({ chimingIn: false }), recaller);
-    const chime = await buildAgentContext(baseInput({ chimingIn: true }), recaller);
+    const direct = await buildAgentContext(
+      baseInput({ chimingIn: false }),
+      recaller,
+    );
+    const chime = await buildAgentContext(
+      baseInput({ chimingIn: true }),
+      recaller,
+    );
 
     for (const ctx of [direct, chime]) {
       expect(ctx.system).toContain("MSOCIETY");
@@ -561,7 +638,10 @@ describe("system prompt composition", () => {
 
   test("the chime-in role states the tests that reject a padded reply", async () => {
     const { recaller } = makeRecaller();
-    const ctx = await buildAgentContext(baseInput({ chimingIn: true }), recaller);
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: true }),
+      recaller,
+    );
 
     expect(ctx.system).toContain("stay_silent");
     expect(ctx.system).toContain("name the specific thing");

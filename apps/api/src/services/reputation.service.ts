@@ -76,7 +76,9 @@ function scoreMessages(
     if (!matchedTrigger) continue;
 
     // Count how many votes this voter cast in the 24h window before this message
-    const cutoff = new Date(row.date.getTime() - VOTE_QUOTA_DURATION_HOURS * 60 * 60 * 1000);
+    const cutoff = new Date(
+      row.date.getTime() - VOTE_QUOTA_DURATION_HOURS * 60 * 60 * 1000,
+    );
     const priorVotes = voterVoteTimes.get(row.fromUserId) ?? [];
     const votesInWindow = priorVotes.filter((d) => d >= cutoff).length;
 
@@ -217,7 +219,9 @@ export const reputationService = {
 
     for (const row of candidates) {
       const text = (row.text ?? "").toLowerCase();
-      const trigger = keywordTriggers.find((t) => text.includes(t.triggerValue));
+      const trigger = keywordTriggers.find((t) =>
+        text.includes(t.triggerValue),
+      );
       if (!trigger) continue;
       result.push({
         chatId: row.chatId,
@@ -386,9 +390,7 @@ export const reputationService = {
       })
       .from(user)
       .where(
-        or(
-          ...topScored.map((s) => eq(user.telegramId, String(s.telegramId))),
-        ),
+        or(...topScored.map((s) => eq(user.telegramId, String(s.telegramId)))),
       );
 
     const userMap = new Map(userRows.map((u) => [u.telegramId, u]));

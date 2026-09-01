@@ -35,23 +35,45 @@ export function createMembersTools(ctx: ToolContext) {
         current_company: z.string().optional().describe("Current company"),
         current_title: z.string().optional().describe("Current job title"),
         github: z.string().optional().describe("GitHub username (without @)"),
-        linkedin_url: z.string().url().optional().describe("LinkedIn profile URL"),
+        linkedin_url: z
+          .string()
+          .url()
+          .optional()
+          .describe("LinkedIn profile URL"),
       }),
       execute: async ({
-        bio, skills, interests, current_company, current_title,
-        github, linkedin_url,
+        bio,
+        skills,
+        interests,
+        current_company,
+        current_title,
+        github,
+        linkedin_url,
       }) => {
         console.log("[members-agent:update_my_profile]", {
-          bio: bio?.slice(0, 40), skills, interests,
-          current_company, current_title, github, linkedin_url,
+          bio: bio?.slice(0, 40),
+          skills,
+          interests,
+          current_company,
+          current_title,
+          github,
+          linkedin_url,
         });
         const { data, error } = await ctx.api.api.v1.members.me.patch({
-          bio, skills, interests, currentCompany: current_company,
-          currentTitle: current_title, githubHandle: github,
+          bio,
+          skills,
+          interests,
+          currentCompany: current_company,
+          currentTitle: current_title,
+          githubHandle: github,
           linkedinUrl: linkedin_url,
         });
         if (error) {
-          console.error("[members-agent:update_my_profile] error:", error.status, error.value);
+          console.error(
+            "[members-agent:update_my_profile] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -65,7 +87,11 @@ export function createMembersTools(ctx: ToolContext) {
         console.log("[members-agent:get_my_profile]");
         const { data, error } = await ctx.api.api.v1.members.me.get();
         if (error) {
-          console.error("[members-agent:get_my_profile] error:", error.status, error.value);
+          console.error(
+            "[members-agent:get_my_profile] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -73,11 +99,13 @@ export function createMembersTools(ctx: ToolContext) {
     }),
 
     get_my_reputation: tool({
-      description: "Get the requesting user's reputation score and recent events",
+      description:
+        "Get the requesting user's reputation score and recent events",
       inputSchema: z.object({}),
       execute: async () => {
         console.log("[members-agent:get_my_reputation]");
-        const { data: me, error: meErr } = await ctx.api.api.v1.members.me.get();
+        const { data: me, error: meErr } =
+          await ctx.api.api.v1.members.me.get();
         if (meErr) return { status: meErr.status, value: meErr.value };
         const { data, error } = await ctx.api.api.v1
           .reputation({ userId: me.user.id })
@@ -106,13 +134,21 @@ export function createMembersTools(ctx: ToolContext) {
     get_leaderboard: tool({
       description: "Get the top reputation scores in the community",
       inputSchema: z.object({
-        limit: z.number().optional().describe("Number of entries to return (default: 10)"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Number of entries to return (default: 10)"),
       }),
       execute: async () => {
         console.log("[members-agent:get_leaderboard]");
-        const { data, error } = await ctx.api.api.v1.reputation.leaderboard.get();
+        const { data, error } =
+          await ctx.api.api.v1.reputation.leaderboard.get();
         if (error) {
-          console.error("[members-agent:get_leaderboard] error:", error.status, error.value);
+          console.error(
+            "[members-agent:get_leaderboard] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -146,10 +182,20 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "members-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      {
+        caller: "members-agent",
+        tier: "fast",
+        telegramUserId: ctx.senderTelegramId,
+        chatId: ctx.chatId,
+      },
     );
 
-    console.log("[members-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
+    console.log(
+      "[members-agent] steps:",
+      result.steps.length,
+      "| response:",
+      result.text?.slice(0, 120),
+    );
     return result.text || "No member information found.";
   };
 }

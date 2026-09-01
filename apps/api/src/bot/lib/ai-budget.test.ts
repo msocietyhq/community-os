@@ -26,7 +26,9 @@ describe("decideBudget", () => {
   });
 
   test("an interactive call is unaffected by the background pause", () => {
-    expect(decideBudget({ ...base, backgroundPaused: true }).allowed).toBe(true);
+    expect(decideBudget({ ...base, backgroundPaused: true }).allowed).toBe(
+      true,
+    );
   });
 
   test("blocks at the daily cap", () => {

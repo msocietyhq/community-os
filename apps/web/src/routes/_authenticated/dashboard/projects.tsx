@@ -184,25 +184,23 @@ function ProjectsPage() {
 
       {/* Nature filter tabs */}
       <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
-        {(["all", "startup", "community", "side_project"] as const).map(
-          (f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => {
-                setNatureFilter(f);
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                natureFilter === f
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {f === "all" ? "All" : NATURE_LABELS[f]}
-            </button>
-          ),
-        )}
+        {(["all", "startup", "community", "side_project"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => {
+              setNatureFilter(f);
+              setPage(1);
+            }}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              natureFilter === f
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f === "all" ? "All" : NATURE_LABELS[f]}
+          </button>
+        ))}
       </div>
 
       {/* Projects grid */}
@@ -350,7 +348,9 @@ function ProjectCard({
         <span
           className={`flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${(project.status && STATUS_COLORS[project.status]) ?? "bg-muted text-muted-foreground"}`}
         >
-          {(project.status && STATUS_LABELS[project.status]) ?? project.status ?? "unknown"}
+          {(project.status && STATUS_LABELS[project.status]) ??
+            project.status ??
+            "unknown"}
         </span>
       </div>
 
@@ -590,10 +590,14 @@ function ProjectDialog({
               className="px-6 pb-6 space-y-4"
             >
               <div>
-                <label className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="project-name"
+                  className="text-sm font-medium text-foreground"
+                >
                   Name *
                 </label>
                 <input
+                  id="project-name"
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
@@ -604,10 +608,14 @@ function ProjectDialog({
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="project-description"
+                  className="text-sm font-medium text-foreground"
+                >
                   Description
                 </label>
                 <textarea
+                  id="project-description"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   rows={3}
@@ -618,10 +626,14 @@ function ProjectDialog({
 
               <div className={mode === "edit" ? "grid grid-cols-2 gap-4" : ""}>
                 <div>
-                  <label className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="project-nature"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Nature
                   </label>
                   <select
+                    id="project-nature"
                     value={formNature}
                     onChange={(e) =>
                       setFormNature(e.target.value as ProjectNature)
@@ -637,10 +649,14 @@ function ProjectDialog({
                 </div>
                 {mode === "edit" && (
                   <div>
-                    <label className="text-sm font-medium text-foreground">
+                    <label
+                      htmlFor="project-status"
+                      className="text-sm font-medium text-foreground"
+                    >
                       Status
                     </label>
                     <select
+                      id="project-status"
                       value={formStatus}
                       onChange={(e) =>
                         setFormStatus(e.target.value as ProjectStatus)
@@ -657,10 +673,10 @@ function ProjectDialog({
                 )}
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-foreground">
+              <fieldset>
+                <legend className="text-sm font-medium text-foreground">
                   Platforms
-                </label>
+                </legend>
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {(
                     Object.entries(PLATFORM_LABELS) as [
@@ -682,13 +698,17 @@ function ProjectDialog({
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
               <div>
-                <label className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="project-url"
+                  className="text-sm font-medium text-foreground"
+                >
                   URL
                 </label>
                 <input
+                  id="project-url"
                   type="url"
                   value={formUrl}
                   onChange={(e) => setFormUrl(e.target.value)}
@@ -698,10 +718,14 @@ function ProjectDialog({
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="project-repo-url"
+                  className="text-sm font-medium text-foreground"
+                >
                   Repo URL
                 </label>
                 <input
+                  id="project-repo-url"
                   type="url"
                   value={formRepoUrl}
                   onChange={(e) => setFormRepoUrl(e.target.value)}
@@ -990,7 +1014,7 @@ function ProjectDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function ProjectMembersSection({
@@ -1192,7 +1216,11 @@ function MemberAutocomplete({
     queryKey: ["members-search", debouncedSearch],
     queryFn: async () => {
       const res = await api.api.v1.members.get({
-        query: { page: 1, limit: 10, ...(debouncedSearch ? { q: debouncedSearch } : {}) },
+        query: {
+          page: 1,
+          limit: 10,
+          ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        },
       });
       if (res.error) throw new Error("Failed to search members");
       return res.data;
@@ -1241,11 +1269,7 @@ function MemberAutocomplete({
                     }}
                     className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-accent/50 transition-colors"
                   >
-                    <Avatar
-                      name={m.user.name}
-                      image={m.user.image}
-                      size="sm"
-                    />
+                    <Avatar name={m.user.name} image={m.user.image} size="sm" />
                     <span className="text-xs font-medium text-foreground truncate">
                       {m.user.name}
                     </span>
@@ -1254,13 +1278,15 @@ function MemberAutocomplete({
               )}
             </div>
           )}
-          {open && debouncedSearch.length > 0 && filteredMembers.length === 0 && (
-            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border rounded-md shadow-lg px-2.5 py-2">
-              <span className="text-xs text-muted-foreground">
-                No members found
-              </span>
-            </div>
-          )}
+          {open &&
+            debouncedSearch.length > 0 &&
+            filteredMembers.length === 0 && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border rounded-md shadow-lg px-2.5 py-2">
+                <span className="text-xs text-muted-foreground">
+                  No members found
+                </span>
+              </div>
+            )}
         </div>
         <select
           value={role}
@@ -1300,8 +1326,7 @@ function Avatar({
     .join("")
     .toUpperCase()
     .slice(0, 2);
-  const sizeClass =
-    size === "lg" ? "w-14 h-14 text-lg" : "w-7 h-7 text-[10px]";
+  const sizeClass = size === "lg" ? "w-14 h-14 text-lg" : "w-7 h-7 text-[10px]";
 
   if (image) {
     return (

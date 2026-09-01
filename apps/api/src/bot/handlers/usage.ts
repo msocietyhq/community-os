@@ -135,10 +135,15 @@ usageHandler.command("usage", async (ctx) => {
   const isPrivate = ctx.chat?.type === "private";
 
   // Extract @username mention from the message (skip the bot_command entity)
-  const mention = ctx.message?.entities?.find((e) => e.type === "mention" && e.offset > 0);
+  const mention = ctx.message?.entities?.find(
+    (e) => e.type === "mention" && e.offset > 0,
+  );
   let username: string | undefined;
   if (mention && ctx.message?.text) {
-    username = ctx.message.text.substring(mention.offset + 1, mention.offset + mention.length);
+    username = ctx.message.text.substring(
+      mention.offset + 1,
+      mention.offset + mention.length,
+    );
   } else if (isPrivate && ctx.from?.username) {
     username = ctx.from.username;
   }

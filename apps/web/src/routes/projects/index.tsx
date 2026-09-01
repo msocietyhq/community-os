@@ -10,7 +10,10 @@ type Nature = "community" | "startup" | "side_project";
 
 const projectSearchSchema = z.object({
   search: z.string().optional().catch(undefined),
-  nature: z.enum(["community", "startup", "side_project"]).optional().catch(undefined),
+  nature: z
+    .enum(["community", "startup", "side_project"])
+    .optional()
+    .catch(undefined),
 });
 
 export const Route = createFileRoute("/projects/")({
@@ -19,22 +22,40 @@ export const Route = createFileRoute("/projects/")({
 });
 
 const NATURE_OPTIONS = [
-  { value: "", label: "All", active: "bg-white/15 text-white border-white/20", hover: "hover:bg-white/10 hover:text-gray-200" },
-  { value: "community", label: "Community", active: "bg-blue-500/20 text-blue-400 border-blue-500/30", hover: "hover:bg-blue-500/10 hover:text-blue-400" },
-  { value: "startup", label: "Startup", active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", hover: "hover:bg-emerald-500/10 hover:text-emerald-400" },
-  { value: "side_project", label: "Side Project", active: "bg-rose-500/20 text-rose-400 border-rose-500/30", hover: "hover:bg-rose-500/10 hover:text-rose-400" },
+  {
+    value: "",
+    label: "All",
+    active: "bg-white/15 text-white border-white/20",
+    hover: "hover:bg-white/10 hover:text-gray-200",
+  },
+  {
+    value: "community",
+    label: "Community",
+    active: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    hover: "hover:bg-blue-500/10 hover:text-blue-400",
+  },
+  {
+    value: "startup",
+    label: "Startup",
+    active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    hover: "hover:bg-emerald-500/10 hover:text-emerald-400",
+  },
+  {
+    value: "side_project",
+    label: "Side Project",
+    active: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+    hover: "hover:bg-rose-500/10 hover:text-rose-400",
+  },
 ] as const;
 
 function PublicProjectsPage() {
-
   const searchParams = Route.useSearch();
   const [search, setSearch] = useState(searchParams.search ?? "");
   const [nature, setNature] = useState<Nature | "">(searchParams.nature ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: () =>
-      api.api.v1.projects.get({ query: { page: 1, limit: 100 } }),
+    queryFn: () => api.api.v1.projects.get({ query: { page: 1, limit: 100 } }),
   });
 
   const allProjects = data?.data?.projects ?? [];
@@ -144,7 +165,9 @@ function PublicProjectsPage() {
           </div>
         ) : projects.length === 0 ? (
           <p className="text-center text-gray-500 py-12">
-            {search || nature ? "No projects match your filters." : "No projects yet."}
+            {search || nature
+              ? "No projects match your filters."
+              : "No projects yet."}
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -167,4 +190,3 @@ function PublicProjectsPage() {
     </div>
   );
 }
-

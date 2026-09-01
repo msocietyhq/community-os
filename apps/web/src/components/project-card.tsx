@@ -84,9 +84,8 @@ function MemberAvatars({
 
 export function ProjectCard({ project }: { project: Project }) {
   const styles =
-    NATURE_HOVER_STYLES[
-      project.nature as keyof typeof NATURE_HOVER_STYLES
-    ] ?? NATURE_HOVER_STYLES.community;
+    NATURE_HOVER_STYLES[project.nature as keyof typeof NATURE_HOVER_STYLES] ??
+    NATURE_HOVER_STYLES.community;
 
   return (
     <Link to="/projects/$slug" params={{ slug: project.slug }}>

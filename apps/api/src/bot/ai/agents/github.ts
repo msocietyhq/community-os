@@ -20,14 +20,17 @@ async function githubFetch(path: string): Promise<unknown> {
   }
   const response = await fetch(`${GITHUB_API}${path}`, { headers });
   if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `GitHub API error: ${response.status} ${response.statusText}`,
+    );
   }
   return response.json();
 }
 
 const githubTools = {
   get_github_org: tool({
-    description: "Get overview of a GitHub organization or user: description, repo count, website, followers",
+    description:
+      "Get overview of a GitHub organization or user: description, repo count, website, followers",
     inputSchema: z.object({
       owner: z
         .string()
@@ -60,24 +63,35 @@ const githubTools = {
         .optional()
         .describe("Number of repos to return (default: 10, max: 30)"),
     }),
-    execute: async ({ owner = DEFAULT_ORG, sort = "updated", per_page = 10 }) => {
+    execute: async ({
+      owner = DEFAULT_ORG,
+      sort = "updated",
+      per_page = 10,
+    }) => {
       const limit = Math.min(per_page, 30);
       // Works for both orgs and users
       try {
-        return await githubFetch(`/orgs/${owner}/repos?sort=${sort}&per_page=${limit}&type=public`);
+        return await githubFetch(
+          `/orgs/${owner}/repos?sort=${sort}&per_page=${limit}&type=public`,
+        );
       } catch {
-        return githubFetch(`/users/${owner}/repos?sort=${sort}&per_page=${limit}&type=public`);
+        return githubFetch(
+          `/users/${owner}/repos?sort=${sort}&per_page=${limit}&type=public`,
+        );
       }
     },
   }),
 
   get_github_repo: tool({
-    description: "Get details of any public GitHub repository: stars, open issues, language, topics, description",
+    description:
+      "Get details of any public GitHub repository: stars, open issues, language, topics, description",
     inputSchema: z.object({
       owner: z
         .string()
         .optional()
-        .describe(`Repository owner (org or username, default: ${DEFAULT_ORG})`),
+        .describe(
+          `Repository owner (org or username, default: ${DEFAULT_ORG})`,
+        ),
       repo: z.string().describe("Repository name (e.g. 'community-os')"),
     }),
     execute: async ({ owner = DEFAULT_ORG, repo }) => {
@@ -91,7 +105,9 @@ const githubTools = {
       owner: z
         .string()
         .optional()
-        .describe(`Repository owner (org or username, default: ${DEFAULT_ORG})`),
+        .describe(
+          `Repository owner (org or username, default: ${DEFAULT_ORG})`,
+        ),
       repo: z.string().describe("Repository name"),
       state: z
         .enum(["open", "closed", "all"])
@@ -102,9 +118,16 @@ const githubTools = {
         .optional()
         .describe("Number of issues to return (default: 10, max: 30)"),
     }),
-    execute: async ({ owner = DEFAULT_ORG, repo, state = "open", per_page = 10 }) => {
+    execute: async ({
+      owner = DEFAULT_ORG,
+      repo,
+      state = "open",
+      per_page = 10,
+    }) => {
       const limit = Math.min(per_page, 30);
-      return githubFetch(`/repos/${owner}/${repo}/issues?state=${state}&per_page=${limit}`);
+      return githubFetch(
+        `/repos/${owner}/${repo}/issues?state=${state}&per_page=${limit}`,
+      );
     },
   }),
 
@@ -114,7 +137,9 @@ const githubTools = {
       owner: z
         .string()
         .optional()
-        .describe(`Repository owner (org or username, default: ${DEFAULT_ORG})`),
+        .describe(
+          `Repository owner (org or username, default: ${DEFAULT_ORG})`,
+        ),
       repo: z.string().describe("Repository name"),
       state: z
         .enum(["open", "closed", "all"])
@@ -125,9 +150,16 @@ const githubTools = {
         .optional()
         .describe("Number of PRs to return (default: 10, max: 30)"),
     }),
-    execute: async ({ owner = DEFAULT_ORG, repo, state = "open", per_page = 10 }) => {
+    execute: async ({
+      owner = DEFAULT_ORG,
+      repo,
+      state = "open",
+      per_page = 10,
+    }) => {
       const limit = Math.min(per_page, 30);
-      return githubFetch(`/repos/${owner}/${repo}/pulls?state=${state}&per_page=${limit}`);
+      return githubFetch(
+        `/repos/${owner}/${repo}/pulls?state=${state}&per_page=${limit}`,
+      );
     },
   }),
 };

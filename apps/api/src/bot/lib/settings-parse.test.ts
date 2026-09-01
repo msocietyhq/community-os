@@ -42,9 +42,9 @@ describe("parseEditValue", () => {
   });
 
   test("quiet hours parse into a window, and 'off' into null", () => {
-    expect(parseEditValue("availability.quietHours", "23:00-07:00", now)).toEqual(
-      { ok: true, value: { start: "23:00", end: "07:00" } },
-    );
+    expect(
+      parseEditValue("availability.quietHours", "23:00-07:00", now),
+    ).toEqual({ ok: true, value: { start: "23:00", end: "07:00" } });
     expect(parseEditValue("availability.quietHours", "off", now)).toEqual({
       ok: true,
       value: null,
@@ -64,13 +64,15 @@ describe("parseEditValue", () => {
 
   test("an unknown enum member is rejected", () => {
     expect(parseEditValue("dm.access", "everybody", now).ok).toBe(false);
-    expect(parseEditValue("cost.advisorMaxTier", "biggest", now).ok).toBe(false);
+    expect(parseEditValue("cost.advisorMaxTier", "biggest", now).ok).toBe(
+      false,
+    );
   });
 
   test("a malformed quiet-hours window is rejected", () => {
-    expect(parseEditValue("availability.quietHours", "25:00-07:00", now).ok).toBe(
-      false,
-    );
+    expect(
+      parseEditValue("availability.quietHours", "25:00-07:00", now).ok,
+    ).toBe(false);
     expect(parseEditValue("availability.quietHours", "nonsense", now).ok).toBe(
       false,
     );

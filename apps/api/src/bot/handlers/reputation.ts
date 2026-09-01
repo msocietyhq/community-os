@@ -1,9 +1,6 @@
 import { Composer } from "grammy";
 import type { BotContext } from "../types";
-import {
-  processKeyword,
-  type ReputationResult,
-} from "../lib/reputation";
+import { processKeyword, type ReputationResult } from "../lib/reputation";
 import { resolveUser, resolveUserByUsername } from "../lib/auth";
 import { reputationService } from "../../services/reputation.service";
 import { VOTE_QUOTA } from "@community-os/shared/constants";
@@ -38,14 +35,10 @@ reputationHandler.on("message:text", async (ctx, next) => {
         mentionTargetId = mentionEntity.user.id;
       }
       // For @username mentions we can't easily compare IDs, so just warn
-      if (
-        mentionTargetId !== undefined &&
-        mentionTargetId !== replyToUser.id
-      ) {
-        await ctx.reply(
-          "Reply or tag only one user at a time to change rep!",
-          { reply_parameters: { message_id: ctx.message.message_id } },
-        );
+      if (mentionTargetId !== undefined && mentionTargetId !== replyToUser.id) {
+        await ctx.reply("Reply or tag only one user at a time to change rep!", {
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
         await next();
         return;
       }
@@ -64,7 +57,10 @@ reputationHandler.on("message:text", async (ctx, next) => {
     } else if (mentionEntity.type === "mention") {
       // @username — extract and resolve
       const username = ctx.message.text
-        .slice(mentionEntity.offset + 1, mentionEntity.offset + mentionEntity.length)
+        .slice(
+          mentionEntity.offset + 1,
+          mentionEntity.offset + mentionEntity.length,
+        )
         .toLowerCase();
       const resolved = await resolveUserByUsername(username);
       if (resolved) {
@@ -113,8 +109,11 @@ reputationHandler.command("reputation", async (ctx) => {
         targetTelegramId = String(mentionEntity.user.id);
         targetLabel = mentionEntity.user.first_name + "'s";
       } else if (mentionEntity?.type === "mention") {
-        const username = ctx.message!.text!
-          .slice(mentionEntity.offset + 1, mentionEntity.offset + mentionEntity.length)
+        const username = ctx
+          .message!.text!.slice(
+            mentionEntity.offset + 1,
+            mentionEntity.offset + mentionEntity.length,
+          )
           .toLowerCase();
         const byUsername = await resolveUserByUsername(username);
         if (byUsername) {
@@ -152,7 +151,9 @@ reputationHandler.command("reputation", async (ctx) => {
 reputationHandler.command("leaderboard", async (ctx) => {
   try {
     const arg = ctx.match?.trim();
-    const limit = arg ? Math.min(Math.max(Number.parseInt(arg, 10) || 10, 1), 50) : 10;
+    const limit = arg
+      ? Math.min(Math.max(Number.parseInt(arg, 10) || 10, 1), 50)
+      : 10;
 
     const rows = await reputationService.getLeaderboard(limit);
     if (rows.length === 0) {
@@ -162,7 +163,9 @@ reputationHandler.command("leaderboard", async (ctx) => {
 
     const lines = rows.map((r, i) => {
       const firstName = (r.userName ?? "Unknown").replace(/_/g, "\\_");
-      const handle = r.telegramUsername ? ` (@${r.telegramUsername.replace(/_/g, "\\_")})` : "";
+      const handle = r.telegramUsername
+        ? ` (@${r.telegramUsername.replace(/_/g, "\\_")})`
+        : "";
       return `${i + 1}. ${firstName}${handle} - *${r.score} pts*`;
     });
 
@@ -180,7 +183,9 @@ reputationHandler.command("vote_quota", async (ctx) => {
   try {
     const resolved = await resolveUser(String(ctx.from!.id));
     if (!resolved) {
-      await ctx.reply("You need to register first. Use /register to get started.");
+      await ctx.reply(
+        "You need to register first. Use /register to get started.",
+      );
       return;
     }
 
@@ -230,9 +235,12 @@ async function sendFeedback(
       break;
     }
     case "user_not_found":
-      await ctx.reply("Can't find that user. They may need to register first.", {
-        reply_parameters: { message_id: ctx.message.message_id },
-      });
+      await ctx.reply(
+        "Can't find that user. They may need to register first.",
+        {
+          reply_parameters: { message_id: ctx.message.message_id },
+        },
+      );
       break;
     case "error":
       console.error("Keyword reputation error:", result.message);

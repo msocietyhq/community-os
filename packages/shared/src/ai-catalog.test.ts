@@ -168,7 +168,10 @@ describe("TIER_FALLBACK_ORDER", () => {
       const ranks = TIER_FALLBACK_ORDER[tier].map(
         (key) => rank[AI_CATALOG[key].provider],
       );
-      expect([...ranks].sort((a, b) => a - b), tier).toEqual(ranks);
+      expect(
+        [...ranks].sort((a, b) => a - b),
+        tier,
+      ).toEqual(ranks);
     }
   });
 

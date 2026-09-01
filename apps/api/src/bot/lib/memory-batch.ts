@@ -39,7 +39,9 @@ import { markMemoryExtracted } from "../../services/messages.service";
 const FLUSH_MARGIN = 0.8;
 
 /** Messages through the conversation before the run is flushed. */
-export const FLUSH_AFTER_SEEN = Math.floor(HISTORY_MESSAGE_LIMIT * FLUSH_MARGIN);
+export const FLUSH_AFTER_SEEN = Math.floor(
+  HISTORY_MESSAGE_LIMIT * FLUSH_MARGIN,
+);
 
 /** Age of the oldest buffered message before the run is flushed. */
 export const FLUSH_AFTER_MS = Math.floor(HISTORY_WINDOW_MS * FLUSH_MARGIN);

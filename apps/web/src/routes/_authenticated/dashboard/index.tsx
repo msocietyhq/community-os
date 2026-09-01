@@ -14,7 +14,9 @@ function DashboardPage() {
   const { data: membersData } = useQuery({
     queryKey: ["members", "count"],
     queryFn: async () => {
-      const res = await api.api.v1.members.get({ query: { page: 1, limit: 1 } });
+      const res = await api.api.v1.members.get({
+        query: { page: 1, limit: 1 },
+      });
       if (res.error) throw new Error("Failed to fetch members");
       return res.data;
     },
@@ -23,7 +25,14 @@ function DashboardPage() {
   const { data: eventsData } = useQuery({
     queryKey: ["events", "upcoming"],
     queryFn: async () => {
-      const res = await api.api.v1.events.get({ query: { page: 1, limit: 1, startsAfter: new Date().toISOString(), status: "published" } });
+      const res = await api.api.v1.events.get({
+        query: {
+          page: 1,
+          limit: 1,
+          startsAfter: new Date().toISOString(),
+          status: "published",
+        },
+      });
       if (res.error) throw new Error("Failed to fetch events");
       return res.data;
     },
@@ -32,7 +41,9 @@ function DashboardPage() {
   const { data: projectsData } = useQuery({
     queryKey: ["projects", "count"],
     queryFn: async () => {
-      const res = await api.api.v1.projects.get({ query: { page: 1, limit: 1 } });
+      const res = await api.api.v1.projects.get({
+        query: { page: 1, limit: 1 },
+      });
       if (res.error) throw new Error("Failed to fetch projects");
       return res.data;
     },
@@ -56,9 +67,18 @@ function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Members" value={memberCount !== null ? String(memberCount) : "—"} />
-        <StatCard label="Upcoming Events" value={upcomingEvents !== null ? String(upcomingEvents) : "—"} />
-        <StatCard label="Active Projects" value={projectCount !== null ? String(projectCount) : "—"} />
+        <StatCard
+          label="Members"
+          value={memberCount !== null ? String(memberCount) : "—"}
+        />
+        <StatCard
+          label="Upcoming Events"
+          value={upcomingEvents !== null ? String(upcomingEvents) : "—"}
+        />
+        <StatCard
+          label="Active Projects"
+          value={projectCount !== null ? String(projectCount) : "—"}
+        />
       </div>
 
       {/* Two-column layout */}

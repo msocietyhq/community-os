@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { resolveSubjectTelegramId, type MemoryInput } from "../../services/memory.service";
+import {
+  resolveSubjectTelegramId,
+  type MemoryInput,
+} from "../../services/memory.service";
 import { aiService } from "../../services/ai.service";
 
 const MEMORY_CATEGORIES = [

@@ -1,10 +1,4 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  jsonb,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 export const auditLog = pgTable("audit_log", {

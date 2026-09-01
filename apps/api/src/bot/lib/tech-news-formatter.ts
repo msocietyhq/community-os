@@ -39,16 +39,16 @@ interface Block {
 
 /** `• <link>` then an indented italic reason, as one two-line block. */
 function entry(label: FormattedString, why: string): FormattedString {
-  return new FormattedString("• ")
-    .concat(label)
-    .plain("\n  ")
-    .i(why);
+  return new FormattedString("• ").concat(label).plain("\n  ").i(why);
 }
 
 function newsBlocks(heading: string | null, items: NewsItem[]): Block[] {
   return items.map((item, i) => ({
     heading: i === 0 && heading ? heading : undefined,
-    body: entry(FormattedString.link(stripSiteSuffix(item.title), item.url), item.why),
+    body: entry(
+      FormattedString.link(stripSiteSuffix(item.title), item.url),
+      item.why,
+    ),
   }));
 }
 
@@ -69,7 +69,9 @@ export function formatTechNews(news: TechNews): FormattedString[] {
     ...news.repos.map((r, i) => ({
       heading: i === 0 ? "Rising on GitHub" : undefined,
       body: entry(
-        FormattedString.link(r.name, r.url).plain(` — ${formatCompact(r.stars)} stars`),
+        FormattedString.link(r.name, r.url).plain(
+          ` — ${formatCompact(r.stars)} stars`,
+        ),
         r.why,
       ),
     })),
@@ -96,8 +98,7 @@ export function formatTechNews(news: TechNews): FormattedString[] {
       ? [FormattedString.b(heading), block.body]
       : [block.body];
     // +1 per join separator, +1 for the blank line before the group.
-    const cost =
-      candidate.reduce((sum, p) => sum + p.text.length + 1, 0) + 1;
+    const cost = candidate.reduce((sum, p) => sum + p.text.length + 1, 0) + 1;
 
     if (length + cost <= MAX_MESSAGE_CHARS) {
       parts.push(new FormattedString(""), ...candidate);
@@ -115,9 +116,7 @@ export function formatTechNews(news: TechNews): FormattedString[] {
     // Spill into a follow-up, repeating the heading of a section left open.
     messages.push(FormattedString.join(parts, "\n"));
     const carried = heading ?? openHeading;
-    parts = carried
-      ? [FormattedString.b(carried), block.body]
-      : [block.body];
+    parts = carried ? [FormattedString.b(carried), block.body] : [block.body];
     length = parts.reduce((sum, p) => sum + p.text.length + 1, 0);
     pendingHeading = null;
   }

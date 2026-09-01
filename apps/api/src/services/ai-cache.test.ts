@@ -10,11 +10,12 @@ const ANTHROPIC = AI_CATALOG["anthropic/haiku-4-5"];
 /** A stand-in for a provider that caches implicitly and takes no flag. */
 const IMPLICIT = { ...ANTHROPIC, cacheControl: null };
 
+type GenerateTextParams = Parameters<typeof withPromptCaching>[0];
+
 // The shape the service passes through; only `tools` and `providerOptions`
 // affect the decision, so the rest is stubbed.
-// biome-ignore lint/suspicious/noExplicitAny: constructing partial SDK params
 const params = (extra: Record<string, unknown>) =>
-  ({ model: "m", prompt: "p", ...extra }) as any;
+  ({ model: "m", prompt: "p", ...extra }) as unknown as GenerateTextParams;
 
 const readCacheControl = (result: { providerOptions?: unknown }) => {
   const opts = result.providerOptions as

@@ -230,7 +230,9 @@ function EventCard({
             <span
               className={`flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${(event.status && STATUS_COLORS[event.status]) ?? "bg-muted text-muted-foreground"}`}
             >
-              {(event.status && STATUS_LABELS[event.status]) ?? event.status ?? "unknown"}
+              {(event.status && STATUS_LABELS[event.status]) ??
+                event.status ??
+                "unknown"}
             </span>
           </div>
 

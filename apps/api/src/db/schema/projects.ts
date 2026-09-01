@@ -59,5 +59,5 @@ export const projectMembers = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [unique().on(table.projectId, table.userId)]
+  (table) => [unique().on(table.projectId, table.userId)],
 );

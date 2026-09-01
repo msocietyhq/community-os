@@ -12,7 +12,24 @@ describe("isPresentChatMember", () => {
   it("counts creators, administrators and plain members as present", () => {
     const present: ChatMember[] = [
       { status: "creator", user, is_anonymous: false },
-      { status: "administrator", user, is_anonymous: false, can_be_edited: false, can_manage_chat: true, can_change_info: false, can_delete_messages: false, can_invite_users: false, can_restrict_members: false, can_pin_messages: false, can_promote_members: false, can_manage_video_chats: true, can_post_stories: false, can_edit_stories: false, can_delete_stories: false, can_manage_topics: false },
+      {
+        status: "administrator",
+        user,
+        is_anonymous: false,
+        can_be_edited: false,
+        can_manage_chat: true,
+        can_change_info: false,
+        can_delete_messages: false,
+        can_invite_users: false,
+        can_restrict_members: false,
+        can_pin_messages: false,
+        can_promote_members: false,
+        can_manage_video_chats: true,
+        can_post_stories: false,
+        can_edit_stories: false,
+        can_delete_stories: false,
+        can_manage_topics: false,
+      },
       { status: "member", user },
     ];
 
@@ -23,9 +40,9 @@ describe("isPresentChatMember", () => {
 
   it("counts users who left or were kicked as absent", () => {
     expect(isPresentChatMember({ status: "left", user })).toBe(false);
-    expect(
-      isPresentChatMember({ status: "kicked", user, until_date: 0 }),
-    ).toBe(false);
+    expect(isPresentChatMember({ status: "kicked", user, until_date: 0 })).toBe(
+      false,
+    );
   });
 
   // The distinction that a status-only check gets wrong: both of these are
@@ -53,6 +70,8 @@ describe("isPresentChatMember", () => {
     } as const;
 
     expect(isPresentChatMember({ ...restricted, is_member: true })).toBe(true);
-    expect(isPresentChatMember({ ...restricted, is_member: false })).toBe(false);
+    expect(isPresentChatMember({ ...restricted, is_member: false })).toBe(
+      false,
+    );
   });
 });

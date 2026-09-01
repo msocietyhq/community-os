@@ -23,7 +23,7 @@ describe("applyRelativeCutoff", () => {
 
   test("keeps matches within the cutoff of the top score", () => {
     const result = applyRelativeCutoff(
-      [m("a", 0.64), m("b", 0.55), m("c", 0.50)],
+      [m("a", 0.64), m("b", 0.55), m("c", 0.5)],
       0.15,
     );
     expect(result.map((r) => r.id)).toEqual(["a", "b", "c"]);
@@ -31,27 +31,30 @@ describe("applyRelativeCutoff", () => {
 
   test("drops matches further than the cutoff from the top score", () => {
     const result = applyRelativeCutoff(
-      [m("a", 0.64), m("b", 0.55), m("c", 0.40)],
+      [m("a", 0.64), m("b", 0.55), m("c", 0.4)],
       0.15,
     );
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
   });
 
   test("boundary score is inclusive", () => {
-    const result = applyRelativeCutoff([m("a", 0.60), m("b", 0.45)], 0.15);
+    const result = applyRelativeCutoff([m("a", 0.6), m("b", 0.45)], 0.15);
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
   });
 
   test("unsorted input is ranked before the cutoff is applied", () => {
     const result = applyRelativeCutoff(
-      [m("weak", 0.40), m("best", 0.70), m("mid", 0.62)],
+      [m("weak", 0.4), m("best", 0.7), m("mid", 0.62)],
       0.15,
     );
     expect(result.map((r) => r.id)).toEqual(["best", "mid"]);
   });
 
   test("cutoff of 0 keeps only ties with the top score", () => {
-    const result = applyRelativeCutoff([m("a", 0.7), m("b", 0.7), m("c", 0.69)], 0);
+    const result = applyRelativeCutoff(
+      [m("a", 0.7), m("b", 0.7), m("c", 0.69)],
+      0,
+    );
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
   });
 
@@ -159,6 +162,8 @@ describe("rankByConfidenceAndRecency", () => {
 
   test("future timestamps do not inflate weight above confidence", () => {
     const future = new Date(NOW.getTime() + 90 * 24 * 60 * 60 * 1000);
-    expect(memoryWeight({ confidence: 0.8, createdAt: future }, NOW)).toBeCloseTo(0.8, 5);
+    expect(
+      memoryWeight({ confidence: 0.8, createdAt: future }, NOW),
+    ).toBeCloseTo(0.8, 5);
   });
 });

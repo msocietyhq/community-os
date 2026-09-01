@@ -21,7 +21,9 @@ export async function backfillInlinePhotos(): Promise<void> {
     .where(like(user.image, "http%/api/v1/members/%/photo"))
     .returning({ id: user.id });
   if (repaired.length > 0) {
-    console.log(`[backfill-photos] repaired ${repaired.length} absolute URLs to relative paths`);
+    console.log(
+      `[backfill-photos] repaired ${repaired.length} absolute URLs to relative paths`,
+    );
   }
 
   const rows = await db
@@ -39,7 +41,9 @@ export async function backfillInlinePhotos(): Promise<void> {
   for (const row of rows) {
     const parsed = row.image ? parseDataUri(row.image) : null;
     if (!parsed) {
-      console.warn(`[backfill-photos] ${row.name}: unparseable data URI, skipping`);
+      console.warn(
+        `[backfill-photos] ${row.name}: unparseable data URI, skipping`,
+      );
       failed++;
       continue;
     }
@@ -67,7 +71,9 @@ export async function backfillInlinePhotos(): Promise<void> {
   console.log(
     `[backfill-photos] removed ${bytesFreed.toLocaleString()} chars (~${Math.round(bytesFreed / 4)} tokens) from the user table`,
   );
-  console.log(`[backfill-photos] inline photos remaining: ${remaining?.n ?? 0}`);
+  console.log(
+    `[backfill-photos] inline photos remaining: ${remaining?.n ?? 0}`,
+  );
 }
 
 // Allow running standalone: bun run src/scripts/backfill-photos.ts

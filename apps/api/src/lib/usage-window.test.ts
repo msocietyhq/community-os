@@ -26,19 +26,27 @@ describe("resolveWindow", () => {
   });
 
   test("months step by calendar month, not 30 days", () => {
-    expect(resolveWindow("3m", NOW).since.toISOString()).toBe("2026-05-21T14:30:00.000Z");
+    expect(resolveWindow("3m", NOW).since.toISOString()).toBe(
+      "2026-05-21T14:30:00.000Z",
+    );
   });
 
   test("years step by calendar year", () => {
-    expect(resolveWindow("1y", NOW).since.toISOString()).toBe("2025-08-21T14:30:00.000Z");
+    expect(resolveWindow("1y", NOW).since.toISOString()).toBe(
+      "2025-08-21T14:30:00.000Z",
+    );
   });
 
   test("today starts at midnight UTC, not 24 hours ago", () => {
-    expect(resolveWindow("today", NOW).since.toISOString()).toBe("2026-08-21T00:00:00.000Z");
+    expect(resolveWindow("today", NOW).since.toISOString()).toBe(
+      "2026-08-21T00:00:00.000Z",
+    );
   });
 
   test("ytd starts on 1 January", () => {
-    expect(resolveWindow("ytd", NOW).since.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    expect(resolveWindow("ytd", NOW).since.toISOString()).toBe(
+      "2026-01-01T00:00:00.000Z",
+    );
   });
 
   test("all time reaches the epoch", () => {
@@ -59,7 +67,9 @@ describe("resolveWindow", () => {
   // ── never fail the tool call ─────────────────────────────────────────────
 
   test("undefined uses the default window", () => {
-    expect(daysBack(resolveWindow(undefined, NOW))).toBe(Number(DEFAULT_WINDOW.replace("d", "")));
+    expect(daysBack(resolveWindow(undefined, NOW))).toBe(
+      Number(DEFAULT_WINDOW.replace("d", "")),
+    );
   });
 
   test.each(["", "nonsense", "0d", "-5d", "last fortnight", "🙂"])(
@@ -72,7 +82,9 @@ describe("resolveWindow", () => {
   );
 
   test("the fallback says it wasn't understood, so the agent can admit it", () => {
-    expect(resolveWindow("last fortnight", NOW).label).toContain("unrecognised");
+    expect(resolveWindow("last fortnight", NOW).label).toContain(
+      "unrecognised",
+    );
   });
 
   /** The label is reported back, so it must describe what was measured. */

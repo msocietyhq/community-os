@@ -15,7 +15,7 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
       auth: true,
       beforeHandle: checkPermission("read", "Reputation"),
       detail: { tags: ["Reputation"], summary: "Get reputation leaderboard" },
-    }
+    },
   )
   .get(
     "/:userId",
@@ -30,5 +30,5 @@ export const reputationRoutes = new Elysia({ prefix: "/api/v1/reputation" })
       auth: true,
       beforeHandle: checkPermission("read", "Reputation"),
       detail: { tags: ["Reputation"], summary: "Get user reputation" },
-    }
+    },
   );

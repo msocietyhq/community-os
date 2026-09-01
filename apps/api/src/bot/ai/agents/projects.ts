@@ -35,19 +35,44 @@ export function createProjectsTools(ctx: ToolContext) {
           .enum(["startup", "community", "side_project"])
           .describe("Project nature"),
         platforms: z
-          .array(z.enum(["web_app", "mobile_app", "mobile_game", "telegram_bot", "library", "other"]))
+          .array(
+            z.enum([
+              "web_app",
+              "mobile_app",
+              "mobile_game",
+              "telegram_bot",
+              "library",
+              "other",
+            ]),
+          )
           .optional()
           .describe("Platforms the project targets"),
         url: z.string().optional().describe("Project URL"),
         repoUrl: z.string().optional().describe("Repository URL"),
       }),
-      execute: async ({ name, description, nature, platforms, url, repoUrl }) => {
+      execute: async ({
+        name,
+        description,
+        nature,
+        platforms,
+        url,
+        repoUrl,
+      }) => {
         console.log("[projects-agent:create_project]", { name, nature });
         const { data, error } = await ctx.api.api.v1.projects.post({
-          name, description, nature, platforms: platforms ?? [], url, repoUrl,
+          name,
+          description,
+          nature,
+          platforms: platforms ?? [],
+          url,
+          repoUrl,
         });
         if (error) {
-          console.error("[projects-agent:create_project] error:", error.status, error.value);
+          console.error(
+            "[projects-agent:create_project] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -55,9 +80,12 @@ export function createProjectsTools(ctx: ToolContext) {
     }),
 
     update_project: tool({
-      description: "Update an existing project. Only available to project owner or admin.",
+      description:
+        "Update an existing project. Only available to project owner or admin.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
+        project_id: z
+          .string()
+          .describe("The project slug (preferred — readable) or ID (UUID)"),
         name: z.string().optional().describe("Project name"),
         description: z.string().optional().describe("Project description"),
         nature: z
@@ -65,7 +93,16 @@ export function createProjectsTools(ctx: ToolContext) {
           .optional()
           .describe("Project nature"),
         platforms: z
-          .array(z.enum(["web_app", "mobile_app", "mobile_game", "telegram_bot", "library", "other"]))
+          .array(
+            z.enum([
+              "web_app",
+              "mobile_app",
+              "mobile_game",
+              "telegram_bot",
+              "library",
+              "other",
+            ]),
+          )
           .optional()
           .describe("Platforms the project targets"),
         url: z.string().optional().describe("Project URL"),
@@ -76,14 +113,37 @@ export function createProjectsTools(ctx: ToolContext) {
           .describe("Project status"),
       }),
       execute: async ({
-        project_id, name, description, nature, platforms, url, repoUrl, status,
+        project_id,
+        name,
+        description,
+        nature,
+        platforms,
+        url,
+        repoUrl,
+        status,
       }) => {
-        console.log("[projects-agent:update_project]", { project_id, name, status });
+        console.log("[projects-agent:update_project]", {
+          project_id,
+          name,
+          status,
+        });
         const { data, error } = await ctx.api.api.v1
           .projects({ id: project_id })
-          .patch({ name, description, nature, platforms, url, repoUrl, status });
+          .patch({
+            name,
+            description,
+            nature,
+            platforms,
+            url,
+            repoUrl,
+            status,
+          });
         if (error) {
-          console.error("[projects-agent:update_project] error:", error.status, error.value);
+          console.error(
+            "[projects-agent:update_project] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -91,19 +151,30 @@ export function createProjectsTools(ctx: ToolContext) {
     }),
 
     add_project_member: tool({
-      description: "Add a member to a project team. Requires project owner or admin.",
+      description:
+        "Add a member to a project team. Requires project owner or admin.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
+        project_id: z
+          .string()
+          .describe("The project slug (preferred — readable) or ID (UUID)"),
         user_id: z.string().describe("The user ID to add"),
         role: z.enum(["owner", "contributor"]).describe("Role in the project"),
       }),
       execute: async ({ project_id, user_id, role }) => {
-        console.log("[projects-agent:add_project_member]", { project_id, user_id, role });
+        console.log("[projects-agent:add_project_member]", {
+          project_id,
+          user_id,
+          role,
+        });
         const { data, error } = await ctx.api.api.v1
           .projects({ id: project_id })
           .members.post({ userId: user_id, role });
         if (error) {
-          console.error("[projects-agent:add_project_member] error:", error.status, error.value);
+          console.error(
+            "[projects-agent:add_project_member] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -114,17 +185,26 @@ export function createProjectsTools(ctx: ToolContext) {
       description:
         "Remove a member from a project team. Requires project owner or admin. Cannot remove the last owner.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
+        project_id: z
+          .string()
+          .describe("The project slug (preferred — readable) or ID (UUID)"),
         user_id: z.string().describe("The user ID to remove"),
       }),
       execute: async ({ project_id, user_id }) => {
-        console.log("[projects-agent:remove_project_member]", { project_id, user_id });
+        console.log("[projects-agent:remove_project_member]", {
+          project_id,
+          user_id,
+        });
         const { data, error } = await ctx.api.api.v1
           .projects({ id: project_id })
           .members({ userId: user_id })
           .delete();
         if (error) {
-          console.error("[projects-agent:remove_project_member] error:", error.status, error.value);
+          console.error(
+            "[projects-agent:remove_project_member] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -134,7 +214,9 @@ export function createProjectsTools(ctx: ToolContext) {
     delete_project: tool({
       description: "Delete a project. Only available to admin.",
       inputSchema: z.object({
-        project_id: z.string().describe("The project slug (preferred — readable) or ID (UUID)"),
+        project_id: z
+          .string()
+          .describe("The project slug (preferred — readable) or ID (UUID)"),
       }),
       execute: async ({ project_id }) => {
         console.log("[projects-agent:delete_project]", { project_id });
@@ -142,7 +224,11 @@ export function createProjectsTools(ctx: ToolContext) {
           .projects({ id: project_id })
           .delete();
         if (error) {
-          console.error("[projects-agent:delete_project] error:", error.status, error.value);
+          console.error(
+            "[projects-agent:delete_project] error:",
+            error.status,
+            error.value,
+          );
           return { status: error.status, value: error.value };
         }
         return data;
@@ -176,10 +262,20 @@ ${schemaSDL}`,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 512,
       },
-      { caller: "projects-agent", tier: "fast", telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+      {
+        caller: "projects-agent",
+        tier: "fast",
+        telegramUserId: ctx.senderTelegramId,
+        chatId: ctx.chatId,
+      },
     );
 
-    console.log("[projects-agent] steps:", result.steps.length, "| response:", result.text?.slice(0, 120));
+    console.log(
+      "[projects-agent] steps:",
+      result.steps.length,
+      "| response:",
+      result.text?.slice(0, 120),
+    );
     return result.text || "No project information found.";
   };
 }

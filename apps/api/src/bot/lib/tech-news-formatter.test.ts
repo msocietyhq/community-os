@@ -23,7 +23,10 @@ function links(parts: FormattedString[]): { text: string; url: string }[] {
   return parts.flatMap((p) =>
     (p.entities ?? [])
       .filter((e): e is typeof e & { url: string } => e.type === "text_link")
-      .map((e) => ({ text: p.text.slice(e.offset, e.offset + e.length), url: e.url })),
+      .map((e) => ({
+        text: p.text.slice(e.offset, e.offset + e.length),
+        url: e.url,
+      })),
   );
 }
 
@@ -38,7 +41,12 @@ describe("formatTechNews", () => {
     const parts = formatTechNews({
       stories: [story(1)],
       repos: [
-        { name: "acme/thing", url: "https://github.com/acme/thing", stars: 1500, why: "Useful." },
+        {
+          name: "acme/thing",
+          url: "https://github.com/acme/thing",
+          stars: 1500,
+          why: "Useful.",
+        },
       ],
       local: [story(2)],
       islamic: [story(3)],
@@ -59,7 +67,10 @@ describe("formatTechNews", () => {
   });
 
   test("carries reasons as italic entities", () => {
-    const parts = formatTechNews({ ...empty, stories: [story(1, "Because reasons.")] });
+    const parts = formatTechNews({
+      ...empty,
+      stories: [story(1, "Because reasons.")],
+    });
     expect(styled(parts, "italic")).toEqual(["Because reasons."]);
   });
 
@@ -69,7 +80,11 @@ describe("formatTechNews", () => {
     const parts = formatTechNews({
       ...empty,
       stories: [
-        { title: "Rust <script> & you", url: "https://e.com/a", why: "A & B < C" },
+        {
+          title: "Rust <script> & you",
+          url: "https://e.com/a",
+          why: "A & B < C",
+        },
       ],
     });
 
@@ -82,7 +97,13 @@ describe("formatTechNews", () => {
   test("leaves markdown characters in titles untouched", () => {
     const parts = formatTechNews({
       ...empty,
-      stories: [{ title: "Use max_output_tokens *now*", url: "https://e.com/a", why: "w" }],
+      stories: [
+        {
+          title: "Use max_output_tokens *now*",
+          url: "https://e.com/a",
+          why: "w",
+        },
+      ],
     });
     expect(parts[0]!.text).toContain("Use max_output_tokens *now*");
   });
@@ -94,16 +115,30 @@ describe("formatTechNews", () => {
         { title: "T", url: "https://e.com/a?x=1&y=2#frag_(v)", why: "w" },
       ],
     });
-    expect(links(parts)).toEqual([{ text: "T", url: "https://e.com/a?x=1&y=2#frag_(v)" }]);
+    expect(links(parts)).toEqual([
+      { text: "T", url: "https://e.com/a?x=1&y=2#frag_(v)" },
+    ]);
   });
 
   test("strips an aggregator suffix but keeps real title tails", () => {
     const parts = formatTechNews({
       ...empty,
       stories: [
-        { title: "Model runs locally | VentureBeat", url: "https://e.com/1", why: "w" },
-        { title: "Agents found bugs - Help Net Security", url: "https://e.com/2", why: "w" },
-        { title: "Self-hosting - is it worth it?", url: "https://e.com/3", why: "w" },
+        {
+          title: "Model runs locally | VentureBeat",
+          url: "https://e.com/1",
+          why: "w",
+        },
+        {
+          title: "Agents found bugs - Help Net Security",
+          url: "https://e.com/2",
+          why: "w",
+        },
+        {
+          title: "Self-hosting - is it worth it?",
+          url: "https://e.com/3",
+          why: "w",
+        },
       ],
     });
 
@@ -173,7 +208,11 @@ describe("formatTechNews", () => {
 
     test("never leaves a heading with nothing under it", () => {
       const out = render(crowded);
-      for (const heading of ["Rising on GitHub", "Singapore & SEA", "Muslim Tech & Fintech"]) {
+      for (const heading of [
+        "Rising on GitHub",
+        "Singapore & SEA",
+        "Muslim Tech & Fintech",
+      ]) {
         if (!out.includes(heading)) continue;
         const after = out.slice(out.indexOf(heading) + heading.length);
         expect(after.trimStart().startsWith("•")).toBe(true);

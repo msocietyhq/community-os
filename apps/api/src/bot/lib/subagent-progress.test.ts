@@ -22,7 +22,13 @@ const render = (root: SubagentEntry | null) => renderProgress(root).text;
 function entry(
   partial: Partial<SubagentEntry> & { name: string; query: string },
 ): SubagentEntry {
-  return { state: "running", activeTools: [], toolLog: [], children: [], ...partial };
+  return {
+    state: "running",
+    activeTools: [],
+    toolLog: [],
+    children: [],
+    ...partial,
+  };
 }
 
 /** The main agent's own entry, which heads every turn. */
@@ -127,7 +133,10 @@ function makeReporter(options: Partial<SubagentProgressOptions> = {}) {
  */
 function rooted(progress: SubagentProgress) {
   const root = progress.rootActivity("Thinking");
-  return { root, start: (name: string, query: string) => root.start(name, query) };
+  return {
+    root,
+    start: (name: string, query: string) => root.start(name, query),
+  };
 }
 
 // ─── renderProgress ──────────────────────────────────────────────────────────
@@ -150,7 +159,11 @@ describe("renderProgress", () => {
 
   test("a settled sub-agent keeps its task line and gains a checkmark", () => {
     expect(
-      render(root([entry({ name: "Events", query: "upcoming meetups", state: "done" })])),
+      render(
+        root([
+          entry({ name: "Events", query: "upcoming meetups", state: "done" }),
+        ]),
+      ),
     ).toBe("⏳ Thinking\n    ✅ Events — upcoming meetups");
   });
 
@@ -173,7 +186,12 @@ describe("renderProgress", () => {
     expect(
       render(
         root([
-          entry({ name: "Research", query: "rate limits", state: "failed", detail: "timed out" }),
+          entry({
+            name: "Research",
+            query: "rate limits",
+            state: "failed",
+            detail: "timed out",
+          }),
         ]),
       ),
     ).toBe("⏳ Thinking\n    ❌ Research — rate limits (failed: timed out)");
@@ -218,33 +236,44 @@ describe("renderProgress", () => {
   });
 
   test("multi-line tasks are flattened to one line", () => {
-    expect(render(root([entry({ name: "Events", query: "line one\nline two" })]))).toBe(
-      "⏳ Thinking\n    ⏳ Events — line one line two",
-    );
+    expect(
+      render(root([entry({ name: "Events", query: "line one\nline two" })])),
+    ).toBe("⏳ Thinking\n    ⏳ Events — line one line two");
   });
 
   test("long tasks are truncated", () => {
-    const out = render(root([entry({ name: "Events", query: "x".repeat(120) })]));
+    const out = render(
+      root([entry({ name: "Events", query: "x".repeat(120) })]),
+    );
     expect(out).toContain("…");
     expect(out.length).toBeLessThan(120);
   });
 
   test("markup in a running query is left verbatim", () => {
-    expect(render(root([entry({ name: "Events", query: "<b>bold</b> & co" })]))).toContain(
-      "<b>bold</b> & co",
-    );
+    expect(
+      render(root([entry({ name: "Events", query: "<b>bold</b> & co" })])),
+    ).toContain("<b>bold</b> & co");
   });
 
   test("markup in a failure reason is left verbatim", () => {
     expect(
       render(
-        root([entry({ name: "Events", query: "q", state: "failed", detail: "<i>nope</i>" })]),
+        root([
+          entry({
+            name: "Events",
+            query: "q",
+            state: "failed",
+            detail: "<i>nope</i>",
+          }),
+        ]),
       ),
     ).toContain("<i>nope</i>");
   });
 
   test("the sub-agent name is bold, as an entity rather than markup", () => {
-    const rendered = renderProgress(root([entry({ name: "Events", query: "upcoming meetups" })]));
+    const rendered = renderProgress(
+      root([entry({ name: "Events", query: "upcoming meetups" })]),
+    );
     expect(rendered.text).not.toContain("<b>");
     const bold = rendered.entities
       .filter((e) => e.type === "bold")
@@ -331,7 +360,9 @@ describe("SubagentProgress", () => {
     handle.failed("rate limited");
     await progress.finish();
 
-    expect(current()).toContain("❌ GitHub — list repos (failed: rate limited)");
+    expect(current()).toContain(
+      "❌ GitHub — list repos (failed: rate limited)",
+    );
   });
 
   test("settling twice is ignored", async () => {
@@ -427,7 +458,9 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("graphql_query");
     await settle();
 
-    expect(current()).toContain("    ⏳ Events — meetups\n        ↳ looking up data");
+    expect(current()).toContain(
+      "    ⏳ Events — meetups\n        ↳ looking up data",
+    );
   });
 
   test("the last tool stays on screen after it finishes", async () => {
@@ -521,8 +554,13 @@ describe("SubagentProgress", () => {
     fire();
     await settle();
     for (const t of [
-      "graphql_query", "create_event", "update_event",
-      "delete_event", "rsvp_event", "get_reputation", "get_leaderboard",
+      "graphql_query",
+      "create_event",
+      "update_event",
+      "delete_event",
+      "rsvp_event",
+      "get_reputation",
+      "get_leaderboard",
     ]) {
       handle.activity.toolStart(t)();
     }
@@ -543,14 +581,14 @@ describe("SubagentProgress", () => {
     handle.activity.toolStart("graphql_query")();
     handle.activity.toolStart("create_event")();
     await settle();
-    expect((current() ?? "").split("\n").filter((l) => l.includes("↳"))).toHaveLength(2);
+    expect(
+      (current() ?? "").split("\n").filter((l) => l.includes("↳")),
+    ).toHaveLength(2);
 
     handle.done("event created");
     await progress.finish();
 
-    expect(current()).toBe(
-      "🏁 Completed\n✅ Events — plan it",
-    );
+    expect(current()).toBe("🏁 Completed\n✅ Events — plan it");
   });
 
   test("a settled sub-agent shows no tool line", async () => {
@@ -663,7 +701,9 @@ describe("nested sub-agents", () => {
     child.activity.toolStart("graphql_query");
     await settle();
 
-    expect(current()).toContain("        ⏳ Venues — find a room\n            ↳ looking up data");
+    expect(current()).toContain(
+      "        ⏳ Venues — find a room\n            ↳ looking up data",
+    );
   });
 
   test("children settle independently of their parent", async () => {
@@ -715,7 +755,10 @@ describe("nested sub-agents", () => {
     parent.done("Meetup planned");
     await progress.finish();
 
-    expect(progress.completedResults()).toEqual(["Meetup planned", "Room 3 is free"]);
+    expect(progress.completedResults()).toEqual([
+      "Meetup planned",
+      "Room 3 is free",
+    ]);
   });
 
   test("a deep tree is clamped to Telegram's message limit", async () => {
@@ -743,7 +786,15 @@ describe("edit throttling", () => {
       now: () => time,
     });
     const { start } = rooted(progress);
-    return { ...sink, ...clock, progress, ...rooted(progress), advance: (ms: number) => { time += ms; } };
+    return {
+      ...sink,
+      ...clock,
+      progress,
+      ...rooted(progress),
+      advance: (ms: number) => {
+        time += ms;
+      },
+    };
   }
 
   test("the first post is never delayed", async () => {
@@ -845,9 +896,14 @@ describe("tool line visibility", () => {
       revealDelayMs: 1500,
     });
     const { start } = rooted(progress);
-    const advance = (ms: number) => { time += ms; };
+    const advance = (ms: number) => {
+      time += ms;
+    };
     const seen: string[] = [];
-    const record = () => { const t = sink.current(); if (t) seen.push(t); };
+    const record = () => {
+      const t = sink.current();
+      if (t) seen.push(t);
+    };
 
     // Step 1 returns a tool call at ~1.0s — before the 1.5s reveal — and the
     // query is fast, so the tool is long finished by the time anything is
@@ -968,7 +1024,10 @@ describe("trackToolCalls", () => {
     const tools = trackToolCalls(
       { graphql_query: { execute: async () => "rows" } } as never,
       activity,
-    ) as unknown as Record<string, { execute: (a: unknown, o: unknown) => Promise<string> }>;
+    ) as unknown as Record<
+      string,
+      { execute: (a: unknown, o: unknown) => Promise<string> }
+    >;
 
     const out = await tools.graphql_query!.execute({}, {});
 
@@ -979,9 +1038,18 @@ describe("trackToolCalls", () => {
   test("reports the end even when the tool throws", async () => {
     const { events, activity } = makeActivity();
     const tools = trackToolCalls(
-      { rsvp_event: { execute: async () => { throw new Error("boom"); } } } as never,
+      {
+        rsvp_event: {
+          execute: async () => {
+            throw new Error("boom");
+          },
+        },
+      } as never,
       activity,
-    ) as unknown as Record<string, { execute: (a: unknown, o: unknown) => Promise<string> }>;
+    ) as unknown as Record<
+      string,
+      { execute: (a: unknown, o: unknown) => Promise<string> }
+    >;
 
     await expect(tools.rsvp_event!.execute({}, {})).rejects.toThrow("boom");
     expect(events).toEqual(["start:rsvp_event", "end:rsvp_event"]);
@@ -989,7 +1057,10 @@ describe("trackToolCalls", () => {
 
   test("tools without an execute are passed through", () => {
     const { activity } = makeActivity();
-    const tools = trackToolCalls({ client_side: { description: "x" } } as never, activity);
+    const tools = trackToolCalls(
+      { client_side: { description: "x" } } as never,
+      activity,
+    );
     expect(tools).toHaveProperty("client_side");
   });
 });
@@ -1002,7 +1073,7 @@ describe("graphqlRootField", () => {
     ["query { members { items { id } } }", "members"],
     ["query Upcoming { events(limit: 5) { id } }", "events"],
     ["\n  query  {\n    venues {\n      id\n    }\n  }", "venues"],
-    ["mutation { createEvent(title: \"x\") { id } }", "createEvent"],
+    ['mutation { createEvent(title: "x") { id } }', "createEvent"],
   ])("%s → %s", (query, expected) => {
     expect(graphqlRootField(query)).toBe(expected);
   });
@@ -1017,13 +1088,15 @@ describe("graphqlRootField", () => {
 
 describe("describeToolCall", () => {
   test("a GraphQL query names what it is fetching", () => {
-    expect(describeToolCall("graphql_query", { query: "{ events { id } }" })).toBe(
-      "looking up events",
-    );
+    expect(
+      describeToolCall("graphql_query", { query: "{ events { id } }" }),
+    ).toBe("looking up events");
   });
 
   test("falls back to the static label when args do not help", () => {
-    expect(describeToolCall("graphql_query", { query: "???" })).toBe("looking up data");
+    expect(describeToolCall("graphql_query", { query: "???" })).toBe(
+      "looking up data",
+    );
     expect(describeToolCall("graphql_query")).toBe("looking up data");
   });
 
@@ -1031,12 +1104,17 @@ describe("describeToolCall", () => {
     expect(describeToolCall("create_event", { title: "Tech Halaqah" })).toBe(
       "creating event Tech Halaqah",
     );
-    expect(describeToolCall("rsvp_event", { status: "going" })).toBe("RSVPing going");
+    expect(describeToolCall("rsvp_event", { status: "going" })).toBe(
+      "RSVPing going",
+    );
   });
 
   test("github calls name the repo", () => {
     expect(
-      describeToolCall("list_github_prs", { owner: "msocietyhq", repo: "community-os" }),
+      describeToolCall("list_github_prs", {
+        owner: "msocietyhq",
+        repo: "community-os",
+      }),
     ).toBe("reading PRs in msocietyhq/community-os");
     expect(describeToolCall("list_github_prs", { repo: "community-os" })).toBe(
       "reading PRs in community-os",
@@ -1056,9 +1134,9 @@ describe("describeToolCall", () => {
   });
 
   test("a slug names the record being changed", () => {
-    expect(describeToolCall("update_event", { event_id: "tech-halaqah-aug" })).toBe(
-      "updating event tech-halaqah-aug",
-    );
+    expect(
+      describeToolCall("update_event", { event_id: "tech-halaqah-aug" }),
+    ).toBe("updating event tech-halaqah-aug");
     expect(describeToolCall("delete_project", { project_id: "ppm" })).toBe(
       "removing project ppm",
     );
@@ -1099,8 +1177,12 @@ describe("stacking by phrase", () => {
     const handle = start("Members", "find people");
     clock.fire();
     await settleTick();
-    handle.activity.toolStart("graphql_query", { query: "{ members { id } }" })();
-    handle.activity.toolStart("graphql_query", { query: "{ events { id } }" })();
+    handle.activity.toolStart("graphql_query", {
+      query: "{ members { id } }",
+    })();
+    handle.activity.toolStart("graphql_query", {
+      query: "{ events { id } }",
+    })();
     await settleTick();
 
     const text = sink.current() ?? "";
@@ -1271,8 +1353,9 @@ describe("SUBAGENT_TOOLS", () => {
     } as unknown as Record<string, never>;
 
     const wrapped = trackToolCalls(tools, root, SUBAGENT_TOOLS);
-    await (wrapped as Record<string, { execute: () => Promise<void> }>)
-      .events!.execute();
+    await (
+      wrapped as Record<string, { execute: () => Promise<void> }>
+    ).events!.execute();
     await settle();
 
     const text = sink.current() ?? "";
@@ -1298,8 +1381,9 @@ describe("SUBAGENT_TOOLS", () => {
     } as unknown as Record<string, never>;
 
     const wrapped = trackToolCalls(tools, root, SUBAGENT_TOOLS);
-    await (wrapped as Record<string, { execute: () => Promise<void> }>)
-      .recall_memory!.execute();
+    await (
+      wrapped as Record<string, { execute: () => Promise<void> }>
+    ).recall_memory!.execute();
     await settle();
 
     expect(sink.current()).toContain("recall memory");
@@ -1307,7 +1391,14 @@ describe("SUBAGENT_TOOLS", () => {
 
   // Catches a rename: every entry must be a tool the progress display knows.
   test("every name is a labelled tool or a sub-agent delegate", () => {
-    const delegates = ["events", "members", "venues", "projects", "research", "github"];
+    const delegates = [
+      "events",
+      "members",
+      "venues",
+      "projects",
+      "research",
+      "github",
+    ];
     for (const name of SUBAGENT_TOOLS) {
       const known = delegates.includes(name) || toolLabel(name) !== name;
       expect(known, `${name} is not a recognised tool`).toBe(true);
@@ -1400,7 +1491,9 @@ describe("model label on the heading", () => {
     const out = renderProgress(
       turn({
         state: "done",
-        children: [entry({ name: "Research", query: "latest AI news", state: "done" })],
+        children: [
+          entry({ name: "Research", query: "latest AI news", state: "done" }),
+        ],
       }),
       "DeepSeek V4 Flash",
     ).text;
@@ -1419,10 +1512,14 @@ describe("model label on the heading", () => {
   // all, which put the label out of reach there entirely.
   test("stamps the model when the root logged no tools of its own", () => {
     const out = renderProgress(
-      turn({ children: [entry({ name: "Events", query: "upcoming meetups" })] }),
+      turn({
+        children: [entry({ name: "Events", query: "upcoming meetups" })],
+      }),
       "Sonnet 4.5",
     ).text;
-    expect(out).toBe("⏳ Pondering — Sonnet 4.5\n    ⏳ Events — upcoming meetups");
+    expect(out).toBe(
+      "⏳ Pondering — Sonnet 4.5\n    ⏳ Events — upcoming meetups",
+    );
   });
 
   // The label is italic; the heading stays bold. Telegram fails the whole
@@ -1432,7 +1529,10 @@ describe("model label on the heading", () => {
     const italic = rendered.entities.filter((e) => e.type === "italic");
     expect(italic).toHaveLength(1);
     expect(
-      rendered.text.slice(italic[0]!.offset, italic[0]!.offset + italic[0]!.length),
+      rendered.text.slice(
+        italic[0]!.offset,
+        italic[0]!.offset + italic[0]!.length,
+      ),
     ).toBe("DeepSeek V4 Flash");
   });
 });
@@ -1440,7 +1540,9 @@ describe("model label on the heading", () => {
 // ─── status message cleanup ──────────────────────────────────────────────────
 
 describe("status message cleanup", () => {
-  function setup(options: { clearAfterMs?: number; withDelete?: boolean } = {}) {
+  function setup(
+    options: { clearAfterMs?: number; withDelete?: boolean } = {},
+  ) {
     const sink = makeSink({ withDelete: options.withDelete });
     const clock = makeScheduler();
     const progress = new SubagentProgress({

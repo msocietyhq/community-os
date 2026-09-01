@@ -121,7 +121,9 @@ export const chimeDecisionSchema = z.object({
   respond: z.boolean(),
   confidence: z
     .number()
-    .describe("How sure that speaking up is welcome, 0-1. 0.9+ only for an unambiguous, unanswered, answerable question."),
+    .describe(
+      "How sure that speaking up is welcome, 0-1. 0.9+ only for an unambiguous, unanswered, answerable question.",
+    ),
   reason: z.string().describe("A few words"),
 });
 
@@ -296,7 +298,8 @@ function calledTool(
   matches: (toolName: string) => boolean,
 ): boolean {
   for (const message of messages) {
-    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+    if (message.role !== "assistant" || !Array.isArray(message.content))
+      continue;
     for (const part of message.content) {
       if (part.type === "tool-call" && matches(part.toolName)) return true;
     }

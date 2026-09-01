@@ -1,8 +1,5 @@
 import type { Context, SessionFlavor } from "grammy";
-import type {
-  ConversationFlavor,
-  Conversation,
-} from "@grammyjs/conversations";
+import type { ConversationFlavor, Conversation } from "@grammyjs/conversations";
 import type { ModelMessage } from "ai";
 import type { PendingQuestion } from "./lib/pending-question";
 import type { SettingsDraft } from "./lib/settings-draft";

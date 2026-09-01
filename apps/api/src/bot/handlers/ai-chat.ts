@@ -11,7 +11,10 @@ import {
   HISTORY_WINDOW_MS,
   ONE_HOUR_MS,
 } from "../lib/chat-context";
-import { getRecentChatMessages, logBotMessage } from "../lib/telegram-message-logger";
+import {
+  getRecentChatMessages,
+  logBotMessage,
+} from "../lib/telegram-message-logger";
 import {
   GROUP_PROGRESS_CLEAR_MS,
   type ProgressSink,
@@ -53,7 +56,10 @@ async function replyFormatted(
 
   if (markdown !== null) {
     try {
-      return await ctx.reply(markdown, { ...options, parse_mode: "MarkdownV2" });
+      return await ctx.reply(markdown, {
+        ...options,
+        parse_mode: "MarkdownV2",
+      });
     } catch (err) {
       console.error("[ai-chat] MarkdownV2 rejected, sending plain:", err);
     }
@@ -189,7 +195,11 @@ aiChatHandler.on("message:text", async (ctx) => {
 
   // Build ModelMessage[] from DB rows + session AI context
   const aiResponses = ctx.session.aiResponses ?? {};
-  const chatHistory = buildMessagesFromHistory(recentMessages, ctx.me.id, aiResponses);
+  const chatHistory = buildMessagesFromHistory(
+    recentMessages,
+    ctx.me.id,
+    aiResponses,
+  );
 
   // Posts a status message the first time a sub-agent runs long enough to be
   // worth reporting, then edits it in place as each one settles. Failures here
@@ -197,7 +207,9 @@ aiChatHandler.on("message:text", async (ctx) => {
   const progressSink: ProgressSink = {
     async send(message) {
       try {
-        const msg = await ctx.reply(message.text, { entities: message.entities });
+        const msg = await ctx.reply(message.text, {
+          entities: message.entities,
+        });
         return msg.message_id;
       } catch (err) {
         console.error("[subagent-progress] send failed:", err);
@@ -270,11 +282,16 @@ aiChatHandler.on("message:text", async (ctx) => {
   };
 
   /** Keys this turn's AI context to the bot message it produced, then prunes. */
-  const rememberTurn = (botMessageId: number, turn: typeof aiResponses[number]) => {
+  const rememberTurn = (
+    botMessageId: number,
+    turn: (typeof aiResponses)[number],
+  ) => {
     aiResponses[botMessageId] = turn;
 
     const recentBotMessageIds = new Set(
-      recentMessages.filter((r) => r.fromUserId === ctx.me.id).map((r) => r.messageId),
+      recentMessages
+        .filter((r) => r.fromUserId === ctx.me.id)
+        .map((r) => r.messageId),
     );
     recentBotMessageIds.add(botMessageId);
     for (const key of Object.keys(aiResponses)) {
@@ -343,7 +360,10 @@ aiChatHandler.on("message:text", async (ctx) => {
     // breaks. The member asked the room, not the bot, and has no idea what an
     // apology would even be for.
     const delivery = deliver(
-      { kind: "notice", text: "Sorry, I encountered an error. Please try again later." },
+      {
+        kind: "notice",
+        text: "Sorry, I encountered an error. Please try again later.",
+      },
       policy,
     );
     if (!delivery.send) return;

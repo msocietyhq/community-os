@@ -29,7 +29,6 @@ interface ExaResult {
   text?: string;
 }
 
-
 export function createResearchTools(_ctx: ToolContext) {
   return {
     web_search: tool({
@@ -70,7 +69,9 @@ export function createResearchTools(_ctx: ToolContext) {
             query,
             type: "auto",
             numResults: num_results ?? 5,
-            ...(include_domains?.length ? { includeDomains: include_domains } : {}),
+            ...(include_domains?.length
+              ? { includeDomains: include_domains }
+              : {}),
             contents: { text: { maxCharacters: RESULT_TEXT_MAX } },
           }),
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -78,13 +79,18 @@ export function createResearchTools(_ctx: ToolContext) {
 
         if (!res.ok) {
           const body = await res.text().catch(() => "");
-          console.error("[research-agent:web_search] failed:", res.status, body.slice(0, 200));
+          console.error(
+            "[research-agent:web_search] failed:",
+            res.status,
+            body.slice(0, 200),
+          );
           return { error: `Search failed with status ${res.status}` };
         }
 
         const json = (await res.json()) as { results?: ExaResult[] };
         const results = json.results ?? [];
-        if (results.length === 0) return { results: [], note: "No results found." };
+        if (results.length === 0)
+          return { results: [], note: "No results found." };
 
         return {
           results: results.map((r) => ({
@@ -114,7 +120,9 @@ export function createResearchTools(_ctx: ToolContext) {
         min_points: z
           .number()
           .optional()
-          .describe("Only results scoring above this. Defaults to 10 for stories, unset for comments."),
+          .describe(
+            "Only results scoring above this. Defaults to 10 for stories, unset for comments.",
+          ),
         days: z
           .number()
           .optional()
@@ -143,10 +151,13 @@ export function createResearchTools(_ctx: ToolContext) {
 
         try {
           const res = await fetch(`${HN_SEARCH_URL}?${params}`, {
-            headers: { "User-Agent": "msociety-bot/1.0 (+https://msociety.dev)" },
+            headers: {
+              "User-Agent": "msociety-bot/1.0 (+https://msociety.dev)",
+            },
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           });
-          if (!res.ok) return { error: `Hacker News search failed (${res.status})` };
+          if (!res.ok)
+            return { error: `Hacker News search failed (${res.status})` };
 
           const json = (await res.json()) as {
             hits?: {
@@ -163,7 +174,8 @@ export function createResearchTools(_ctx: ToolContext) {
           };
 
           const hits = json.hits ?? [];
-          if (hits.length === 0) return { results: [], note: "No matching discussions." };
+          if (hits.length === 0)
+            return { results: [], note: "No matching discussions." };
 
           return {
             results: hits.map((h) => ({
@@ -194,26 +206,38 @@ export function createResearchTools(_ctx: ToolContext) {
       description:
         "Find public GitHub repositories by topic, language or popularity. Use when someone asks what libraries exist for a problem, what's new in an ecosystem, or how popular a project is. Returns real star counts and descriptions.",
       inputSchema: z.object({
-        query: z
-          .string()
-          .describe("Keywords, e.g. 'postgres migration tool'"),
+        query: z.string().describe("Keywords, e.g. 'postgres migration tool'"),
         language: z
           .string()
           .optional()
           .describe("Restrict to a language, e.g. 'rust'"),
-        min_stars: z.number().optional().describe("Only repos above this star count"),
+        min_stars: z
+          .number()
+          .optional()
+          .describe("Only repos above this star count"),
         created_after: z
           .string()
           .optional()
-          .describe("ISO date (YYYY-MM-DD) — use to find recently created projects"),
+          .describe(
+            "ISO date (YYYY-MM-DD) — use to find recently created projects",
+          ),
         sort: z
           .enum(["stars", "updated", "forks"])
           .optional()
           .default("stars")
-          .describe("Ranking. 'updated' surfaces actively maintained projects."),
+          .describe(
+            "Ranking. 'updated' surfaces actively maintained projects.",
+          ),
         num_results: z.number().min(1).max(10).optional().default(5),
       }),
-      execute: async ({ query, language, min_stars, created_after, sort, num_results }) => {
+      execute: async ({
+        query,
+        language,
+        min_stars,
+        created_after,
+        sort,
+        num_results,
+      }) => {
         const qualifiers = [
           query,
           language ? `language:${language}` : "",
@@ -229,7 +253,8 @@ export function createResearchTools(_ctx: ToolContext) {
           Accept: "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28",
         };
-        if (env.GITHUB_TOKEN) headers.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
+        if (env.GITHUB_TOKEN)
+          headers.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
 
         const url = `${GITHUB_SEARCH_URL}?q=${encodeURIComponent(qualifiers)}&sort=${sort ?? "stars"}&order=desc&per_page=${num_results ?? 5}`;
 
@@ -261,7 +286,8 @@ export function createResearchTools(_ctx: ToolContext) {
           };
 
           const items = json.items ?? [];
-          if (items.length === 0) return { results: [], note: "No matching repositories." };
+          if (items.length === 0)
+            return { results: [], note: "No matching repositories." };
 
           return {
             totalMatches: json.total_count,
@@ -308,7 +334,9 @@ export function createResearchTools(_ctx: ToolContext) {
 
         try {
           const res = await fetch(parsed.toString(), {
-            headers: { "User-Agent": "msociety-bot/1.0 (+https://msociety.dev)" },
+            headers: {
+              "User-Agent": "msociety-bot/1.0 (+https://msociety.dev)",
+            },
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
             redirect: "follow",
           });

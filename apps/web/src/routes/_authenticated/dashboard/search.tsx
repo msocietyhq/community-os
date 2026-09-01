@@ -257,13 +257,7 @@ function MemoryCard({
   );
 }
 
-function RelevanceBadge({
-  score,
-  label,
-}: {
-  score: number;
-  label: string;
-}) {
+function RelevanceBadge({ score, label }: { score: number; label: string }) {
   const pct = Math.round(score * 100);
   return (
     <span

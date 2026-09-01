@@ -171,7 +171,10 @@ export async function calibrateRecall(): Promise<NoiseProfile | null> {
       );
       return profile;
     } catch (err) {
-      console.error("[recall-calibration] failed, keeping previous floor:", err);
+      console.error(
+        "[recall-calibration] failed, keeping previous floor:",
+        err,
+      );
       return cached;
     } finally {
       inFlight = null;

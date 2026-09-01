@@ -5,19 +5,12 @@ import { createTelegramUser } from "../lib/auth";
 import { telegramUserFromContext } from "../lib/telegram-user";
 import { membersService } from "../../services/members.service";
 import { reputationService } from "../../services/reputation.service";
-import type {
-  CreateMemberInput,
-  UpdateMemberInput,
-} from "@community-os/shared/validators";
+import type { UpdateMemberInput } from "@community-os/shared/validators";
 import { env } from "../../env";
-import { bot } from "../bot";
 import { hasUserMessages } from "../../services/messages.service";
 import { truncate } from "../../lib/text";
 import { aiProfileService } from "../../services/ai-profile.service";
-import {
-  additiveKey,
-  scalarKey,
-} from "../../services/ai-profile-suggestions";
+import { additiveKey, scalarKey } from "../../services/ai-profile-suggestions";
 
 function parseCsvList(text: string): string[] {
   return text
@@ -37,7 +30,10 @@ function withCurrent(prompt: string, value: string | null | undefined): string {
  * Only ever reached when the field is empty — a member who already answered is
  * never suggested at, since their own value is the source of truth.
  */
-function withSuggestion(prompt: string, suggestion: string | undefined): string {
+function withSuggestion(
+  prompt: string,
+  suggestion: string | undefined,
+): string {
   if (!suggestion) return prompt;
   return `${prompt}\n\n_Suggested:_ \`${suggestion}\``;
 }
@@ -250,7 +246,9 @@ async function setProfileConversation(
   );
   if (linkedinResult.answer) {
     const raw = linkedinResult.answer.trim().replace(/^@/, "");
-    data.linkedinUrl = raw.startsWith("http") ? raw : `https://linkedin.com/in/${raw}`;
+    data.linkedinUrl = raw.startsWith("http")
+      ? raw
+      : `https://linkedin.com/in/${raw}`;
   }
 
   // Create or update member
@@ -416,7 +414,9 @@ function applyFieldUpdate(
       return { githubHandle: text.replace(/^@/, "").trim() };
     case "linkedin": {
       const raw = text.trim().replace(/^@/, "");
-      const url = raw.startsWith("http") ? raw : `https://linkedin.com/in/${raw}`;
+      const url = raw.startsWith("http")
+        ? raw
+        : `https://linkedin.com/in/${raw}`;
       return { linkedinUrl: url };
     }
   }
@@ -517,7 +517,8 @@ profileHandler.command("profile", async (ctx) => {
   }
 
   const score = await reputationService.getScore(userId);
-  const displayName = from.first_name + (from.last_name ? ` ${from.last_name}` : "");
+  const displayName =
+    from.first_name + (from.last_name ? ` ${from.last_name}` : "");
 
   await ctx.reply(formatProfile(displayName, from.username, score, member), {
     parse_mode: "Markdown",

@@ -25,7 +25,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       auth: true,
       beforeHandle: checkPermission("read", "Member"),
       detail: { tags: ["Members"], summary: "Get current member profile" },
-    }
+    },
   )
   .patch(
     "/me",
@@ -47,7 +47,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       beforeHandle: checkPermission("update", "Member"),
       body: "member.update",
       detail: { tags: ["Members"], summary: "Update current member profile" },
-    }
+    },
   )
   .post(
     "/me/dismiss-suggestions",
@@ -63,7 +63,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
         tags: ["Members"],
         summary: "Dismiss AI profile suggestions",
       },
-    }
+    },
   )
   .get(
     "/",
@@ -75,7 +75,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       beforeHandle: checkPermission("read", "Member"),
       query: "member.listQuery",
       detail: { tags: ["Members"], summary: "Search and list members" },
-    }
+    },
   )
   .get(
     "/:userId",
@@ -91,7 +91,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       auth: true,
       beforeHandle: checkPermission("read", "Member"),
       detail: { tags: ["Members"], summary: "Get member by user ID" },
-    }
+    },
   )
   .patch(
     "/:userId/ban",
@@ -108,8 +108,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       }
 
       const callerLevel = ROLE_HIERARCHY[user.role as Role] ?? 0;
-      const targetLevel =
-        ROLE_HIERARCHY[target.user.role as Role] ?? 0;
+      const targetLevel = ROLE_HIERARCHY[target.user.role as Role] ?? 0;
       if (targetLevel >= callerLevel) {
         set.status = 403;
         return { message: "Cannot ban a user with equal or higher role" };
@@ -137,7 +136,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       beforeHandle: checkPermission("ban", "Member"),
       body: "member.ban",
       detail: { tags: ["Members"], summary: "Ban a member" },
-    }
+    },
   )
   .patch(
     "/:userId/unban",
@@ -169,7 +168,7 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       auth: true,
       beforeHandle: checkPermission("ban", "Member"),
       detail: { tags: ["Members"], summary: "Unban a member" },
-    }
+    },
   )
   .patch(
     "/:userId/role",
@@ -209,5 +208,5 @@ export const memberRoutes = new Elysia({ prefix: "/api/v1/members" })
       beforeHandle: checkPermission("manage_role", "Member"),
       body: "member.changeRole",
       detail: { tags: ["Members"], summary: "Change a member's role" },
-    }
+    },
   );

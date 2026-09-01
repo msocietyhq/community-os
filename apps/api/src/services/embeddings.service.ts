@@ -16,7 +16,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     inputType: "document",
   });
   const embedding = response.data?.[0]?.embedding;
-  if (!embedding) throw new Error("[embeddings] empty response from Voyage API");
+  if (!embedding)
+    throw new Error("[embeddings] empty response from Voyage API");
   return embedding;
 }
 
@@ -32,7 +33,8 @@ export async function generateEmbeddingsBatch(
   const data = response.data;
   if (!data) throw new Error("[embeddings] empty response from Voyage API");
   return data.map((item) => {
-    if (!item.embedding) throw new Error("[embeddings] missing embedding in batch response");
+    if (!item.embedding)
+      throw new Error("[embeddings] missing embedding in batch response");
     return item.embedding;
   });
 }
@@ -44,7 +46,8 @@ export async function generateQueryEmbedding(text: string): Promise<number[]> {
     inputType: "query",
   });
   const embedding = response.data?.[0]?.embedding;
-  if (!embedding) throw new Error("[embeddings] empty response from Voyage API");
+  if (!embedding)
+    throw new Error("[embeddings] empty response from Voyage API");
   return embedding;
 }
 

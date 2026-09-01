@@ -33,7 +33,9 @@ describe("pageToMarkdown", () => {
 
   test("falls back to a full conversion when there is no article", () => {
     // An index page has no prose body for Readability to score.
-    const out = pageToMarkdown("<html><body><a href='/a'>One</a></body></html>");
+    const out = pageToMarkdown(
+      "<html><body><a href='/a'>One</a></body></html>",
+    );
     expect(out).toContain("One");
   });
 
@@ -62,9 +64,9 @@ describe("htmlToMarkdown", () => {
   test("keeps link targets, not just the anchor text", () => {
     // The regex version dropped every href, so the agent could see that a page
     // linked somewhere but never where.
-    expect(htmlToMarkdown('<p>see <a href="https://x.com/d">docs</a></p>')).toBe(
-      "see [docs](https://x.com/d)",
-    );
+    expect(
+      htmlToMarkdown('<p>see <a href="https://x.com/d">docs</a></p>'),
+    ).toBe("see [docs](https://x.com/d)");
   });
 
   test("preserves lists and code blocks", () => {
@@ -91,8 +93,10 @@ describe("htmlToMarkdown", () => {
 
   test("decodes the common entities", () => {
     expect(
-      htmlToMarkdown("<p>Tom &amp; Jerry &quot;quoted&quot; &lt;tag&gt; &#39;s</p>"),
-    ).toBe("Tom & Jerry \"quoted\" <tag> 's");
+      htmlToMarkdown(
+        "<p>Tom &amp; Jerry &quot;quoted&quot; &lt;tag&gt; &#39;s</p>",
+      ),
+    ).toBe('Tom & Jerry "quoted" <tag> \'s');
   });
 
   test("decodes hex numeric entities, which is what Hacker News returns", () => {
@@ -104,7 +108,9 @@ describe("htmlToMarkdown", () => {
   test("does not double-decode an escaped ampersand", () => {
     // `&amp;lt;` is a literal "&lt;", not a less-than sign. The hand-rolled
     // version decoded `&amp;` first and invented markup here.
-    expect(htmlToMarkdown("<p>&amp;lt;script&amp;gt;</p>")).toBe("&lt;script&gt;");
+    expect(htmlToMarkdown("<p>&amp;lt;script&amp;gt;</p>")).toBe(
+      "&lt;script&gt;",
+    );
   });
 
   test("nbsp becomes a normal space", () => {

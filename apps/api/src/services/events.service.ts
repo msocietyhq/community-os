@@ -1,4 +1,15 @@
-import { eq, and, isNull, gt, lte, count, desc, asc, sql, or } from "drizzle-orm";
+import {
+  eq,
+  and,
+  isNull,
+  gt,
+  lte,
+  count,
+  desc,
+  asc,
+  sql,
+  or,
+} from "drizzle-orm";
 import { db } from "../db";
 import { events, eventAttendees } from "../db/schema/events";
 import { venues } from "../db/schema/venues";
@@ -13,7 +24,8 @@ import type {
   CheckInInput,
 } from "@community-os/shared/validators";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function generateSlug(title: string): string {
   const base = title
@@ -74,7 +86,9 @@ export const eventsService = {
     if (query.status) {
       conditions.push(eq(events.status, query.status));
     } else if (userRole === "member") {
-      conditions.push(or(eq(events.status, "published"), eq(events.status, "completed"))!);
+      conditions.push(
+        or(eq(events.status, "published"), eq(events.status, "completed"))!,
+      );
     }
 
     if (query.eventType) {
@@ -121,8 +135,14 @@ export const eventsService = {
         .select({
           event: events,
           venueName: venues.name,
-          attendeeCount: sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(Number),
-          maybeCount: sql<number>`coalesce(${maybeCountSq.maybeCount}, 0)`.mapWith(Number),
+          attendeeCount:
+            sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(
+              Number,
+            ),
+          maybeCount:
+            sql<number>`coalesce(${maybeCountSq.maybeCount}, 0)`.mapWith(
+              Number,
+            ),
         })
         .from(events)
         .leftJoin(venues, eq(events.venueId, venues.id))
@@ -221,8 +241,12 @@ export const eventsService = {
       .select({
         event: events,
         venueName: venues.name,
-        attendeeCount: sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(Number),
-        maybeCount: sql<number>`coalesce(${maybeCountSq.maybeCount}, 0)`.mapWith(Number),
+        attendeeCount:
+          sql<number>`coalesce(${attendeeCountSq.attendeeCount}, 0)`.mapWith(
+            Number,
+          ),
+        maybeCount:
+          sql<number>`coalesce(${maybeCountSq.maybeCount}, 0)`.mapWith(Number),
       })
       .from(events)
       .leftJoin(venues, eq(events.venueId, venues.id))
@@ -281,7 +305,11 @@ export const eventsService = {
 
     const [cancelled] = await db
       .update(events)
-      .set({ status: "cancelled", deletedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status: "cancelled",
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(events.id, id))
       .returning();
 
@@ -292,7 +320,11 @@ export const eventsService = {
     const eventId = await resolveEventId(eventIdOrSlug);
 
     const [event] = await db
-      .select({ id: events.id, status: events.status, maxAttendees: events.maxAttendees })
+      .select({
+        id: events.id,
+        status: events.status,
+        maxAttendees: events.maxAttendees,
+      })
       .from(events)
       .where(eq(events.id, eventId));
 
@@ -301,7 +333,11 @@ export const eventsService = {
     }
 
     if (event.status !== "published") {
-      throw new AppError(400, "EVENT_NOT_PUBLISHED", "Event is not open for RSVPs");
+      throw new AppError(
+        400,
+        "EVENT_NOT_PUBLISHED",
+        "Event is not open for RSVPs",
+      );
     }
 
     if (rsvpStatus === "going" && event.maxAttendees) {
@@ -317,7 +353,11 @@ export const eventsService = {
       const goingCount = goingResult[0]?.goingCount ?? 0;
 
       if (goingCount >= event.maxAttendees) {
-        throw new AppError(409, "EVENT_FULL", "Event has reached maximum capacity");
+        throw new AppError(
+          409,
+          "EVENT_FULL",
+          "Event has reached maximum capacity",
+        );
       }
     }
 
@@ -375,7 +415,11 @@ export const eventsService = {
     }
 
     if (event.status !== "published" && event.status !== "completed") {
-      throw new AppError(400, "EVENT_NOT_ACTIVE", "Event is not active for check-ins");
+      throw new AppError(
+        400,
+        "EVENT_NOT_ACTIVE",
+        "Event is not active for check-ins",
+      );
     }
 
     let userId = input.userId;
@@ -392,7 +436,11 @@ export const eventsService = {
         );
 
       if (!acct) {
-        throw new AppError(404, "MEMBER_NOT_FOUND", "No user found with that Telegram ID");
+        throw new AppError(
+          404,
+          "MEMBER_NOT_FOUND",
+          "No user found with that Telegram ID",
+        );
       }
 
       userId = acct.userId;

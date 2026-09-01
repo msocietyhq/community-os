@@ -73,7 +73,10 @@ export async function fetchTelegramPhoto(
       contentType: res.headers.get("content-type") ?? "image/jpeg",
     };
   } catch (err) {
-    console.warn(`Failed to fetch profile photo for telegram ID ${telegramId}:`, err);
+    console.warn(
+      `Failed to fetch profile photo for telegram ID ${telegramId}:`,
+      err,
+    );
     return null;
   }
 }

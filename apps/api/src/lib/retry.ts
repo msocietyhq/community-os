@@ -41,7 +41,8 @@ export function isRetryableError(error: unknown): boolean {
     return status === 429 || (status !== undefined && status >= 500);
   }
 
-  const status = (error as { status?: number; statusCode?: number })?.status ??
+  const status =
+    (error as { status?: number; statusCode?: number })?.status ??
     (error as { statusCode?: number })?.statusCode;
   if (status === 429 || (typeof status === "number" && status >= 500)) {
     return true;

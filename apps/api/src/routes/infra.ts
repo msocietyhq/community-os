@@ -1,7 +1,6 @@
 import { Elysia } from "elysia";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission } from "../middleware/permissions";
-import { createAuditEntry } from "../middleware/audit";
 
 export const infraRoutes = new Elysia({ prefix: "/api/v1/infra" })
   .use(authMiddleware)
@@ -14,8 +13,11 @@ export const infraRoutes = new Elysia({ prefix: "/api/v1/infra" })
     {
       auth: true,
       beforeHandle: checkPermission("read", "Infra"),
-      detail: { tags: ["Infrastructure"], summary: "List infrastructure services" },
-    }
+      detail: {
+        tags: ["Infrastructure"],
+        summary: "List infrastructure services",
+      },
+    },
   )
   .post(
     "/provision",
@@ -27,7 +29,7 @@ export const infraRoutes = new Elysia({ prefix: "/api/v1/infra" })
       auth: true,
       beforeHandle: checkPermission("provision", "Infra"),
       detail: { tags: ["Infrastructure"], summary: "Provision resource" },
-    }
+    },
   )
   .post(
     "/subdomains",
@@ -39,5 +41,5 @@ export const infraRoutes = new Elysia({ prefix: "/api/v1/infra" })
       auth: true,
       beforeHandle: checkPermission("provision", "Infra"),
       detail: { tags: ["Infrastructure"], summary: "Create subdomain" },
-    }
+    },
   );
