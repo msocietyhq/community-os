@@ -139,6 +139,21 @@ Would you mind doing a short intro?
 
 export const DEFAULT_RETURNING_TEXT = `Welcome back, {name}! 👋`;
 
+/**
+ * For the member who has been in the group all along and is only now saying
+ * something. Telegram reports a join to an admin bot, but tells us nothing
+ * about the people already sitting in the chat when the bot arrived, so their
+ * first message is the first we ever hear of them — which is not the same
+ * thing as them being new. Greeting them as a new joiner is what this copy
+ * exists to avoid.
+ */
+export const DEFAULT_FIRST_MESSAGE_TEXT = `Long-time member, first-time poster — salam {name}! 👋
+
+Since this is your first message here, mind doing a short intro?
+1. Some background of your academics
+2. Your current job/situation
+3. Your tech interests/aspirations`;
+
 export const DEFAULT_MAINTENANCE_REPLY =
   "I'm paused right now — I'll be back shortly.";
 /**
@@ -375,7 +390,7 @@ export const BOT_SETTINGS = {
     default: DEFAULT_WELCOME_TEXT,
     label: "New member welcome",
     description:
-      "Sent once when someone joins the group or first speaks. {name} becomes a tappable mention. Telegram HTML is allowed and checked by preview.",
+      "Sent once when someone joins the group. {name} becomes a tappable mention. Telegram HTML is allowed and checked by preview.",
     group: "welcome",
     control: "text",
     format: (v) => previewText(v),
@@ -386,6 +401,26 @@ export const BOT_SETTINGS = {
     label: "Returning welcome",
     description:
       "Sent when someone who previously left rejoins the group. Same placeholders as the new member welcome.",
+    group: "welcome",
+    control: "text",
+    format: (v) => previewText(v),
+  }),
+  "welcome.firstMessageEnabled": def<boolean>({
+    schema: z.boolean(),
+    default: true,
+    label: "First message greeting",
+    description:
+      "Whether a member we have never seen before is greeted when they first post. Separate from the join greeting so this one can be silenced on its own.",
+    group: "welcome",
+    control: "toggle",
+    format: onOff,
+  }),
+  "welcome.firstMessageText": def<string>({
+    schema: z.string().min(1).max(2000),
+    default: DEFAULT_FIRST_MESSAGE_TEXT,
+    label: "First message greeting",
+    description:
+      "Sent once when someone posts for the first time without us having seen them join — usually a long-standing member who has only ever read. Same placeholders as the new member welcome.",
     group: "welcome",
     control: "text",
     format: (v) => previewText(v),

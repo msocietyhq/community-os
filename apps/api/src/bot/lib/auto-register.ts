@@ -12,7 +12,11 @@ import { account } from "../../db/schema/auth";
 import { members } from "../../db/schema/members";
 import { env } from "../../env";
 import { getSettings } from "../../services/bot-settings.service";
-import { renderWelcome } from "./welcome-template";
+import {
+  chooseWelcomeTemplate,
+  renderWelcome,
+  type WelcomeVariant,
+} from "./welcome-template";
 
 /**
  * In-memory cache of Telegram IDs that are known to have
@@ -82,26 +86,35 @@ async function ensureRegistered(
 }
 
 /**
- * Greet a new member in the group, at most once ever.
+ * Greet a member in the group, at most once ever.
  *
- * Both join signals funnel through here — the `chat_member` update when the
- * bot is a group admin, and the member's first message when it isn't — so the
- * claim in `claimWelcome` is what keeps a member from being greeted twice when
- * both arrive for the same join.
+ * Both signals funnel through here, so the claim in `claimWelcome` is what
+ * keeps a member from being greeted twice when both arrive for the same
+ * person.
  */
 async function sendWelcome(
   ctx: BotContext,
   from: User,
   userId: string,
+  variant: WelcomeVariant,
 ): Promise<void> {
   // Claimed regardless of whether greetings are enabled, so a member who joins
-  // while they're off is not greeted later when they're switched back on.
+  // while they're off is not greeted later when they're switched back on. The
+  // first-message toggle below is checked after the claim for the same reason:
+  // switching it on must not greet a backlog of members who already posted.
   if (!(await membersService.claimWelcome(userId))) return;
 
   const settings = await getSettings();
-  if (!settings["welcome.enabled"]) return;
+  const template = chooseWelcomeTemplate({
+    variant,
+    enabled: settings["welcome.enabled"],
+    firstMessageEnabled: settings["welcome.firstMessageEnabled"],
+    newMemberText: settings["welcome.newMemberText"],
+    firstMessageText: settings["welcome.firstMessageText"],
+  });
+  if (template === null) return;
 
-  const text = renderWelcome(settings["welcome.newMemberText"], {
+  const text = renderWelcome(template, {
     telegramId: from.id,
     firstName: from.first_name,
     username: from.username,
@@ -122,14 +135,14 @@ async function sendWelcome(
  *
  * - chat_member join  → register + welcome, or unban + "welcome back"
  * - chat_member leave → ban user
- * - Regular messages  → register on first interaction, and welcome if this is
- *   the first we've seen of them
+ * - Regular messages  → register on first interaction, and greet as a
+ *   first-time poster if this is the first we've seen of them
  *
- * The message path duplicates the join path's greeting on purpose. Telegram
- * only delivers `chat_member` updates to bots that are administrators of the
- * chat, so if the bot is ever not an admin the join branch goes silent and a
- * first message is the only join signal left. `members.welcomedAt` is what
- * keeps the two paths from greeting the same person twice.
+ * The two greetings are deliberately different copy. Only the `chat_member`
+ * update actually witnesses a join; a first message means nothing more than
+ * that we had no record, which is the normal state of every member who was
+ * already in the group before the bot became an admin. `members.welcomedAt`
+ * is what keeps the two paths from greeting the same person twice.
  */
 export async function membershipMiddleware(
   ctx: BotContext,
@@ -228,7 +241,7 @@ export async function membershipMiddleware(
       try {
         const { userId } = await ensureRegistered(telegramUser);
         knownTelegramIds.add(telegramUser.id);
-        await sendWelcome(ctx, telegramUser, userId);
+        await sendWelcome(ctx, telegramUser, userId, "join");
       } catch (error) {
         console.error(
           `Membership: join handling failed for telegram ID ${telegramUser.id}:`,
@@ -262,12 +275,17 @@ export async function membershipMiddleware(
         `Membership: auto-registered @${from.username ?? from.first_name} (telegram ID ${telegramId})`,
       );
 
-      // Fallback greeting. Telegram only sends `chat_member` updates to bots
-      // that are group admins, so when the bot isn't one, a member's first
-      // message is the only join signal we ever get. Reaching here means they
-      // have no record at all — including no message anywhere in the imported
-      // history — so this is genuinely the first time we've seen them.
-      await sendWelcome(ctx, from, userId);
+      // Reaching here means we had no record of them at all, which is not the
+      // same as them being new. Telegram reports joins to an admin bot but
+      // says nothing about who was already in the chat when the bot arrived,
+      // and membership leaves no trace in our data — only messages do. So the
+      // overwhelmingly common case is a member of long standing who simply
+      // never posted until now, and greeting them as a fresh joiner reads as
+      // the bot not knowing who they are. Hence its own copy, not the join
+      // copy. A genuine joiner only lands here if their `chat_member` update
+      // was lost (bot offline past Telegram's ~24h update retention, or not an
+      // admin at the time), which is rare and reads acceptably either way.
+      await sendWelcome(ctx, from, userId, "first_message");
     }
   } catch (error) {
     // Don't add to cache on failure — retry on next message

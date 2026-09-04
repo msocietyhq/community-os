@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderWelcome } from "./welcome-template";
+import { chooseWelcomeTemplate, renderWelcome } from "./welcome-template";
 
 const vars = { telegramId: 123, firstName: "Aziz", username: "aziz" };
 
@@ -59,5 +59,42 @@ describe("renderWelcome", () => {
 
   test("a placeholder appearing twice is substituted twice", () => {
     expect(renderWelcome("{first_name} {first_name}", vars)).toBe("Aziz Aziz");
+  });
+});
+
+describe("chooseWelcomeTemplate", () => {
+  const base = {
+    enabled: true,
+    firstMessageEnabled: true,
+    newMemberText: "JOIN",
+    firstMessageText: "FIRST",
+  };
+
+  test("a witnessed join gets the new member copy", () => {
+    expect(chooseWelcomeTemplate({ ...base, variant: "join" })).toBe("JOIN");
+  });
+
+  // The whole point of the split: someone we merely hadn't heard of before is
+  // not a new arrival, and must not be told they are.
+  test("a first message gets its own copy, not the new member copy", () => {
+    expect(chooseWelcomeTemplate({ ...base, variant: "first_message" })).toBe(
+      "FIRST",
+    );
+  });
+
+  test("the master switch silences both", () => {
+    for (const variant of ["join", "first_message"] as const) {
+      expect(
+        chooseWelcomeTemplate({ ...base, variant, enabled: false }),
+      ).toBeNull();
+    }
+  });
+
+  test("the first-message toggle silences only the first-message copy", () => {
+    const off = { ...base, firstMessageEnabled: false };
+    expect(
+      chooseWelcomeTemplate({ ...off, variant: "first_message" }),
+    ).toBeNull();
+    expect(chooseWelcomeTemplate({ ...off, variant: "join" })).toBe("JOIN");
   });
 });
