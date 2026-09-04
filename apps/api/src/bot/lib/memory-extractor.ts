@@ -121,9 +121,6 @@ ${EXTRACTION_RULES}
 
 Read the whole exchange for context, but extract only facts the messages actually establish. Tag each fact with the index of the message it came from.`;
 
-/** Messages per model call. Also the size of the context window the model sees. */
-export const BATCH_SIZE = 10;
-
 export interface PendingMessage {
   chatId: string;
   messageId: number;

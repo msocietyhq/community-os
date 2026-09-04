@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
+  BATCH_SIZE,
   decideFlush,
   FLUSH_AFTER_MS,
   FLUSH_AFTER_SEEN,
   type BufferState,
-} from "./memory-batch";
-import { BATCH_SIZE } from "./memory-extractor";
+} from "./memory-batch-policy";
 import { HISTORY_MESSAGE_LIMIT, HISTORY_WINDOW_MS } from "./chat-context";
 
 const state = (over: Partial<BufferState> = {}): BufferState => ({

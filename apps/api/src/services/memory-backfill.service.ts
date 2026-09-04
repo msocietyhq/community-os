@@ -11,11 +11,11 @@ import { db } from "../db";
 import { telegramMessages } from "../db/schema/bot";
 import { saveMemories } from "./memory.service";
 import {
-  BATCH_SIZE,
   extractBatch,
   type PendingMessage,
   shouldExtractMemory,
 } from "../bot/lib/memory-extractor";
+import { BATCH_SIZE } from "../bot/lib/memory-batch-policy";
 import { markMemoryExtracted } from "./messages.service";
 import { withRetry } from "../lib/retry";
 import { truncate } from "../lib/text";
