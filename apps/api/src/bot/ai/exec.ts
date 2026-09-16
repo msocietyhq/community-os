@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clip } from "../../lib/text";
+import { clip, clipTail } from "../../lib/text";
 import type { SettingsSnapshot } from "@community-os/shared/bot-settings";
 
 export const DEFAULT_EXEC_TIMEOUT_MS = 60_000;
@@ -29,6 +29,8 @@ export const EXEC_TOOL_DESCRIPTION = [
   "Each call starts a fresh shell in the home directory: working directory and environment",
   "variables do not carry over unless you persist them (chain with &&, write to disk, or",
   "update a profile file).",
+  "There is no way to poll a running command. If it times out, it may still be running on",
+  "the VM — ask the user to check back later; do not retry or wait in a loop.",
   "Use this to inspect the machine, install tools, run programs, or do any work that needs",
   "a real computer. Read the output before deciding the next command.",
 ].join(" ");
@@ -57,12 +59,17 @@ export type ExecTransport = (
   timeoutMs: number,
 ) => Promise<ExecTransportResult>;
 
+export const EXEC_TIMEOUT_MESSAGE =
+  "The wait timed out; the command may still be running on the VM. There is no polling — ask the user to check back later, and look then. Do not retry or wait in a loop.";
+
 export interface RemoteExecSuccess {
   exitCode: number | null;
   stdout: string;
   stderr: string;
   truncated: boolean;
   timedOut: boolean;
+  /** Present when the wait ended before the process did. */
+  message?: string;
 }
 
 export interface RemoteExecFailure {
@@ -152,23 +159,36 @@ export async function remoteExec(
 }
 
 export function formatExecResult(raw: ExecTransportResult): RemoteExecSuccess {
-  const stdout = clipOutput(raw.stdout, MAX_STDOUT_CHARS);
-  const stderr = clipOutput(raw.stderr, MAX_STDERR_CHARS);
+  // On timeout the latest lines are the progress; a completed flood still
+  // keeps the start so a huge listing is readable from the top.
+  const clipFn = raw.timedOut ? clipTail : clip;
+  const stdout = clipOutput(raw.stdout, MAX_STDOUT_CHARS, clipFn);
+  const stderr = clipOutput(raw.stderr, MAX_STDERR_CHARS, clipFn);
   return {
     exitCode: raw.timedOut ? null : raw.exitCode,
     stdout: stdout.text,
     stderr: stderr.text,
     truncated: stdout.truncated || stderr.truncated,
     timedOut: raw.timedOut,
+    ...(raw.timedOut ? { message: EXEC_TIMEOUT_MESSAGE } : {}),
   };
 }
 
 function clipOutput(
   text: string,
   max: number,
+  clipFn: (text: string, max: number) => string,
 ): { text: string; truncated: boolean } {
   if (text.length <= max) return { text, truncated: false };
-  return { text: clip(text, max), truncated: true };
+  return { text: clipFn(text, max), truncated: true };
+}
+
+/**
+ * Ignoring HUP means killing our SSH wait does not take the remote process
+ * down with it — a compile or install can finish after we stop listening.
+ */
+export function wrapRemoteCommand(command: string): string {
+  return `trap "" HUP; ${command}`;
 }
 
 function chunkToString(chunk: Buffer | string): string {
@@ -235,9 +255,13 @@ function runSsh(
         "-o",
         `ConnectTimeout=${connectTimeoutSec}`,
         "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=4",
+        "-o",
         "LogLevel=ERROR",
         `${config.username}@${config.host}`,
-        command,
+        wrapRemoteCommand(command),
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );

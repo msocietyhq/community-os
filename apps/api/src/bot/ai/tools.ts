@@ -367,7 +367,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           .min(1)
           .max(300)
           .optional()
-          .describe("Seconds to wait before aborting (default 60, max 300)"),
+          .describe(
+            "Seconds to wait for the command (default 60, max 300). On timeout it may still be running — ask the user to check back later; do not poll.",
+          ),
       }),
       execute: async ({ command, timeout_seconds }) => {
         const snapshot = await ensureComputerSshKey().catch((err) => {

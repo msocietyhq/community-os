@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   clampExecTimeoutMs,
   DEFAULT_EXEC_TIMEOUT_MS,
+  EXEC_TIMEOUT_MESSAGE,
   EXEC_TOOL_DESCRIPTION,
   execConfigFromSnapshot,
   formatExecResult,
@@ -11,6 +12,7 @@ import {
   normalizePrivateKey,
   remoteExec,
   remoteExecConfigFrom,
+  wrapRemoteCommand,
   type ExecTransportResult,
   type RemoteExecConfig,
 } from "./exec";
@@ -152,6 +154,25 @@ describe("formatExecResult", () => {
     expect(out.exitCode).toBeNull();
     expect(out.stdout).toBe("partial");
     expect(out.truncated).toBe(false);
+    expect(out.message).toBe(EXEC_TIMEOUT_MESSAGE);
+  });
+
+  test("on timeout keeps the tail of a long log, not the start", () => {
+    const out = formatExecResult(
+      ok({
+        timedOut: true,
+        stdout: `${"A".repeat(MAX_STDOUT_CHARS)}TAIL`,
+      }),
+    );
+    expect(out.truncated).toBe(true);
+    expect(out.stdout.startsWith("…")).toBe(true);
+    expect(out.stdout.endsWith("TAIL")).toBe(true);
+    expect(out.message).toContain("check back later");
+    expect(out.message).toContain("no polling");
+  });
+
+  test("a finished command does not carry the timeout message", () => {
+    expect(formatExecResult(ok()).message).toBeUndefined();
   });
 });
 
@@ -236,5 +257,17 @@ describe("EXEC_TOOL_DESCRIPTION", () => {
     expect(EXEC_TOOL_DESCRIPTION).toContain("automatically");
     expect(EXEC_TOOL_DESCRIPTION).toContain("do not SSH");
     expect(EXEC_TOOL_DESCRIPTION).toContain("fresh shell");
+  });
+
+  test("tells the model not to poll a timeout, and to ask the user to check later", () => {
+    expect(EXEC_TOOL_DESCRIPTION).toContain("no way to poll");
+    expect(EXEC_TOOL_DESCRIPTION).toContain("check back later");
+    expect(EXEC_TOOL_DESCRIPTION).toContain("do not retry");
+  });
+});
+
+describe("wrapRemoteCommand", () => {
+  test("ignores hangup so a timeout does not kill the remote process", () => {
+    expect(wrapRemoteCommand("sleep 120")).toBe('trap "" HUP; sleep 120');
   });
 });

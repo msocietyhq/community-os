@@ -205,6 +205,8 @@ manage keys. The same machine is reused across calls, so files, installed
 packages, and services persist. Each call starts a fresh shell in the home
 directory, so working directory and environment variables do not carry over
 unless you persist them (chain with &&, write to disk, or update a profile file).
+If a command times out it may still be running on the VM. There is no polling:
+ask the user to check back later rather than retrying or waiting in a loop.
 `
     : "";
 

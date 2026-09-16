@@ -669,6 +669,8 @@ describe("system prompt composition", () => {
     expect(withComputer.system).toContain(
       "Running commands on a persistent remote Linux VM",
     );
+    expect(withComputer.system).toContain("There is no polling");
+    expect(withComputer.system).toContain("check back later");
     expect(without.system).not.toContain("persistent Linux VM");
   });
 
