@@ -177,7 +177,8 @@ type AdvisorToolName =
   | "big_brain_advisor"
   | "bigger_brain_advisor"
   | "ask_user"
-  | "ai_usage";
+  | "ai_usage"
+  | "exec";
 
 export type TrackedToolName =
   | AdvisorToolName
@@ -222,6 +223,7 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
 
   ask_user: "asking you a question",
   ai_usage: "checking AI usage",
+  exec: "running a command",
   big_brain_advisor: "consulting a stronger model",
   bigger_brain_advisor: "consulting the deepest model",
 
@@ -332,6 +334,7 @@ const TOOL_PHRASES: Partial<
       short(a.query),
     ),
   github_search_repos: (a) => wrap("searching GitHub for", short(a.query)),
+  exec: (a) => wrap("running", short(a.command)),
   fetch_url: (a) => {
     const raw = short(a.url);
     if (!raw) return undefined;

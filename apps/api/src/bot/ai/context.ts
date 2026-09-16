@@ -53,6 +53,12 @@ export interface AgentContextInput {
    * the responder role, and scopes recalled memories to this chat.
    */
   chimingIn: boolean;
+  /**
+   * The exec tool is registered this turn (SSH env is configured). Adds the
+   * computer to the responder role so the model knows commands run on a
+   * remote, persistent VM rather than guessing it from the tool list alone.
+   */
+  hasComputer?: boolean;
 }
 
 /**
@@ -187,7 +193,21 @@ what you do have or move on — "no relevant hits" is your plumbing, not an answ
 }
 
 /** The role for a turn the bot was actually asked to take. */
-function responderRole(schemaSDL: string): string {
+function responderRole(schemaSDL: string, hasComputer: boolean): string {
+  const computerBullet = hasComputer
+    ? "\n- Running commands on a persistent remote Linux VM"
+    : "";
+  const computerBlock = hasComputer
+    ? `
+You have an exec tool that runs a shell command on a remote, persistent Linux VM.
+The command is executed for you automatically — you do not SSH, pick a host, or
+manage keys. The same machine is reused across calls, so files, installed
+packages, and services persist. Each call starts a fresh shell in the home
+directory, so working directory and environment variables do not carry over
+unless you persist them (chain with &&, write to disk, or update a profile file).
+`
+    : "";
+
   return `You help members with:
 - Finding information about upcoming events
 - Checking event details and attendee lists
@@ -198,7 +218,7 @@ function responderRole(schemaSDL: string): string {
 - Managing events, venues, and members (admin only)
 - Adjusting my own settings — pauses, cost caps, chime-in behaviour, welcome messages (admin only, in a DM). Proposed changes always need a button press to confirm; never claim a change has been applied.
 - Exploring the MSOCIETY GitHub org (msocietyhq): repos, issues, PRs
-- Looking things up on the live web, and reading links members share
+- Looking things up on the live web, and reading links members share${computerBullet}
 
 If a user message is short, vague or cryptic, NEVER assume — use the ask_user tool to put one
 specific question to them, then end your turn with no further text. Their reply arrives as a new
@@ -215,7 +235,7 @@ If it comes back with consulted: false, relay its tell_user message in your own 
 and then answer as best you can yourself. Never mention budgets, models or tiers.
 
 Use the research tool for anything outside community data — news, docs, release notes, or a link someone posted. Don't guess at facts that change over time; look them up and cite the source.
-
+${computerBlock}
 You have a graphql_query tool for fast reads. Use it directly for simple lookups instead of delegating to sub-agents. Delegate to sub-agents only when the user wants write operations (create/update/delete/RSVP).
 
 If the user's question seems to relate to a recent group discussion or past messages,
@@ -335,6 +355,7 @@ function getSystemPrompt(
   now: Date,
   runningModel: string,
   chimingIn: boolean,
+  hasComputer: boolean,
 ): string {
   const today = now.toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
 
@@ -378,7 +399,7 @@ ${blocks.join("\n\n")}`
 
   return [
     sharedPreamble(today, runningModel),
-    chimingIn ? chimeInRole() : responderRole(schemaSDL),
+    chimingIn ? chimeInRole() : responderRole(schemaSDL, hasComputer),
     messageFormatBlock(),
     memoryBlock(),
     memorySection,
@@ -499,6 +520,7 @@ export async function buildAgentContext(
       now,
       input.runningModel,
       input.chimingIn,
+      input.hasComputer === true,
     ),
     messages: [...chatHistory, { role: "user", content: enrichedQuery }],
     memories,

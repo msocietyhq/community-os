@@ -648,4 +648,37 @@ describe("system prompt composition", () => {
     expect(ctx.system).toContain("advice, considerations, suggestions");
     expect(ctx.system).toContain("Never tell someone to ask the group");
   });
+
+  test("a computer-enabled turn tells the model about the remote VM", async () => {
+    const { recaller } = makeRecaller();
+    const withComputer = await buildAgentContext(
+      baseInput({ chimingIn: false, hasComputer: true }),
+      recaller,
+    );
+    const without = await buildAgentContext(
+      baseInput({ chimingIn: false, hasComputer: false }),
+      recaller,
+    );
+
+    expect(withComputer.system).toContain(
+      "exec tool that runs a shell command on a remote, persistent Linux VM",
+    );
+    expect(withComputer.system).toContain(
+      "executed for you automatically — you do not SSH",
+    );
+    expect(withComputer.system).toContain(
+      "Running commands on a persistent remote Linux VM",
+    );
+    expect(without.system).not.toContain("persistent Linux VM");
+  });
+
+  test("chime-in does not mention the computer even when it is configured", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: true, hasComputer: true }),
+      recaller,
+    );
+    expect(ctx.system).not.toContain("persistent Linux VM");
+    expect(ctx.system).not.toContain("exec tool");
+  });
 });

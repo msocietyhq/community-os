@@ -53,6 +53,13 @@ import {
   forgetMemoriesBySubject,
   incrementAccessCount,
 } from "../../services/memory.service";
+import { env } from "../../env";
+import {
+  DEFAULT_EXEC_TIMEOUT_MS,
+  EXEC_TOOL_DESCRIPTION,
+  remoteExec,
+  remoteExecConfigFrom,
+} from "./exec";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -226,6 +233,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
   const runVenuesAgent = createVenuesAgent(ctx);
   const runProjectsAgent = createProjectsAgent(ctx);
   const runResearchAgent = createResearchAgent(ctx);
+  const execConfig = remoteExecConfigFrom(env);
 
   return {
     graphql_query: tool({
@@ -343,6 +351,37 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
         return result;
       },
     }),
+
+    ...(execConfig
+      ? {
+          exec: tool({
+            description: EXEC_TOOL_DESCRIPTION,
+            inputSchema: z.object({
+              command: z
+                .string()
+                .describe(
+                  "Shell command to run on the remote VM. Executed automatically — do not wrap in ssh.",
+                ),
+              timeout_seconds: z
+                .number()
+                .min(1)
+                .max(300)
+                .optional()
+                .describe(
+                  "Seconds to wait before aborting (default 60, max 300)",
+                ),
+            }),
+            execute: async ({ command, timeout_seconds }) => {
+              console.log("[main-agent:exec]", command.slice(0, 120));
+              return remoteExec(command, execConfig, {
+                timeoutMs: timeout_seconds
+                  ? timeout_seconds * 1000
+                  : DEFAULT_EXEC_TIMEOUT_MS,
+              });
+            },
+          }),
+        }
+      : {}),
 
     get_settings: tool({
       description:

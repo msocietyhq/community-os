@@ -13,6 +13,8 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
+import { remoteExecConfigFrom } from "./exec";
+import { env } from "../../env";
 import {
   classify,
   type AgentOutcome,
@@ -202,6 +204,7 @@ export async function runAgent({
       now: new Date(),
       chatId,
       chimingIn: policy.kind === "uninvited",
+      hasComputer: remoteExecConfigFrom(env) !== null,
     },
     memoryRecaller,
   );

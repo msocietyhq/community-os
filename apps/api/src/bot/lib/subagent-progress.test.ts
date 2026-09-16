@@ -1118,6 +1118,13 @@ describe("describeToolCall", () => {
     );
   });
 
+  test("exec names the command", () => {
+    expect(describeToolCall("exec", { command: "ls -la" })).toBe(
+      "running ls -la",
+    );
+    expect(describeToolCall("exec", {})).toBe("running a command");
+  });
+
   test("long details are truncated", () => {
     const phrase = describeToolCall("create_event", { title: "A".repeat(200) });
     expect(phrase).toContain("…");

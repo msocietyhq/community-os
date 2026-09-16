@@ -19,6 +19,16 @@ const envSchema = z.object({
   VOYAGE_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().optional(),
   EXA_API_KEY: z.string().optional(),
+  // Remote computer for the agent's exec tool. All three must be set
+  // or the tool is not registered. The key may be PEM, `\n`-escaped PEM,
+  // or base64.
+  EXEC_SSH_HOST: z.string().optional(),
+  EXEC_SSH_USER: z.string().optional(),
+  EXEC_SSH_PRIVATE_KEY: z.string().optional(),
+  EXEC_SSH_PORT: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.coerce.number().int().positive().optional(),
+  ),
   WEB_URL: z.string().url(),
   PORT: z.coerce.number().default(3000),
 });
