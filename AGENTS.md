@@ -22,3 +22,22 @@ Already here, use these rather than adding more:
 
 Search before adding a utility; several of these existed in two or three copies
 before anyone noticed.
+
+## Cloud Agent environment
+
+Agents boot with **local PostgreSQL 16** (`community_os` on `127.0.0.1:5432`), not
+Neon. Do not put a production `DATABASE_URL` in the environment — this repo's
+local `.env` files have pointed at production before.
+
+`apps/api/.env` is written on each boot. Required keys (`TELEGRAM_BOT_TOKEN`,
+`ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`) get placeholders unless those secrets are
+set, so the HTTP API and web app can start. The Telegram bot then fails
+`getMe` until a real bot token is provided.
+
+- Runtime: Bun (`~/.bun/bin/bun`, also `/usr/local/bin/bun`)
+- API: `http://localhost:3000` (`/api/v1/health`)
+- Web: `http://localhost:5173` (Vite, proxied `/api` → API)
+- Checks: `bun lint`, `bun type-check`, `cd apps/api && bun test`,
+  `cd packages/shared && bun test`
+- DB: `bun db:migrate` then `bun db:seed` (idempotent). Extensions: `vector`
+  and ParadeDB `pg_search`.
