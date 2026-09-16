@@ -24,6 +24,12 @@ export const EXEC_MAX_LIFETIME_SEC = 600;
 /** SIGKILL this many seconds after SIGTERM if the process ignores TERM. */
 export const EXEC_KILL_GRACE_SEC = 10;
 
+/**
+ * Set on every remote exec so a restart can find leftovers whose SSH
+ * parent died in a crash. The reaper only kills processes that carry it.
+ */
+export const EXEC_MARKER_ENV = "MSOCIETY_AGENT_EXEC";
+
 /** Cap on bytes kept while the command is still running, so a flood cannot OOM. */
 const COLLECT_MAX = 80_000;
 
@@ -197,13 +203,94 @@ function clipOutput(
  *
  * The user command is base64-encoded rather than interpolated, so pipes,
  * quotes and `timeout` itself cannot break out of the wrapper.
+ *
+ * `MSOCIETY_AGENT_EXEC=1` marks the process tree so a bot restart can reap
+ * leftovers whose SSH parent died in a crash, without waiting out the 10
+ * minute lifetime.
  */
 export function wrapRemoteCommand(command: string): string {
   const encoded = Buffer.from(command, "utf8").toString("base64");
   return [
     `trap "" HUP`,
-    `printf '%s' '${encoded}' | base64 -d | timeout --kill-after=${EXEC_KILL_GRACE_SEC}s ${EXEC_MAX_LIFETIME_SEC} sh`,
+    `printf '%s' '${encoded}' | base64 -d | env ${EXEC_MARKER_ENV}=1 timeout --kill-after=${EXEC_KILL_GRACE_SEC}s ${EXEC_MAX_LIFETIME_SEC} sh`,
   ].join("; ");
+}
+
+/**
+ * Remote script that SIGTERMs every leftover exec, then SIGKILLs survivors.
+ *
+ * Skips pid 1 and its own shell so a crash-reaper SSH cannot shoot itself.
+ * `graceSec` is how long TERM gets before KILL; tests use 0.
+ */
+export function execReaperCommand(
+  graceSec: number = EXEC_KILL_GRACE_SEC,
+): string {
+  const grace =
+    Number.isFinite(graceSec) && graceSec >= 0
+      ? Math.floor(graceSec)
+      : EXEC_KILL_GRACE_SEC;
+  // Collect PIDs first. Re-scanning after TERM misses zombies: their environ
+  // is already gone, so a second grep would skip them and leave kill -0 true.
+  return [
+    `marker=${EXEC_MARKER_ENV}=1`,
+    `pids=$(`,
+    `  find /proc -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' 2>/dev/null |`,
+    `  while read -r dir; do`,
+    `    pid=\${dir#/proc/}`,
+    `    [ "$pid" = "1" ] && continue`,
+    `    [ "$pid" = "$$" ] && continue`,
+    `    grep -qaz "$marker" "$dir/environ" 2>/dev/null || continue`,
+    `    printf '%s\\n' "$pid"`,
+    `  done`,
+    `)`,
+    `[ -n "$pids" ] || exit 0`,
+    `kill -s TERM $pids 2>/dev/null || true`,
+    `sleep ${grace}`,
+    `kill -s KILL $pids 2>/dev/null || true`,
+  ].join("\n");
+}
+
+export type ReapOrphanedExecsResult =
+  | { skipped: true }
+  | { skipped: false; result: RemoteExecResult };
+
+/**
+ * Kills leftover remote execs. Used on bot boot after a crash: hangup was
+ * ignored, so those process trees can outlive the previous API process.
+ *
+ * Runs the reaper *unwrapped* — wrapping it would mark the reaper as an exec
+ * and it would kill itself. `null` config is a no-op so boot can call this
+ * before Computer is configured.
+ */
+export async function reapOrphanedExecs(
+  config: RemoteExecConfig | null,
+  options: {
+    transport?: ExecTransport;
+    graceSec?: number;
+    timeoutMs?: number;
+  } = {},
+): Promise<ReapOrphanedExecsResult> {
+  if (!config) return { skipped: true };
+
+  const graceSec = options.graceSec ?? EXEC_KILL_GRACE_SEC;
+  const timeoutMs =
+    options.timeoutMs ?? Math.max(15_000, (graceSec + 15) * 1000);
+  const transport =
+    options.transport ??
+    ((command, cfg, ms) => sshCliTransport(command, cfg, ms, false));
+
+  try {
+    const raw = await transport(execReaperCommand(graceSec), config, timeoutMs);
+    return { skipped: false, result: formatExecResult(raw) };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return {
+      skipped: false,
+      result: {
+        error: `Could not reap leftover commands on the computer: ${reason}`,
+      },
+    };
+  }
 }
 
 function chunkToString(chunk: Buffer | string): string {
@@ -220,6 +307,7 @@ async function sshCliTransport(
   command: string,
   config: RemoteExecConfig,
   timeoutMs: number,
+  wrap = true,
 ): Promise<ExecTransportResult> {
   const dir = await mkdtemp(join(tmpdir(), "agent-exec-"));
   const keyPath = join(dir, `id-${randomUUID()}`);
@@ -236,7 +324,13 @@ async function sshCliTransport(
   );
 
   try {
-    return await runSsh(command, config, keyPath, timeoutMs, connectTimeoutSec);
+    return await runSsh(
+      wrap ? wrapRemoteCommand(command) : command,
+      config,
+      keyPath,
+      timeoutMs,
+      connectTimeoutSec,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -276,7 +370,7 @@ function runSsh(
         "-o",
         "LogLevel=ERROR",
         `${config.username}@${config.host}`,
-        wrapRemoteCommand(command),
+        command,
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );

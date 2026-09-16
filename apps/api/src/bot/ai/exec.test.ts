@@ -15,6 +15,9 @@ import {
   wrapRemoteCommand,
   EXEC_MAX_LIFETIME_SEC,
   EXEC_KILL_GRACE_SEC,
+  EXEC_MARKER_ENV,
+  execReaperCommand,
+  reapOrphanedExecs,
   type ExecTransportResult,
   type RemoteExecConfig,
 } from "./exec";
@@ -301,5 +304,95 @@ describe("wrapRemoteCommand", () => {
     const result = Bun.spawnSync(["sh", "-c", wrapped], { stdout: "pipe" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString()).toBe("ok-from-wrapper\n");
+  });
+
+  test("marks the process so a restart can reap leftovers", () => {
+    expect(EXEC_MARKER_ENV).toBe("MSOCIETY_AGENT_EXEC");
+    expect(wrapRemoteCommand("true")).toContain(
+      `env ${EXEC_MARKER_ENV}=1 timeout`,
+    );
+  });
+});
+
+describe("execReaperCommand", () => {
+  test("signals marked processes, then kills whoever survives the grace", () => {
+    const script = execReaperCommand(0);
+    expect(script).toContain(EXEC_MARKER_ENV);
+    expect(script).toContain("kill -s TERM $pids");
+    expect(script).toContain("kill -s KILL $pids");
+    expect(script).toContain("sleep 0");
+  });
+
+  test("kills a marked leftover and leaves unmarked processes alone", async () => {
+    const cleanEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => key !== EXEC_MARKER_ENV),
+    );
+    const marked = Bun.spawn(["sleep", "60"], {
+      env: { ...cleanEnv, [EXEC_MARKER_ENV]: "1" },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    const unmarked = Bun.spawn(["sleep", "60"], {
+      env: cleanEnv,
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+
+    try {
+      const result = Bun.spawnSync(["sh", "-c", execReaperCommand(0)], {
+        env: cleanEnv,
+      });
+      expect(result.exitCode).toBe(0);
+
+      const unmarkedAlive = Bun.spawnSync(["kill", "-0", String(unmarked.pid)]);
+      expect(unmarkedAlive.exitCode).toBe(0);
+
+      const timedOut = await Promise.race([
+        marked.exited.then(() => false),
+        Bun.sleep(1000).then(() => true),
+      ]);
+      expect(timedOut).toBe(false);
+    } finally {
+      marked.kill();
+      unmarked.kill();
+    }
+  });
+});
+
+describe("reapOrphanedExecs", () => {
+  test("is a no-op when the computer is not configured", async () => {
+    let called = false;
+    const outcome = await reapOrphanedExecs(null, {
+      transport: async () => {
+        called = true;
+        return ok();
+      },
+    });
+    expect(called).toBe(false);
+    expect(outcome).toEqual({ skipped: true });
+  });
+
+  test("runs the reaper over SSH without wrapping it as an exec", async () => {
+    let seen = "";
+    const outcome = await reapOrphanedExecs(CONFIG, {
+      transport: async (command) => {
+        seen = command;
+        return ok({ stdout: "reaped\n" });
+      },
+    });
+    expect(seen).toContain(EXEC_MARKER_ENV);
+    expect(seen).toContain("kill -s TERM");
+    expect(seen).toContain("kill -s KILL");
+    expect(seen).not.toContain('trap "" HUP');
+    expect(outcome).toEqual({
+      skipped: false,
+      result: {
+        exitCode: 0,
+        stdout: "reaped\n",
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      },
+    });
   });
 });
