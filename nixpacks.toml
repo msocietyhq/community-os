@@ -1,4 +1,6 @@
-# The computer exec transport shells out to `ssh`. Nixpacks' Bun image does
-# not include openssh-client. Key generation no longer needs ssh-keygen.
+# Fallback if the API still builds with Nixpacks. Railway's default builder
+# is Railpack (see railpack.json), which ignores this file.
+# `"..."` keeps the provider's packages (bun, etc.).
 [phases.setup]
+nixPkgs = ["...", "openssh"]
 aptPkgs = ["openssh-client"]

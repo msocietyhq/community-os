@@ -22,6 +22,7 @@ import {
 } from "micro-key-producer/ssh.js";
 import { randomBytes } from "micro-key-producer/utils.js";
 import { normalizePrivateKey } from "./exec";
+import { resolveBinary } from "./ssh-bin";
 
 export const SSH_KEY_COMMENT = "community-os-computer";
 
@@ -138,7 +139,13 @@ function runSshKeygen(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ssh-keygen", args, {
+    const sshKeygen = resolveBinary("ssh-keygen");
+    if (!sshKeygen) {
+      reject(new Error("ssh-keygen is not installed on this host"));
+      return;
+    }
+
+    const proc = spawn(sshKeygen, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
