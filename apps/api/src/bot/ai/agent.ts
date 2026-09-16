@@ -1,4 +1,4 @@
-import { stepCountIs, type ModelMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
 import { yoga, schemaSDL } from "../../graphql";
@@ -14,7 +14,7 @@ import {
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
 import { execConfigFromSnapshot } from "./exec";
-import { DEFAULT_AGENT_STEPS } from "./agent-steps";
+import { computerAwareStepLimit } from "./agent-steps";
 import { getSettings } from "../../services/bot-settings.service";
 import {
   classify,
@@ -218,7 +218,7 @@ export async function runAgent({
         system,
         messages,
         tools: trackedTools,
-        stopWhen: stepCountIs(DEFAULT_AGENT_STEPS),
+        stopWhen: computerAwareStepLimit,
         maxOutputTokens: 1024,
       },
       {
