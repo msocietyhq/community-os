@@ -124,6 +124,11 @@ export function execConfigFromSnapshot(
 /**
  * PEM keys in env vars often arrive as a single line with `\n` sequences, or
  * as base64, because platforms dislike multi-line secrets.
+ *
+ * OpenSSH 9.6 + OpenSSL 3 rejects a private key file that does not end in a
+ * newline (`Load key: error in libcrypto`) and then offers no identity, so
+ * the VM answers Permission denied. Always restore that terminator — `trim()`
+ * and the config snapshot both strip it.
  */
 export function normalizePrivateKey(raw: string): string {
   let key = raw.trim();
@@ -139,7 +144,7 @@ export function normalizePrivateKey(raw: string): string {
       }
     }
   }
-  return key;
+  return key.endsWith("\n") ? key : `${key}\n`;
 }
 
 export function clampExecTimeoutMs(ms: number | undefined): number {

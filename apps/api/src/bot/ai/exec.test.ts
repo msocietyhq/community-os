@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   clampExecTimeoutMs,
   DEFAULT_EXEC_TIMEOUT_MS,
@@ -21,6 +24,7 @@ import {
   type ExecTransportResult,
   type RemoteExecConfig,
 } from "./exec";
+import { generateEd25519KeyPair } from "./ssh-keys";
 import {
   BOT_SETTINGS,
   type SettingsSnapshot,
@@ -109,20 +113,50 @@ describe("execConfigFromSnapshot", () => {
 });
 
 describe("normalizePrivateKey", () => {
-  test("leaves a real PEM alone", () => {
-    expect(normalizePrivateKey(PEM)).toBe(PEM);
+  test("appends the trailing newline OpenSSH needs to load the key", () => {
+    expect(PEM.endsWith("\n")).toBe(false);
+    expect(normalizePrivateKey(PEM)).toBe(`${PEM}\n`);
+  });
+
+  test("does not double a trailing newline that is already present", () => {
+    expect(normalizePrivateKey(`${PEM}\n`)).toBe(`${PEM}\n`);
   });
 
   test("turns literal \\n sequences into newlines", () => {
     const escaped = PEM.replace(/\n/g, "\\n");
     expect(escaped).not.toContain("\n");
-    expect(normalizePrivateKey(escaped)).toBe(PEM);
+    expect(normalizePrivateKey(escaped)).toBe(`${PEM}\n`);
   });
 
   test("decodes a base64-encoded PEM", () => {
     const encoded = Buffer.from(PEM, "utf8").toString("base64");
     expect(encoded).not.toContain("BEGIN");
-    expect(normalizePrivateKey(encoded)).toBe(PEM);
+    expect(normalizePrivateKey(encoded)).toBe(`${PEM}\n`);
+  });
+
+  // Exec trims the stored key before writing the throwaway identity file.
+  // OpenSSH 9.6 + OpenSSL 3 then fails with "Load key: error in libcrypto"
+  // and never offers the key, so the VM answers Permission denied.
+  test("OpenSSH can load a generated key after normalizePrivateKey", async () => {
+    const pair = await generateEd25519KeyPair();
+    const dir = await mkdtemp(join(tmpdir(), "exec-key-"));
+    const keyPath = join(dir, "id");
+    try {
+      await writeFile(keyPath, normalizePrivateKey(pair.privateKey.trim()), {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      await chmod(keyPath, 0o600);
+      const result = Bun.spawnSync(["ssh-keygen", "-y", "-f", keyPath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(result.stderr.toString()).not.toContain("libcrypto");
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toContain("ssh-ed25519");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
