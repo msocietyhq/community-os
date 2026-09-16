@@ -12,6 +12,7 @@ describe("COMPUTER_TOOL_DESCRIPTION", () => {
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("not the commands");
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("delegate again");
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("check back later");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("10 minutes");
   });
 });
 
@@ -23,6 +24,7 @@ describe("COMPUTER_AGENT_SYSTEM", () => {
     expect(COMPUTER_AGENT_SYSTEM).toContain("fresh shell");
     expect(COMPUTER_AGENT_SYSTEM).toContain("no polling");
     expect(COMPUTER_AGENT_SYSTEM).toContain("check back later");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("10 minutes");
   });
 });
 

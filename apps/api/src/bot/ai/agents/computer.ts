@@ -42,7 +42,7 @@ const computerTools = {
         .max(300)
         .optional()
         .describe(
-          "Seconds to wait for the command (default 60, max 300). On timeout it may still be running — report that and stop; do not poll.",
+          "Seconds to wait for the command (default 60, max 300). On timeout it may still be running for up to 10 minutes, then it is killed — report that and stop; do not poll.",
         ),
     }),
     execute: async ({ command, timeout_seconds }) => {

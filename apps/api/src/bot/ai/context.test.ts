@@ -671,6 +671,7 @@ describe("system prompt composition", () => {
     );
     expect(withComputer.system).toContain("There is no polling");
     expect(withComputer.system).toContain("check back later");
+    expect(withComputer.system).toContain("10 minutes");
     expect(withComputer.system).toContain("delegate again");
     expect(without.system).not.toContain("persistent Linux VM");
   });

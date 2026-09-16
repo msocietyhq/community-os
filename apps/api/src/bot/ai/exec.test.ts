@@ -13,6 +13,8 @@ import {
   remoteExec,
   remoteExecConfigFrom,
   wrapRemoteCommand,
+  EXEC_MAX_LIFETIME_SEC,
+  EXEC_KILL_GRACE_SEC,
   type ExecTransportResult,
   type RemoteExecConfig,
 } from "./exec";
@@ -169,6 +171,7 @@ describe("formatExecResult", () => {
     expect(out.stdout.endsWith("TAIL")).toBe(true);
     expect(out.message).toContain("check back later");
     expect(out.message).toContain("no polling");
+    expect(out.message).toContain("killed after 10 minutes");
   });
 
   test("a finished command does not carry the timeout message", () => {
@@ -259,15 +262,44 @@ describe("EXEC_TOOL_DESCRIPTION", () => {
     expect(EXEC_TOOL_DESCRIPTION).toContain("fresh shell");
   });
 
-  test("tells the model not to poll a timeout, and to ask the user to check later", () => {
+  test("tells the model not to poll a timeout, and that leftovers die after 10 minutes", () => {
     expect(EXEC_TOOL_DESCRIPTION).toContain("no way to poll");
+    expect(EXEC_TOOL_DESCRIPTION).toContain("up to 10 minutes");
+    expect(EXEC_TOOL_DESCRIPTION).toContain("killed");
     expect(EXEC_TOOL_DESCRIPTION).toContain("check back later");
     expect(EXEC_TOOL_DESCRIPTION).toContain("do not retry");
   });
 });
 
 describe("wrapRemoteCommand", () => {
-  test("ignores hangup so a timeout does not kill the remote process", () => {
-    expect(wrapRemoteCommand("sleep 120")).toBe('trap "" HUP; sleep 120');
+  test("ignores hangup so a wait timeout does not kill the remote process", () => {
+    expect(wrapRemoteCommand("sleep 120")).toContain('trap "" HUP');
+  });
+
+  test("kills the remote process after 10 minutes so leftovers cannot linger", () => {
+    expect(EXEC_MAX_LIFETIME_SEC).toBe(600);
+    expect(EXEC_KILL_GRACE_SEC).toBe(10);
+    const wrapped = wrapRemoteCommand("sleep 120");
+    expect(wrapped).toContain(
+      `timeout --kill-after=${EXEC_KILL_GRACE_SEC}s ${EXEC_MAX_LIFETIME_SEC}`,
+    );
+  });
+
+  test("the user command is preserved through the wrapper", () => {
+    const command = `echo "it's fine"; foo | bar && baz`;
+    const wrapped = wrapRemoteCommand(command);
+    const match = /printf '%s' '([A-Za-z0-9+/=]+)' \| base64 -d/.exec(wrapped);
+    expect(match?.[1]).toBeDefined();
+    const payload = match?.[1];
+    expect(payload).toBeTruthy();
+    if (!payload) return;
+    expect(Buffer.from(payload, "base64").toString("utf8")).toBe(command);
+  });
+
+  test("the wrapper actually runs the encoded command", () => {
+    const wrapped = wrapRemoteCommand("printf 'ok-from-wrapper\\n'");
+    const result = Bun.spawnSync(["sh", "-c", wrapped], { stdout: "pipe" });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toBe("ok-from-wrapper\n");
   });
 });

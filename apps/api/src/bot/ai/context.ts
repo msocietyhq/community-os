@@ -204,7 +204,7 @@ Delegate the outcome you want — not the commands. It keeps going until the tas
 and verified, then reports back. If the report is incomplete, delegate again. You keep
 this conversation; the next user message is a new one, so finish or hand off clearly.
 The same machine is reused across calls, so files and installed packages persist.
-If a command times out it may still be running on the VM. There is no polling:
+If a command times out it may still be running on the VM for up to 10 minutes, then it is killed. There is no polling:
 ask the user to check back later rather than retrying or waiting in a loop.
 `
     : "";

@@ -19,6 +19,11 @@ export const MAX_EXEC_TIMEOUT_MS = 300_000;
 export const MAX_STDOUT_CHARS = 32_000;
 export const MAX_STDERR_CHARS = 8_000;
 
+/** Remote commands that outlive the SSH wait are killed after this. */
+export const EXEC_MAX_LIFETIME_SEC = 600;
+/** SIGKILL this many seconds after SIGTERM if the process ignores TERM. */
+export const EXEC_KILL_GRACE_SEC = 10;
+
 /** Cap on bytes kept while the command is still running, so a flood cannot OOM. */
 const COLLECT_MAX = 80_000;
 
@@ -30,7 +35,8 @@ export const EXEC_TOOL_DESCRIPTION = [
   "variables do not carry over unless you persist them (chain with &&, write to disk, or",
   "update a profile file).",
   "There is no way to poll a running command. If it times out, it may still be running on",
-  "the VM — ask the user to check back later; do not retry or wait in a loop.",
+  "the VM for up to 10 minutes, then it is killed. Ask the user to check back later;",
+  "do not retry or wait in a loop.",
   "Use this to inspect the machine, install tools, run programs, or do any work that needs",
   "a real computer. Read the output before deciding the next command.",
 ].join(" ");
@@ -60,7 +66,7 @@ export type ExecTransport = (
 ) => Promise<ExecTransportResult>;
 
 export const EXEC_TIMEOUT_MESSAGE =
-  "The wait timed out; the command may still be running on the VM. There is no polling — ask the user to check back later, and look then. Do not retry or wait in a loop.";
+  "The wait timed out; the command may still be running on the VM and will be killed after 10 minutes if it has not finished. There is no polling — ask the user to check back later, and look then. Do not retry or wait in a loop.";
 
 export interface RemoteExecSuccess {
   exitCode: number | null;
@@ -186,9 +192,18 @@ function clipOutput(
 /**
  * Ignoring HUP means killing our SSH wait does not take the remote process
  * down with it — a compile or install can finish after we stop listening.
+ * GNU timeout then reaps it after 10 minutes so abandoned commands cannot
+ * pile up as zombies.
+ *
+ * The user command is base64-encoded rather than interpolated, so pipes,
+ * quotes and `timeout` itself cannot break out of the wrapper.
  */
 export function wrapRemoteCommand(command: string): string {
-  return `trap "" HUP; ${command}`;
+  const encoded = Buffer.from(command, "utf8").toString("base64");
+  return [
+    `trap "" HUP`,
+    `printf '%s' '${encoded}' | base64 -d | timeout --kill-after=${EXEC_KILL_GRACE_SEC}s ${EXEC_MAX_LIFETIME_SEC} sh`,
+  ].join("; ");
 }
 
 function chunkToString(chunk: Buffer | string): string {
