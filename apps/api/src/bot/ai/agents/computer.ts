@@ -23,48 +23,59 @@ import {
 import {
   COMPUTER_AGENT_SYSTEM,
   COMPUTER_TOOL_DESCRIPTION,
+  withParentVerifyAsk,
 } from "./computer-prompt";
 
 export { COMPUTER_AGENT_SYSTEM, COMPUTER_TOOL_DESCRIPTION };
 
+export const execInputSchema = z.object({
+  command: z
+    .string()
+    .describe(
+      "Shell command to run on the remote VM. Executed automatically — do not wrap in ssh.",
+    ),
+  timeout_seconds: z
+    .number()
+    .min(1)
+    .max(300)
+    .optional()
+    .describe(
+      "Seconds to wait for the command (default 60, max 300). On timeout it may still be running for up to 10 minutes, then it is killed — report that and stop; do not poll.",
+    ),
+});
+
+export async function executeComputerExec({
+  command,
+  timeout_seconds,
+}: {
+  command: string;
+  timeout_seconds?: number;
+}) {
+  const snapshot = await ensureComputerSshKey().catch((err) => {
+    console.error("[computer:exec] ssh key generation failed:", err);
+    return getSettings();
+  });
+  const config = execConfigFromSnapshot(snapshot);
+  if (!config) {
+    return {
+      error:
+        "The computer is not configured. An admin can set the SSH host and user under /settings → Computer, and add the public key to the VM's authorized_keys.",
+    };
+  }
+
+  console.log("[computer:exec]", command.slice(0, 120));
+  return remoteExec(command, config, {
+    timeoutMs: timeout_seconds
+      ? timeout_seconds * 1000
+      : DEFAULT_EXEC_TIMEOUT_MS,
+  });
+}
+
 const computerTools = {
   exec: tool({
     description: EXEC_TOOL_DESCRIPTION,
-    inputSchema: z.object({
-      command: z
-        .string()
-        .describe(
-          "Shell command to run on the remote VM. Executed automatically — do not wrap in ssh.",
-        ),
-      timeout_seconds: z
-        .number()
-        .min(1)
-        .max(300)
-        .optional()
-        .describe(
-          "Seconds to wait for the command (default 60, max 300). On timeout it may still be running for up to 10 minutes, then it is killed — report that and stop; do not poll.",
-        ),
-    }),
-    execute: async ({ command, timeout_seconds }) => {
-      const snapshot = await ensureComputerSshKey().catch((err) => {
-        console.error("[computer-agent:exec] ssh key generation failed:", err);
-        return getSettings();
-      });
-      const config = execConfigFromSnapshot(snapshot);
-      if (!config) {
-        return {
-          error:
-            "The computer is not configured. An admin can set the SSH host and user under /settings → Computer, and add the public key to the VM's authorized_keys.",
-        };
-      }
-
-      console.log("[computer-agent:exec]", command.slice(0, 120));
-      return remoteExec(command, config, {
-        timeoutMs: timeout_seconds
-          ? timeout_seconds * 1000
-          : DEFAULT_EXEC_TIMEOUT_MS,
-      });
-    },
+    inputSchema: execInputSchema,
+    execute: executeComputerExec,
   }),
 };
 
@@ -96,5 +107,7 @@ export async function runComputerAgent(
     result.text?.slice(0, 120),
   );
 
-  return result.text || "I couldn't complete that on the computer.";
+  return withParentVerifyAsk(
+    result.text || "I couldn't complete that on the computer.",
+  );
 }

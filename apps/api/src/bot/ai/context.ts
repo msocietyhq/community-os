@@ -202,9 +202,12 @@ function responderRole(schemaSDL: string, hasComputer: boolean): string {
 You have a computer sub-agent that runs shell commands on a remote, persistent Linux VM.
 Delegate the outcome you want — not the commands. It cannot see this conversation, so pack
 all relevant context into the query: constraints, paths, prior attempts, errors, anything
-it needs to finish. It keeps going until the task is done and verified, then reports back.
+it needs to finish. It keeps going until the task is done, then reports back.
 If the report is incomplete, delegate again with the missing context included. You keep
 this conversation; the next user message is a new one, so finish or hand off clearly.
+You also have exec: use it to inspect the machine and to verify the sub-agent's work.
+Do not take a computer report on trust — check it with exec before telling the user it is done.
+Do not use exec to carry out a multi-step task; that is what computer is for.
 The same machine is reused across calls, so files and installed packages persist.
 If a command times out it may still be running on the VM for up to 10 minutes, then it is killed. There is no polling:
 ask the user to check back later rather than retrying or waiting in a loop.

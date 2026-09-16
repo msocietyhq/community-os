@@ -21,10 +21,15 @@ import {
 } from "@community-os/shared/bot-settings";
 import { getHistory, getSettings } from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
-import { runComputerAgent } from "./agents/computer";
 import {
-  COMPUTER_TOOL_DESCRIPTION,
+  executeComputerExec,
+  execInputSchema,
+  runComputerAgent,
+} from "./agents/computer";
+import {
   COMPUTER_QUERY_DESCRIPTION,
+  COMPUTER_TOOL_DESCRIPTION,
+  PARENT_EXEC_TOOL_DESCRIPTION,
 } from "./agents/computer-prompt";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
@@ -385,6 +390,15 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           result.slice(0, 120),
         );
         return result;
+      },
+    }),
+
+    exec: tool({
+      description: PARENT_EXEC_TOOL_DESCRIPTION,
+      inputSchema: execInputSchema,
+      execute: async ({ command, timeout_seconds }) => {
+        console.log("[main-agent:exec]", command.slice(0, 120));
+        return executeComputerExec({ command, timeout_seconds });
       },
     }),
 

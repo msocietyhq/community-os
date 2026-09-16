@@ -32,6 +32,10 @@ describe("stepsUsedComputer", () => {
       ]),
     ).toBe(true);
   });
+
+  test("true once any step called exec, so the parent can verify", () => {
+    expect(stepsUsedComputer([step("exec")])).toBe(true);
+  });
 });
 
 describe("computerAwareStepLimit", () => {

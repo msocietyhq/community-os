@@ -668,6 +668,8 @@ describe("system prompt composition", () => {
     );
     expect(withComputer.system).toContain("cannot see this conversation");
     expect(withComputer.system).toContain("all relevant context");
+    expect(withComputer.system).toContain("verify the sub-agent's work");
+    expect(withComputer.system).toContain("check it with exec");
     expect(withComputer.system).toContain(
       "Running commands on a persistent remote Linux VM",
     );
