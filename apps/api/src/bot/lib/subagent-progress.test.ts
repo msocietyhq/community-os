@@ -1402,6 +1402,7 @@ describe("SUBAGENT_TOOLS", () => {
       "projects",
       "research",
       "github",
+      "computer",
     ];
     for (const name of SUBAGENT_TOOLS) {
       const known = delegates.includes(name) || toolLabel(name) !== name;

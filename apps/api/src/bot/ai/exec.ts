@@ -1,7 +1,7 @@
 /**
- * Remote shell for the agent's `exec` tool.
+ * Remote shell for the computer sub-agent's `exec` tool.
  *
- * The model only sees a command; this module is the harness that SSHs to a
+ * The sub-agent only sees a command; this module is the harness that SSHs to a
  * long-lived VM using host/user/key from bot settings. Connection details
  * never belong in the tool schema or the prompt.
  */

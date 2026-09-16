@@ -661,19 +661,17 @@ describe("system prompt composition", () => {
     );
 
     expect(withComputer.system).toContain(
-      "exec tool that runs a shell command on a remote, persistent Linux VM",
+      "computer sub-agent that runs shell commands on a remote, persistent Linux VM",
     );
     expect(withComputer.system).toContain(
-      "executed for you automatically — you do not SSH",
+      "Delegate the outcome you want — not the commands",
     );
     expect(withComputer.system).toContain(
       "Running commands on a persistent remote Linux VM",
     );
     expect(withComputer.system).toContain("There is no polling");
     expect(withComputer.system).toContain("check back later");
-    expect(withComputer.system).toContain(
-      "up to 30 tool-calling steps instead of 10",
-    );
+    expect(withComputer.system).toContain("delegate again");
     expect(without.system).not.toContain("persistent Linux VM");
   });
 
@@ -685,5 +683,6 @@ describe("system prompt composition", () => {
     );
     expect(ctx.system).not.toContain("persistent Linux VM");
     expect(ctx.system).not.toContain("exec tool");
+    expect(ctx.system).not.toContain("computer sub-agent");
   });
 });

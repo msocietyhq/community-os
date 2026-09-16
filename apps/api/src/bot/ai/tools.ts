@@ -1,4 +1,4 @@
-import { tool, type ModelMessage } from "ai";
+import { tool, stepCountIs, type ModelMessage } from "ai";
 import { z } from "zod";
 import { hasLookedUp, hasAttemptedSilence } from "../lib/chime-in";
 import type { treaty } from "@elysiajs/eden";
@@ -21,6 +21,7 @@ import {
 } from "@community-os/shared/bot-settings";
 import { getHistory, getSettings } from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
+import { runComputerAgent, COMPUTER_TOOL_DESCRIPTION } from "./agents/computer";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
@@ -56,14 +57,9 @@ import {
   forgetMemoriesBySubject,
   incrementAccessCount,
 } from "../../services/memory.service";
-import {
-  DEFAULT_EXEC_TIMEOUT_MS,
-  EXEC_TOOL_DESCRIPTION,
-  execConfigFromSnapshot,
-  remoteExec,
-} from "./exec";
+import { execConfigFromSnapshot } from "./exec";
 import { ensureComputerSshKey } from "./computer-ssh";
-import { execAwareStepLimit } from "./agent-steps";
+import { DEFAULT_AGENT_STEPS } from "./agent-steps";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -183,7 +179,7 @@ async function runAdvisor(
       system: advisorSystemPrompt(tier),
       messages: buildAdvisorMessages(conversation, problem),
       tools,
-      stopWhen: execAwareStepLimit,
+      stopWhen: stepCountIs(DEFAULT_AGENT_STEPS),
       maxOutputTokens: ADVISOR_MAX_OUTPUT_TOKENS,
     },
     {
@@ -355,42 +351,40 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       },
     }),
 
-    exec: tool({
-      description: EXEC_TOOL_DESCRIPTION,
+    computer: tool({
+      description: COMPUTER_TOOL_DESCRIPTION,
       inputSchema: z.object({
-        command: z
+        query: z
           .string()
           .describe(
-            "Shell command to run on the remote VM. Executed automatically — do not wrap in ssh.",
-          ),
-        timeout_seconds: z
-          .number()
-          .min(1)
-          .max(300)
-          .optional()
-          .describe(
-            "Seconds to wait for the command (default 60, max 300). On timeout it may still be running — ask the user to check back later; do not poll.",
+            "What to accomplish on the remote VM. Describe the outcome, not the commands.",
           ),
       }),
-      execute: async ({ command, timeout_seconds }) => {
+      execute: async ({ query }) => {
         const snapshot = await ensureComputerSshKey().catch((err) => {
-          console.error("[main-agent:exec] ssh key generation failed:", err);
+          console.error(
+            "[main-agent:computer] ssh key generation failed:",
+            err,
+          );
           return getSettings();
         });
-        const config = execConfigFromSnapshot(snapshot);
-        if (!config) {
-          return {
-            error:
-              "The computer is not configured. An admin can set the SSH host and user under /settings → Computer, and add the public key to the VM's authorized_keys.",
-          };
+        if (!execConfigFromSnapshot(snapshot)) {
+          return "The computer is not configured. An admin can set the SSH host and user under /settings → Computer, and add the public key to the VM's authorized_keys.";
         }
 
-        console.log("[main-agent:exec]", command.slice(0, 120));
-        return remoteExec(command, config, {
-          timeoutMs: timeout_seconds
-            ? timeout_seconds * 1000
-            : DEFAULT_EXEC_TIMEOUT_MS,
-        });
+        console.log("[main-agent] → computer sub-agent, query:", query);
+        const result = await withProgress(ctx, "Computer", query, (activity) =>
+          runComputerAgent(
+            query,
+            { telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+            activity,
+          ),
+        );
+        console.log(
+          "[main-agent] ← computer sub-agent, response:",
+          result.slice(0, 120),
+        );
+        return result;
       },
     }),
 

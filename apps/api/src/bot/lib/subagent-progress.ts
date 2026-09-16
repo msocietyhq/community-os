@@ -20,6 +20,7 @@ import type { MembersToolName } from "../ai/agents/members";
 import type { VenuesToolName } from "../ai/agents/venues";
 import type { ProjectsToolName } from "../ai/agents/projects";
 import type { GithubToolName } from "../ai/agents/github";
+import type { ComputerToolName } from "../ai/agents/computer";
 import type { ResearchToolName } from "../ai/agents/research";
 
 export type SubagentState = "running" | "done" | "failed";
@@ -177,8 +178,7 @@ type AdvisorToolName =
   | "big_brain_advisor"
   | "bigger_brain_advisor"
   | "ask_user"
-  | "ai_usage"
-  | "exec";
+  | "ai_usage";
 
 export type TrackedToolName =
   | AdvisorToolName
@@ -187,6 +187,7 @@ export type TrackedToolName =
   | VenuesToolName
   | ProjectsToolName
   | GithubToolName
+  | ComputerToolName
   | ResearchToolName;
 
 /**
@@ -778,6 +779,7 @@ export const SUBAGENT_TOOLS: ReadonlySet<string> = new Set([
   "projects",
   "research",
   "github",
+  "computer",
   ADVISOR_TOOL_NAMES.big,
   ADVISOR_TOOL_NAMES.bigger,
 ]);
