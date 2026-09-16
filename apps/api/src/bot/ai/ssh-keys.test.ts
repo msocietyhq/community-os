@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   derivePublicKey,
   generateEd25519KeyPair,
@@ -101,6 +104,12 @@ describe("nextComputerSshKeys", () => {
 });
 
 describe("generateEd25519KeyPair", () => {
+  const originalPath = process.env.PATH;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+  });
+
   test("produces a pair ssh-keygen can round-trip", async () => {
     const pair = await generateEd25519KeyPair();
     expect(pair.privateKey).toContain("BEGIN OPENSSH PRIVATE KEY");
@@ -111,5 +120,35 @@ describe("generateEd25519KeyPair", () => {
     const storedBody = pair.publicKey.split(" ").slice(0, 2).join(" ");
     const derivedBody = derived.split(" ").slice(0, 2).join(" ");
     expect(derivedBody).toBe(storedBody);
+  });
+
+  // Railway's Nixpacks Bun image has no openssh-client, so generation
+  // must not depend on `ssh-keygen` being on PATH. Opening Computer and
+  // tapping Regenerate both failed there with "Could not generate a key."
+  test("mints a pair when ssh-keygen is not on PATH", async () => {
+    const empty = await mkdtemp(join(tmpdir(), "no-ssh-keygen-"));
+    process.env.PATH = empty;
+    try {
+      const pair = await generateEd25519KeyPair();
+      expect(pair.privateKey).toContain("BEGIN OPENSSH PRIVATE KEY");
+      expect(pair.publicKey.startsWith("ssh-ed25519 ")).toBe(true);
+      expect(pair.publicKey).toContain(SSH_KEY_COMMENT);
+    } finally {
+      await rm(empty, { recursive: true, force: true });
+    }
+  });
+
+  test("derives the public key when ssh-keygen is not on PATH", async () => {
+    const pair = await generateEd25519KeyPair();
+    const empty = await mkdtemp(join(tmpdir(), "no-ssh-keygen-"));
+    process.env.PATH = empty;
+    try {
+      const derived = await derivePublicKey(pair.privateKey);
+      const storedBody = pair.publicKey.split(" ").slice(0, 2).join(" ");
+      const derivedBody = derived.split(" ").slice(0, 2).join(" ");
+      expect(derivedBody).toBe(storedBody);
+    } finally {
+      await rm(empty, { recursive: true, force: true });
+    }
   });
 });

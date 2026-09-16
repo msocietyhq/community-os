@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clip, clipTail } from "../../lib/text";
 import type { SettingsSnapshot } from "@community-os/shared/bot-settings";
+import { resolveSsh, SSH_MISSING_MESSAGE } from "./ssh-bin";
 
 export const DEFAULT_EXEC_TIMEOUT_MS = 60_000;
 export const MAX_EXEC_TIMEOUT_MS = 300_000;
@@ -309,6 +310,11 @@ async function sshCliTransport(
   timeoutMs: number,
   wrap = true,
 ): Promise<ExecTransportResult> {
+  const sshPath = resolveSsh();
+  if (!sshPath) {
+    throw new Error(SSH_MISSING_MESSAGE);
+  }
+
   const dir = await mkdtemp(join(tmpdir(), "agent-exec-"));
   const keyPath = join(dir, `id-${randomUUID()}`);
   await writeFile(keyPath, normalizePrivateKey(config.privateKey), {
@@ -330,6 +336,7 @@ async function sshCliTransport(
       keyPath,
       timeoutMs,
       connectTimeoutSec,
+      sshPath,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -342,10 +349,11 @@ function runSsh(
   keyPath: string,
   timeoutMs: number,
   connectTimeoutSec: number,
+  sshPath: string,
 ): Promise<ExecTransportResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(
-      "ssh",
+      sshPath,
       [
         "-i",
         keyPath,

@@ -1,16 +1,28 @@
 /**
  * OpenSSH keypair helpers for the agent's computer.
  *
- * Generation and public-key derivation go through `ssh-keygen` rather than
- * a hand-rolled encoder — OpenSSH's on-disk format is easy to get wrong,
- * and the CLI is already required for the exec transport.
+ * Generation and public-key derivation use `micro-key-producer`, not
+ * `ssh-keygen`. OpenSSH's on-disk format is easy to get wrong, and the
+ * Railway image the API deploys to does not ship `openssh-client` — spawning
+ * `ssh-keygen` left Computer with no key and Regenerate showing
+ * "Could not generate a key."
+ *
+ * Leftover private keys that aren't OpenSSH-format still fall through to
+ * `ssh-keygen -y` when the binary is present.
  */
 
 import { spawn } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  formatPublicKey,
+  getKeys,
+  PrivateExport,
+} from "micro-key-producer/ssh.js";
+import { randomBytes } from "micro-key-producer/utils.js";
 import { normalizePrivateKey } from "./exec";
+import { resolveBinary } from "./ssh-bin";
 
 export const SSH_KEY_COMMENT = "community-os-computer";
 
@@ -63,40 +75,28 @@ export async function nextComputerSshKeys(
 }
 
 export async function generateEd25519KeyPair(): Promise<SshKeyPair> {
-  const dir = await mkdtemp(join(tmpdir(), "agent-ssh-"));
-  const keyPath = join(dir, "id_ed25519");
-  try {
-    const result = await runSshKeygen([
-      "-t",
-      "ed25519",
-      "-N",
-      "",
-      "-f",
-      keyPath,
-      "-C",
-      SSH_KEY_COMMENT,
-      "-q",
-    ]);
-    if (result.code !== 0) {
-      throw new Error(result.stderr.trim() || "ssh-keygen failed");
-    }
-
-    const privateKey = await readFile(keyPath, "utf8");
-    const publicKey = (await readFile(`${keyPath}.pub`, "utf8")).trim();
-    if (!privateKey.includes("BEGIN") || !publicKey.startsWith("ssh-")) {
-      throw new Error("ssh-keygen produced an unrecognised key");
-    }
-    return { privateKey, publicKey };
-  } finally {
-    await rm(dir, { recursive: true, force: true });
+  const produced = getKeys(randomBytes(32), SSH_KEY_COMMENT);
+  const privateKey = produced.privateKey.endsWith("\n")
+    ? produced.privateKey
+    : `${produced.privateKey}\n`;
+  const publicKey = produced.publicKey.trim();
+  if (
+    !privateKey.includes("BEGIN OPENSSH PRIVATE KEY") ||
+    !publicKey.startsWith("ssh-ed25519 ")
+  ) {
+    throw new Error("key producer produced an unrecognised key");
   }
+  return { privateKey, publicKey };
 }
 
 export async function derivePublicKey(privateKey: string): Promise<string> {
+  const body = normalizePrivateKey(privateKey);
+  const fromOpenSsh = publicKeyFromOpenSshPrivate(body);
+  if (fromOpenSsh) return fromOpenSsh;
+
   const dir = await mkdtemp(join(tmpdir(), "agent-ssh-"));
   const keyPath = join(dir, "id");
   try {
-    const body = normalizePrivateKey(privateKey);
     await writeFile(keyPath, body.endsWith("\n") ? body : `${body}\n`, {
       encoding: "utf8",
       mode: 0o600,
@@ -120,11 +120,32 @@ export async function derivePublicKey(privateKey: string): Promise<string> {
   }
 }
 
+function publicKeyFromOpenSshPrivate(privateKey: string): string | null {
+  try {
+    const decoded = PrivateExport.decode(privateKey);
+    const first = decoded.keys[0];
+    if (!first) return null;
+    const comment = first.privKey.comment;
+    return formatPublicKey(
+      first.pubKey.pubKey,
+      comment === "" ? undefined : comment,
+    ).trim();
+  } catch {
+    return null;
+  }
+}
+
 function runSshKeygen(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ssh-keygen", args, {
+    const sshKeygen = resolveBinary("ssh-keygen");
+    if (!sshKeygen) {
+      reject(new Error("ssh-keygen is not installed on this host"));
+      return;
+    }
+
+    const proc = spawn(sshKeygen, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
