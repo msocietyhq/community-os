@@ -21,7 +21,11 @@ import {
 } from "@community-os/shared/bot-settings";
 import { getHistory, getSettings } from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
-import { runComputerAgent, COMPUTER_TOOL_DESCRIPTION } from "./agents/computer";
+import { runComputerAgent } from "./agents/computer";
+import {
+  COMPUTER_TOOL_DESCRIPTION,
+  COMPUTER_QUERY_DESCRIPTION,
+} from "./agents/computer-prompt";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
@@ -354,11 +358,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
     computer: tool({
       description: COMPUTER_TOOL_DESCRIPTION,
       inputSchema: z.object({
-        query: z
-          .string()
-          .describe(
-            "What to accomplish on the remote VM. Describe the outcome, not the commands.",
-          ),
+        query: z.string().describe(COMPUTER_QUERY_DESCRIPTION),
       }),
       execute: async ({ query }) => {
         const snapshot = await ensureComputerSshKey().catch((err) => {

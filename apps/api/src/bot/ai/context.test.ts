@@ -666,6 +666,8 @@ describe("system prompt composition", () => {
     expect(withComputer.system).toContain(
       "Delegate the outcome you want — not the commands",
     );
+    expect(withComputer.system).toContain("cannot see this conversation");
+    expect(withComputer.system).toContain("all relevant context");
     expect(withComputer.system).toContain(
       "Running commands on a persistent remote Linux VM",
     );

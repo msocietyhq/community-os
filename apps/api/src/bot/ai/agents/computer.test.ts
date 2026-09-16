@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   COMPUTER_AGENT_SYSTEM,
+  COMPUTER_QUERY_DESCRIPTION,
   COMPUTER_TOOL_DESCRIPTION,
 } from "./computer-prompt";
 import { COMPUTER_AGENT_STEPS } from "../agent-steps";
@@ -14,6 +15,20 @@ describe("COMPUTER_TOOL_DESCRIPTION", () => {
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("check back later");
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("10 minutes");
   });
+
+  test("tells the parent the sub-agent cannot see this conversation", () => {
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("cannot see this conversation");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("all relevant context");
+  });
+});
+
+describe("COMPUTER_QUERY_DESCRIPTION", () => {
+  test("requires a self-contained briefing", () => {
+    expect(COMPUTER_QUERY_DESCRIPTION).toContain("self-contained");
+    expect(COMPUTER_QUERY_DESCRIPTION).toContain("only this string");
+    expect(COMPUTER_QUERY_DESCRIPTION).toContain("outcome");
+    expect(COMPUTER_QUERY_DESCRIPTION).toContain("constraints");
+  });
 });
 
 describe("COMPUTER_AGENT_SYSTEM", () => {
@@ -25,6 +40,11 @@ describe("COMPUTER_AGENT_SYSTEM", () => {
     expect(COMPUTER_AGENT_SYSTEM).toContain("no polling");
     expect(COMPUTER_AGENT_SYSTEM).toContain("check back later");
     expect(COMPUTER_AGENT_SYSTEM).toContain("10 minutes");
+  });
+
+  test("tells the sub-agent it only has the parent's briefing", () => {
+    expect(COMPUTER_AGENT_SYSTEM).toContain("only the briefing");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("unstated");
   });
 });
 
