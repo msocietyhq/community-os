@@ -11,7 +11,9 @@ import {
 import { isRole, type Role } from "@community-os/shared/constants";
 import {
   BOT_SETTINGS,
+  EDITABLE_SETTING_KEYS,
   SETTING_KEYS,
+  isEditableSetting,
   publicSettingValue,
   optionsFor,
   isSettingKey,
@@ -60,6 +62,7 @@ import {
   execConfigFromSnapshot,
   remoteExec,
 } from "./exec";
+import { ensureComputerSshKey } from "./computer-ssh";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -367,11 +370,15 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           .describe("Seconds to wait before aborting (default 60, max 300)"),
       }),
       execute: async ({ command, timeout_seconds }) => {
-        const config = execConfigFromSnapshot(await getSettings());
+        const snapshot = await ensureComputerSshKey().catch((err) => {
+          console.error("[main-agent:exec] ssh key generation failed:", err);
+          return getSettings();
+        });
+        const config = execConfigFromSnapshot(snapshot);
         if (!config) {
           return {
             error:
-              "The computer is not configured. An admin can set the SSH host, user and private key under /settings → Computer.",
+              "The computer is not configured. An admin can set the SSH host and user under /settings → Computer, and add the public key to the VM's authorized_keys.",
           };
         }
 
@@ -394,25 +401,27 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
 
         const snapshot = await getSettings();
         return {
-          settings: SETTING_KEYS.map((key) => {
-            const def = BOT_SETTINGS[key];
-            const format = def.format as (v: unknown) => string;
-            return {
-              key,
-              label: def.label,
-              description: def.description,
-              group: def.group,
-              current: format(snapshot[key]),
-              raw: def.secret
-                ? undefined
-                : publicSettingValue(key, snapshot[key]),
-              // The exact vocabulary for enum settings. `current` is a display
-              // label ("Sonnet 5") while the stored value is a key
-              // ("anthropic/sonnet-5"), so without this a change has to be
-              // guessed from the shape of the current value.
-              options: optionsFor(key),
-            };
-          }),
+          settings: SETTING_KEYS.filter((key) => !BOT_SETTINGS[key].hidden).map(
+            (key) => {
+              const def = BOT_SETTINGS[key];
+              const format = def.format as (v: unknown) => string;
+              return {
+                key,
+                label: def.label,
+                description: def.description,
+                group: def.group,
+                current: format(snapshot[key]),
+                raw: def.secret
+                  ? undefined
+                  : publicSettingValue(key, snapshot[key]),
+                // The exact vocabulary for enum settings. `current` is a display
+                // label ("Sonnet 5") while the stored value is a key
+                // ("anthropic/sonnet-5"), so without this a change has to be
+                // guessed from the shape of the current value.
+                options: optionsFor(key),
+              };
+            },
+          ),
         };
       },
     }),
@@ -429,7 +438,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
               // lookup just to learn what exists. Call get_settings for what
               // each key actually controls.
               key: z
-                .enum(SETTING_KEYS)
+                .enum(EDITABLE_SETTING_KEYS)
                 .describe(
                   "Which setting to change. Use get_settings if you're unsure what one controls.",
                 ),
@@ -463,6 +472,12 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           // No key check: the enum on `key` means an unknown one can't reach
           // here — the SDK rejects it and the model retries with a real key.
           const key: SettingKey = change.key;
+
+          if (!isEditableSetting(key)) {
+            return {
+              error: `${BOT_SETTINGS[key].label} can't be changed this way.`,
+            };
+          }
 
           // A bare word like `members` isn't valid JSON, so fall back to the
           // raw string — that's what enum-valued settings send.

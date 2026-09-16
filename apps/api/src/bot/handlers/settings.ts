@@ -3,9 +3,11 @@ import { createConversation } from "@grammyjs/conversations";
 import {
   BOT_SETTINGS,
   SETTING_GROUPS,
+  isEditableSetting,
   isSettingKey,
   type SettingGroup,
   type SettingKey,
+  type SettingsSnapshot,
   type SettingValue,
 } from "@community-os/shared/bot-settings";
 import { defineAbilityFor } from "@community-os/shared/abilities";
@@ -35,6 +37,7 @@ import {
   renderHistoryPage,
   HISTORY_PAGE_SIZE,
   renderIndexPage,
+  renderRegenerateConfirm,
   renderSettingPage,
   type RenderedPage,
 } from "../lib/settings-menu";
@@ -47,6 +50,7 @@ import {
 import { parseEditValue } from "../lib/settings-parse";
 import { renderWelcome } from "../lib/welcome-template";
 import { escapeHtml } from "../lib/telegram-html";
+import { ensureComputerSshKey } from "../ai/computer-ssh";
 
 export const settingsHandler = new Composer<BotContext>();
 
@@ -92,6 +96,7 @@ async function requireAdmin(ctx: BotContext): Promise<AdminActor | null> {
  * rather than a permissions refactor.
  */
 function canChangeSetting(key: SettingKey, role: Role): boolean {
+  if (!isEditableSetting(key)) return false;
   const required = BOT_SETTINGS[key].minRole ?? "admin";
   return ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[required];
 }
@@ -102,6 +107,18 @@ async function denied(ctx: BotContext): Promise<void> {
     return;
   }
   await ctx.reply("That's an admin-only command.");
+}
+
+async function snapshotForGroup(
+  group: SettingGroup,
+): Promise<SettingsSnapshot> {
+  if (group !== "computer") return getSettings();
+  try {
+    return await ensureComputerSshKey();
+  } catch (err) {
+    console.error("[settings] ssh key generation failed:", err);
+    return getSettings();
+  }
 }
 
 /** Answers the callback and edits the current message into a rendered page. */
@@ -151,7 +168,7 @@ settingsHandler.callbackQuery(/^set:idx:(\w+)$/, async (ctx) => {
     return;
   }
 
-  const snapshot = await getSettings();
+  const snapshot = await snapshotForGroup(group);
   await showPage(ctx, renderIndexPage(group, snapshot));
 });
 
@@ -167,8 +184,13 @@ settingsHandler.callbackQuery(/^set:view:(.+)$/, async (ctx) => {
     return;
   }
 
+  if (BOT_SETTINGS[key].hidden) {
+    await ctx.answerCallbackQuery({ text: "Unknown setting." });
+    return;
+  }
+
   const [snapshot, history] = await Promise.all([
-    getSettings(),
+    snapshotForGroup(BOT_SETTINGS[key].group),
     getHistory(key, 1),
   ]);
 
@@ -180,6 +202,49 @@ settingsHandler.callbackQuery(/^set:view:(.+)$/, async (ctx) => {
   );
 
   await showPage(ctx, page);
+});
+
+// ── SSH key regeneration ────────────────────────────────────
+
+settingsHandler.callbackQuery(/^set:regen:(.+)$/, async (ctx) => {
+  const actor = await requireAdmin(ctx);
+  if (!actor) return denied(ctx);
+
+  const key = ctx.match![1]!;
+  if (!isSettingKey(key) || !BOT_SETTINGS[key].regenerable) {
+    await ctx.answerCallbackQuery({ text: "Unknown setting." });
+    return;
+  }
+
+  await showPage(ctx, renderRegenerateConfirm(key));
+});
+
+settingsHandler.callbackQuery(/^set:regenok:(.+)$/, async (ctx) => {
+  const actor = await requireAdmin(ctx);
+  if (!actor) return denied(ctx);
+
+  const key = ctx.match![1]!;
+  if (!isSettingKey(key) || !BOT_SETTINGS[key].regenerable) {
+    await ctx.answerCallbackQuery({ text: "Unknown setting." });
+    return;
+  }
+
+  try {
+    const snapshot = await ensureComputerSshKey({ force: true, actor });
+    const [latest] = await getHistory(key, 1);
+    await showPage(
+      ctx,
+      renderSettingPage(
+        key,
+        snapshot,
+        latest ? { by: latest.actor?.name ?? null, at: latest.at } : null,
+      ),
+      "New key generated.",
+    );
+  } catch (err) {
+    console.error("[settings] ssh key regeneration failed:", err);
+    await ctx.answerCallbackQuery({ text: "Could not generate a key." });
+  }
 });
 
 // ── Apply a value ───────────────────────────────────────────
@@ -198,7 +263,9 @@ settingsHandler.callbackQuery(/^set:edit:([^:]+):(.+)$/, async (ctx) => {
 
   if (!canChangeSetting(key, actor.role)) {
     await ctx.answerCallbackQuery({
-      text: "That setting needs a higher role.",
+      text: isEditableSetting(key)
+        ? "That setting needs a higher role."
+        : "That setting can't be edited.",
     });
     return;
   }
@@ -227,7 +294,9 @@ settingsHandler.callbackQuery(/^set:reset:(.+)$/, async (ctx) => {
 
   if (!canChangeSetting(key, actor.role)) {
     await ctx.answerCallbackQuery({
-      text: "That setting needs a higher role.",
+      text: isEditableSetting(key)
+        ? "That setting needs a higher role."
+        : "That setting can't be edited.",
     });
     return;
   }
@@ -248,7 +317,9 @@ settingsHandler.callbackQuery(/^set:undo:(.+)$/, async (ctx) => {
 
   if (!canChangeSetting(key, actor.role)) {
     await ctx.answerCallbackQuery({
-      text: "That setting needs a higher role.",
+      text: isEditableSetting(key)
+        ? "That setting needs a higher role."
+        : "That setting can't be edited.",
     });
     return;
   }
@@ -467,7 +538,11 @@ async function settingsTextConversation(
   }
 
   if (!canChangeSetting(key, actor.role)) {
-    await ctx.reply("That setting needs a higher role. Nothing changed.");
+    await ctx.reply(
+      isEditableSetting(key)
+        ? "That setting needs a higher role. Nothing changed."
+        : "That setting can't be edited. Nothing changed.",
+    );
     return;
   }
 
@@ -500,6 +575,15 @@ settingsHandler.callbackQuery(/^set:text:(.+)$/, async (ctx) => {
   const key = ctx.match![1]!;
   if (!isSettingKey(key)) {
     await ctx.answerCallbackQuery({ text: "Unknown setting." });
+    return;
+  }
+
+  if (!canChangeSetting(key, actor.role)) {
+    await ctx.answerCallbackQuery({
+      text: isEditableSetting(key)
+        ? "That setting needs a higher role."
+        : "That setting can't be edited.",
+    });
     return;
   }
 

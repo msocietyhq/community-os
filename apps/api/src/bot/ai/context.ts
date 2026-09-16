@@ -54,8 +54,8 @@ export interface AgentContextInput {
    */
   chimingIn: boolean;
   /**
-   * The exec tool is registered this turn (SSH env is configured). Adds the
-   * computer to the responder role so the model knows commands run on a
+   * The exec tool is registered this turn (SSH host and user are set). Adds
+   * the computer to the responder role so the model knows commands run on a
    * remote, persistent VM rather than guessing it from the tool list alone.
    */
   hasComputer?: boolean;

@@ -292,6 +292,13 @@ export function renderSettingPage(
       break;
     }
     case "text": {
+      if (def.readonly) {
+        if (def.regenerable) {
+          keyboard.text("Regenerate", callbackFor("regen", key));
+        }
+        keyboard.row();
+        break;
+      }
       keyboard.text("Edit", callbackFor("text", key));
       if (key.startsWith("welcome.")) {
         keyboard.text("Preview", callbackFor("prev", key));
@@ -301,8 +308,10 @@ export function renderSettingPage(
     }
   }
 
+  if (!def.readonly) {
+    keyboard.text("Reset to default", callbackFor("reset", key));
+  }
   keyboard
-    .text("Reset to default", callbackFor("reset", key))
     .text("History", callbackFor("hist", key, "0"))
     .row()
     .text("‹ Back", `set:idx:${def.group}`);
@@ -327,6 +336,22 @@ export function renderSettingPage(
     `Current:  ${code(display(key, snapshot))}\n` +
     `Default:  ${code(formatValue(key, def.default))}\n` +
     `Changed:  <i>${escapeHtml(changedLine)}</i>`;
+
+  return page(text, keyboard);
+}
+
+// ── Key rotation ────────────────────────────────────────────
+
+export function renderRegenerateConfirm(key: SettingKey): RenderedPage {
+  const def = BOT_SETTINGS[key];
+  const keyboard = new InlineKeyboard()
+    .text("Regenerate now", callbackFor("regenok", key))
+    .text("Cancel", callbackFor("view", key));
+
+  const text =
+    `<b>Regenerate ${escapeHtml(def.label)}?</b>\n\n` +
+    `The VM will refuse connections until you add the new public key to ` +
+    `<code>authorized_keys</code>.`;
 
   return page(text, keyboard);
 }
