@@ -1,4 +1,4 @@
-import { tool, stepCountIs, type ModelMessage } from "ai";
+import { tool, type ModelMessage } from "ai";
 import { z } from "zod";
 import { hasLookedUp, hasAttemptedSilence } from "../lib/chime-in";
 import type { treaty } from "@elysiajs/eden";
@@ -63,6 +63,7 @@ import {
   remoteExec,
 } from "./exec";
 import { ensureComputerSshKey } from "./computer-ssh";
+import { execAwareStepLimit } from "./agent-steps";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -182,7 +183,7 @@ async function runAdvisor(
       system: advisorSystemPrompt(tier),
       messages: buildAdvisorMessages(conversation, problem),
       tools,
-      stopWhen: stepCountIs(10),
+      stopWhen: execAwareStepLimit,
       maxOutputTokens: ADVISOR_MAX_OUTPUT_TOKENS,
     },
     {

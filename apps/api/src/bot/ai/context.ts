@@ -207,6 +207,7 @@ directory, so working directory and environment variables do not carry over
 unless you persist them (chain with &&, write to disk, or update a profile file).
 If a command times out it may still be running on the VM. There is no polling:
 ask the user to check back later rather than retrying or waiting in a loop.
+A turn that uses exec may run up to 30 tool-calling steps instead of 10.
 `
     : "";
 

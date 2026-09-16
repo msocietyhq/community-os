@@ -671,6 +671,9 @@ describe("system prompt composition", () => {
     );
     expect(withComputer.system).toContain("There is no polling");
     expect(withComputer.system).toContain("check back later");
+    expect(withComputer.system).toContain(
+      "up to 30 tool-calling steps instead of 10",
+    );
     expect(without.system).not.toContain("persistent Linux VM");
   });
 
