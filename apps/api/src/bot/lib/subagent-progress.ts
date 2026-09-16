@@ -20,6 +20,7 @@ import type { MembersToolName } from "../ai/agents/members";
 import type { VenuesToolName } from "../ai/agents/venues";
 import type { ProjectsToolName } from "../ai/agents/projects";
 import type { GithubToolName } from "../ai/agents/github";
+import type { ComputerToolName } from "../ai/agents/computer";
 import type { ResearchToolName } from "../ai/agents/research";
 
 export type SubagentState = "running" | "done" | "failed";
@@ -186,6 +187,7 @@ export type TrackedToolName =
   | VenuesToolName
   | ProjectsToolName
   | GithubToolName
+  | ComputerToolName
   | ResearchToolName;
 
 /**
@@ -222,6 +224,7 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
 
   ask_user: "asking you a question",
   ai_usage: "checking AI usage",
+  exec: "running a command",
   big_brain_advisor: "consulting a stronger model",
   bigger_brain_advisor: "consulting the deepest model",
 
@@ -332,6 +335,7 @@ const TOOL_PHRASES: Partial<
       short(a.query),
     ),
   github_search_repos: (a) => wrap("searching GitHub for", short(a.query)),
+  exec: (a) => wrap("running", short(a.command)),
   fetch_url: (a) => {
     const raw = short(a.url);
     if (!raw) return undefined;
@@ -775,6 +779,7 @@ export const SUBAGENT_TOOLS: ReadonlySet<string> = new Set([
   "projects",
   "research",
   "github",
+  "computer",
   ADVISOR_TOOL_NAMES.big,
   ADVISOR_TOOL_NAMES.bigger,
 ]);

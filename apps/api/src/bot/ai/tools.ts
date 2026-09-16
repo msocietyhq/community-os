@@ -1,4 +1,4 @@
-import { tool, stepCountIs, type ModelMessage } from "ai";
+import { tool, type ModelMessage } from "ai";
 import { z } from "zod";
 import { hasLookedUp, hasAttemptedSilence } from "../lib/chime-in";
 import type { treaty } from "@elysiajs/eden";
@@ -11,13 +11,26 @@ import {
 import { isRole, type Role } from "@community-os/shared/constants";
 import {
   BOT_SETTINGS,
+  EDITABLE_SETTING_KEYS,
   SETTING_KEYS,
+  isEditableSetting,
+  publicSettingValue,
   optionsFor,
   isSettingKey,
   type SettingKey,
 } from "@community-os/shared/bot-settings";
 import { getHistory, getSettings } from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
+import {
+  executeComputerExec,
+  execInputSchema,
+  runComputerAgent,
+} from "./agents/computer";
+import {
+  COMPUTER_QUERY_DESCRIPTION,
+  COMPUTER_TOOL_DESCRIPTION,
+  PARENT_EXEC_TOOL_DESCRIPTION,
+} from "./agents/computer-prompt";
 import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
@@ -53,6 +66,9 @@ import {
   forgetMemoriesBySubject,
   incrementAccessCount,
 } from "../../services/memory.service";
+import { execConfigFromSnapshot } from "./exec";
+import { ensureComputerSshKey } from "./computer-ssh";
+import { computerAwareStepLimit } from "./agent-steps";
 
 export interface ToolContext {
   api: ReturnType<typeof treaty<App>>;
@@ -172,7 +188,7 @@ async function runAdvisor(
       system: advisorSystemPrompt(tier),
       messages: buildAdvisorMessages(conversation, problem),
       tools,
-      stopWhen: stepCountIs(10),
+      stopWhen: computerAwareStepLimit,
       maxOutputTokens: ADVISOR_MAX_OUTPUT_TOKENS,
     },
     {
@@ -344,6 +360,48 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       },
     }),
 
+    computer: tool({
+      description: COMPUTER_TOOL_DESCRIPTION,
+      inputSchema: z.object({
+        query: z.string().describe(COMPUTER_QUERY_DESCRIPTION),
+      }),
+      execute: async ({ query }) => {
+        const snapshot = await ensureComputerSshKey().catch((err) => {
+          console.error(
+            "[main-agent:computer] ssh key generation failed:",
+            err,
+          );
+          return getSettings();
+        });
+        if (!execConfigFromSnapshot(snapshot)) {
+          return "The computer is not configured. An admin can set the SSH host and user under /settings → Computer, and add the public key to the VM's authorized_keys.";
+        }
+
+        console.log("[main-agent] → computer sub-agent, query:", query);
+        const result = await withProgress(ctx, "Computer", query, (activity) =>
+          runComputerAgent(
+            query,
+            { telegramUserId: ctx.senderTelegramId, chatId: ctx.chatId },
+            activity,
+          ),
+        );
+        console.log(
+          "[main-agent] ← computer sub-agent, response:",
+          result.slice(0, 120),
+        );
+        return result;
+      },
+    }),
+
+    exec: tool({
+      description: PARENT_EXEC_TOOL_DESCRIPTION,
+      inputSchema: execInputSchema,
+      execute: async ({ command, timeout_seconds }) => {
+        console.log("[main-agent:exec]", command.slice(0, 120));
+        return executeComputerExec({ command, timeout_seconds });
+      },
+    }),
+
     get_settings: tool({
       description:
         "Read the bot's current operational settings — pauses, cost caps, chime-in behaviour, welcome messages. Only available to admins. Use this before proposing any change so you know the current values.",
@@ -354,23 +412,27 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
 
         const snapshot = await getSettings();
         return {
-          settings: SETTING_KEYS.map((key) => {
-            const def = BOT_SETTINGS[key];
-            const format = def.format as (v: unknown) => string;
-            return {
-              key,
-              label: def.label,
-              description: def.description,
-              group: def.group,
-              current: format(snapshot[key]),
-              raw: snapshot[key],
-              // The exact vocabulary for enum settings. `current` is a display
-              // label ("Sonnet 5") while the stored value is a key
-              // ("anthropic/sonnet-5"), so without this a change has to be
-              // guessed from the shape of the current value.
-              options: optionsFor(key),
-            };
-          }),
+          settings: SETTING_KEYS.filter((key) => !BOT_SETTINGS[key].hidden).map(
+            (key) => {
+              const def = BOT_SETTINGS[key];
+              const format = def.format as (v: unknown) => string;
+              return {
+                key,
+                label: def.label,
+                description: def.description,
+                group: def.group,
+                current: format(snapshot[key]),
+                raw: def.secret
+                  ? undefined
+                  : publicSettingValue(key, snapshot[key]),
+                // The exact vocabulary for enum settings. `current` is a display
+                // label ("Sonnet 5") while the stored value is a key
+                // ("anthropic/sonnet-5"), so without this a change has to be
+                // guessed from the shape of the current value.
+                options: optionsFor(key),
+              };
+            },
+          ),
         };
       },
     }),
@@ -387,7 +449,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
               // lookup just to learn what exists. Call get_settings for what
               // each key actually controls.
               key: z
-                .enum(SETTING_KEYS)
+                .enum(EDITABLE_SETTING_KEYS)
                 .describe(
                   "Which setting to change. Use get_settings if you're unsure what one controls.",
                 ),
@@ -421,6 +483,12 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           // No key check: the enum on `key` means an unknown one can't reach
           // here — the SDK rejects it and the model retries with a real key.
           const key: SettingKey = change.key;
+
+          if (!isEditableSetting(key)) {
+            return {
+              error: `${BOT_SETTINGS[key].label} can't be changed this way.`,
+            };
+          }
 
           // A bare word like `members` isn't valid JSON, so fall back to the
           // raw string — that's what enum-valued settings send.
@@ -491,7 +559,18 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           return { error: "Only admins can view settings history." };
 
         const scoped = key && isSettingKey(key) ? key : null;
-        return { history: await getHistory(scoped, limit ?? 20) };
+        const history = await getHistory(scoped, limit ?? 20);
+        return {
+          history: history.map((entry) => {
+            if (!isSettingKey(entry.key)) return entry;
+            if (!BOT_SETTINGS[entry.key].secret) return entry;
+            return {
+              ...entry,
+              from: publicSettingValue(entry.key, entry.from),
+              to: publicSettingValue(entry.key, entry.to),
+            };
+          }),
+        };
       },
     }),
 

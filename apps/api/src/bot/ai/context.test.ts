@@ -648,4 +648,46 @@ describe("system prompt composition", () => {
     expect(ctx.system).toContain("advice, considerations, suggestions");
     expect(ctx.system).toContain("Never tell someone to ask the group");
   });
+
+  test("a computer-enabled turn tells the model about the remote VM", async () => {
+    const { recaller } = makeRecaller();
+    const withComputer = await buildAgentContext(
+      baseInput({ chimingIn: false, hasComputer: true }),
+      recaller,
+    );
+    const without = await buildAgentContext(
+      baseInput({ chimingIn: false, hasComputer: false }),
+      recaller,
+    );
+
+    expect(withComputer.system).toContain(
+      "computer sub-agent that runs shell commands on a remote, persistent Linux VM",
+    );
+    expect(withComputer.system).toContain(
+      "Delegate the outcome you want — not the commands",
+    );
+    expect(withComputer.system).toContain("cannot see this conversation");
+    expect(withComputer.system).toContain("all relevant context");
+    expect(withComputer.system).toContain("verify the sub-agent's work");
+    expect(withComputer.system).toContain("check it with exec");
+    expect(withComputer.system).toContain(
+      "Running commands on a persistent remote Linux VM",
+    );
+    expect(withComputer.system).toContain("There is no polling");
+    expect(withComputer.system).toContain("check back later");
+    expect(withComputer.system).toContain("10 minutes");
+    expect(withComputer.system).toContain("delegate again");
+    expect(without.system).not.toContain("persistent Linux VM");
+  });
+
+  test("chime-in does not mention the computer even when it is configured", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: true, hasComputer: true }),
+      recaller,
+    );
+    expect(ctx.system).not.toContain("persistent Linux VM");
+    expect(ctx.system).not.toContain("exec tool");
+    expect(ctx.system).not.toContain("computer sub-agent");
+  });
 });

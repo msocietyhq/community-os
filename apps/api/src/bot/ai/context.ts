@@ -53,6 +53,12 @@ export interface AgentContextInput {
    * the responder role, and scopes recalled memories to this chat.
    */
   chimingIn: boolean;
+  /**
+   * The computer sub-agent is available this turn (SSH host and user are set).
+   * Adds the computer to the responder role so the model knows to delegate VM
+   * work rather than guessing it from the tool list alone.
+   */
+  hasComputer?: boolean;
 }
 
 /**
@@ -187,7 +193,27 @@ what you do have or move on — "no relevant hits" is your plumbing, not an answ
 }
 
 /** The role for a turn the bot was actually asked to take. */
-function responderRole(schemaSDL: string): string {
+function responderRole(schemaSDL: string, hasComputer: boolean): string {
+  const computerBullet = hasComputer
+    ? "\n- Running commands on a persistent remote Linux VM"
+    : "";
+  const computerBlock = hasComputer
+    ? `
+You have a computer sub-agent that runs shell commands on a remote, persistent Linux VM.
+Delegate the outcome you want — not the commands. It cannot see this conversation, so pack
+all relevant context into the query: constraints, paths, prior attempts, errors, anything
+it needs to finish. It keeps going until the task is done, then reports back.
+If the report is incomplete, delegate again with the missing context included. You keep
+this conversation; the next user message is a new one, so finish or hand off clearly.
+You also have exec: use it to inspect the machine and to verify the sub-agent's work.
+Do not take a computer report on trust — check it with exec before telling the user it is done.
+Do not use exec to carry out a multi-step task; that is what computer is for.
+The same machine is reused across calls, so files and installed packages persist.
+If a command times out it may still be running on the VM for up to 10 minutes, then it is killed. There is no polling:
+ask the user to check back later rather than retrying or waiting in a loop.
+`
+    : "";
+
   return `You help members with:
 - Finding information about upcoming events
 - Checking event details and attendee lists
@@ -198,7 +224,7 @@ function responderRole(schemaSDL: string): string {
 - Managing events, venues, and members (admin only)
 - Adjusting my own settings — pauses, cost caps, chime-in behaviour, welcome messages (admin only, in a DM). Proposed changes always need a button press to confirm; never claim a change has been applied.
 - Exploring the MSOCIETY GitHub org (msocietyhq): repos, issues, PRs
-- Looking things up on the live web, and reading links members share
+- Looking things up on the live web, and reading links members share${computerBullet}
 
 If a user message is short, vague or cryptic, NEVER assume — use the ask_user tool to put one
 specific question to them, then end your turn with no further text. Their reply arrives as a new
@@ -215,7 +241,7 @@ If it comes back with consulted: false, relay its tell_user message in your own 
 and then answer as best you can yourself. Never mention budgets, models or tiers.
 
 Use the research tool for anything outside community data — news, docs, release notes, or a link someone posted. Don't guess at facts that change over time; look them up and cite the source.
-
+${computerBlock}
 You have a graphql_query tool for fast reads. Use it directly for simple lookups instead of delegating to sub-agents. Delegate to sub-agents only when the user wants write operations (create/update/delete/RSVP).
 
 If the user's question seems to relate to a recent group discussion or past messages,
@@ -335,6 +361,7 @@ function getSystemPrompt(
   now: Date,
   runningModel: string,
   chimingIn: boolean,
+  hasComputer: boolean,
 ): string {
   const today = now.toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" });
 
@@ -378,7 +405,7 @@ ${blocks.join("\n\n")}`
 
   return [
     sharedPreamble(today, runningModel),
-    chimingIn ? chimeInRole() : responderRole(schemaSDL),
+    chimingIn ? chimeInRole() : responderRole(schemaSDL, hasComputer),
     messageFormatBlock(),
     memoryBlock(),
     memorySection,
@@ -499,6 +526,7 @@ export async function buildAgentContext(
       now,
       input.runningModel,
       input.chimingIn,
+      input.hasComputer === true,
     ),
     messages: [...chatHistory, { role: "user", content: enrichedQuery }],
     memories,

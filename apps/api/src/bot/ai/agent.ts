@@ -1,4 +1,4 @@
-import { stepCountIs, type ModelMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { treaty } from "@elysiajs/eden";
 import { app } from "../../app";
 import { yoga, schemaSDL } from "../../graphql";
@@ -13,6 +13,9 @@ import {
 } from "../../services/memory.service";
 import { DEFAULT_RELATIVE_CUTOFF } from "../../services/memory-ranking";
 import { buildAgentContext, type MemoryRecaller } from "./context";
+import { execConfigFromSnapshot } from "./exec";
+import { computerAwareStepLimit } from "./agent-steps";
+import { getSettings } from "../../services/bot-settings.service";
 import {
   classify,
   type AgentOutcome,
@@ -202,6 +205,7 @@ export async function runAgent({
       now: new Date(),
       chatId,
       chimingIn: policy.kind === "uninvited",
+      hasComputer: execConfigFromSnapshot(await getSettings()) !== null,
     },
     memoryRecaller,
   );
@@ -214,7 +218,7 @@ export async function runAgent({
         system,
         messages,
         tools: trackedTools,
-        stopWhen: stepCountIs(10),
+        stopWhen: computerAwareStepLimit,
         maxOutputTokens: 1024,
       },
       {

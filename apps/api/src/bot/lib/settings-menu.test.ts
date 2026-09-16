@@ -15,6 +15,7 @@ import {
   HISTORY_PAGE_SIZE,
   renderHistoryPage,
   renderIndexPage,
+  renderRegenerateConfirm,
   renderSettingPage,
   type HistoryRow,
   type RenderedPage,
@@ -66,7 +67,26 @@ describe("renderIndexPage", () => {
     const nav = page.keyboard.inline_keyboard.at(-2) ?? [];
     expect(nav).toHaveLength(2);
     expect(nav[0]?.text).toContain("Behaviour");
-    expect(nav[1]?.text).toContain("Availability");
+    expect(nav[1]?.text).toContain("Computer");
+  });
+
+  test("computer index shows host and public key, never the private key", () => {
+    const configured = {
+      ...snapshot,
+      "computer.sshHost": "vm.example",
+      "computer.sshPublicKey":
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake community-os-computer",
+      "computer.sshPrivateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n",
+    };
+    const page = renderIndexPage("computer", configured);
+    expect(page.text).toContain("SSH host — <code>vm.example</code>");
+    expect(page.text).toContain("SSH public key");
+    expect(page.text).toContain("ssh-ed25519");
+    expect(page.text).not.toContain("SSH private key");
+    expect(page.text).not.toContain("BEGIN");
+    expect(page.text).not.toContain("secret");
+    expect(labels(page)).not.toContain("SSH private key");
+    expect(labels(page)).toContain("SSH public key");
   });
 
   test("renders every group without throwing", () => {
@@ -133,6 +153,32 @@ describe("renderSettingPage", () => {
     expect(page.text).not.toContain("<b>hi</b>");
   });
 
+  test("a secret setting is not dumped onto the page", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----";
+    const hostile = { ...snapshot, "computer.sshPrivateKey": pem };
+    const page = renderSettingPage("computer.sshPrivateKey", hostile, null);
+    expect(page.text).toContain("Current:  <code>set</code>");
+    expect(page.text).not.toContain("secret-material");
+    expect(page.text).not.toContain("BEGIN");
+  });
+
+  test("the public key page shows the full key and a regenerate button", () => {
+    const pub =
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake community-os-computer";
+    const page = renderSettingPage(
+      "computer.sshPublicKey",
+      { ...snapshot, "computer.sshPublicKey": pub },
+      null,
+    );
+    expect(page.text).toContain(pub);
+    expect(page.text).toContain("authorized_keys");
+    expect(labels(page)).toContain("Regenerate");
+    expect(labels(page)).not.toContain("Edit");
+    expect(labels(page)).not.toContain("Reset to default");
+    expect(labels(page)).toContain("History");
+  });
+
   test("every generated callback fits Telegram's limit", () => {
     for (const key of SETTING_KEYS) {
       const page = renderSettingPage(key, snapshot, null);
@@ -166,11 +212,21 @@ describe("parse mode", () => {
         [],
       ),
       renderApplied([{ key: "chimeIn.enabled", from: true, to: false }]),
+      renderRegenerateConfirm("computer.sshPublicKey"),
     ];
 
     for (const page of pages) {
       expect(page.parseMode).toBe("HTML");
     }
+  });
+});
+
+describe("renderRegenerateConfirm", () => {
+  test("warns that authorized_keys must be updated", () => {
+    const page = renderRegenerateConfirm("computer.sshPublicKey");
+    expect(page.text).toContain("authorized_keys");
+    expect(labels(page)).toContain("Regenerate now");
+    expect(labels(page)).toContain("Cancel");
   });
 });
 
@@ -392,6 +448,25 @@ describe("renderHistoryPage", () => {
     );
     expect(page.text).toContain("Welcome to MSOCIETY");
     expect(page.text).not.toContain("custom → custom");
+  });
+
+  test("a secret setting's history shows set, not the value", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----";
+    const page = renderHistoryPage(
+      [
+        row({
+          key: "computer.sshPrivateKey",
+          from: "",
+          to: pem,
+        }),
+      ],
+      null,
+    );
+    expect(page.text).toContain("not set");
+    expect(page.text).toContain("set");
+    expect(page.text).not.toContain("secret-material");
+    expect(page.text).not.toContain("BEGIN");
   });
 
   // A display name is whatever the member typed into Telegram, reaching a

@@ -79,7 +79,11 @@ function display(key: SettingKey, snapshot: SettingsSnapshot): string {
  */
 function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   const def = BOT_SETTINGS[key];
-  if (def.control !== "text") return formatValue(key, snapshot[key]);
+  // Computer values are short (a host, "set", a port) and useful on the
+  // index. Welcome templates are not — they collapse to a state word.
+  if (def.secret || def.group === "computer" || def.control !== "text") {
+    return formatValue(key, snapshot[key]);
+  }
 
   const value = snapshot[key];
   if (value === null) return "silent";
@@ -288,6 +292,13 @@ export function renderSettingPage(
       break;
     }
     case "text": {
+      if (def.readonly) {
+        if (def.regenerable) {
+          keyboard.text("Regenerate", callbackFor("regen", key));
+        }
+        keyboard.row();
+        break;
+      }
       keyboard.text("Edit", callbackFor("text", key));
       if (key.startsWith("welcome.")) {
         keyboard.text("Preview", callbackFor("prev", key));
@@ -297,8 +308,10 @@ export function renderSettingPage(
     }
   }
 
+  if (!def.readonly) {
+    keyboard.text("Reset to default", callbackFor("reset", key));
+  }
   keyboard
-    .text("Reset to default", callbackFor("reset", key))
     .text("History", callbackFor("hist", key, "0"))
     .row()
     .text("‹ Back", `set:idx:${def.group}`);
@@ -310,9 +323,10 @@ export function renderSettingPage(
 
   // The full value for text settings, in a <pre> block. Entities aren't parsed
   // inside <pre>, so the admin's own markup shows as written rather than being
-  // interpreted — which is what you want when editing a template.
+  // interpreted — which is what you want when editing a template. Secrets are
+  // never dumped: only "set" / "not set" belongs on this page.
   const body =
-    def.control === "text"
+    def.control === "text" && !def.secret
       ? `\n<pre>${escapeHtml(String(snapshot[key] ?? "(silent)"))}</pre>\n`
       : "";
 
@@ -322,6 +336,22 @@ export function renderSettingPage(
     `Current:  ${code(display(key, snapshot))}\n` +
     `Default:  ${code(formatValue(key, def.default))}\n` +
     `Changed:  <i>${escapeHtml(changedLine)}</i>`;
+
+  return page(text, keyboard);
+}
+
+// ── Key rotation ────────────────────────────────────────────
+
+export function renderRegenerateConfirm(key: SettingKey): RenderedPage {
+  const def = BOT_SETTINGS[key];
+  const keyboard = new InlineKeyboard()
+    .text("Regenerate now", callbackFor("regenok", key))
+    .text("Cancel", callbackFor("view", key));
+
+  const text =
+    `<b>Regenerate ${escapeHtml(def.label)}?</b>\n\n` +
+    `The VM will refuse connections until you add the new public key to ` +
+    `<code>authorized_keys</code>.`;
 
   return page(text, keyboard);
 }
@@ -457,6 +487,18 @@ function formatHistoricValue(key: string, value: unknown): string {
   if (!def) return rawHistoricValue(value);
 
   const parsed = def.schema.safeParse(value);
+
+  // Secrets stay collapsed even when the stored value no longer parses —
+  // a private key must not appear in the trail an admin screenshots.
+  if (def.secret) {
+    if (!parsed.success) {
+      return typeof value === "string" && value.trim() !== ""
+        ? "set"
+        : "not set";
+    }
+    return formatValue(key as SettingKey, parsed.data);
+  }
+
   if (!parsed.success) return rawHistoricValue(value);
 
   // A text setting's own `format` collapses to "custom", which as a history

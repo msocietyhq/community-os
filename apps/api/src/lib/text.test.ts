@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clip, formatCompact, truncate } from "./text";
+import { clip, clipTail, formatCompact, truncate } from "./text";
 
 const LONE =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
@@ -73,6 +73,25 @@ describe("clip", () => {
     const out = clip("abcdefghij", 5);
     expect(out).toBe("abcd…");
     expect(out.length).toBe(5);
+  });
+});
+
+describe("clipTail", () => {
+  test("leaves text within budget untouched", () => {
+    expect(clipTail("hello", 10)).toBe("hello");
+  });
+
+  test("keeps the end and stays within the budget", () => {
+    const out = clipTail("abcdefghij", 5);
+    expect(out).toBe("…ghij");
+    expect(out.length).toBe(5);
+  });
+
+  test("never splits a surrogate pair at the cut", () => {
+    const text = "ab\u{1F600}cd";
+    for (let i = 0; i <= text.length; i++) {
+      expect(LONE.test(clipTail(text, i))).toBe(false);
+    }
   });
 });
 

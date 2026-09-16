@@ -3,12 +3,16 @@ import {
   BOT_SETTINGS,
   SETTING_KEYS,
   SETTING_GROUPS,
+  EDITABLE_SETTING_KEYS,
   callbackFor,
   isPaused,
+  isEditableSetting,
+  keysInGroup,
   previewText,
   type PauseState,
   type SettingKey,
   optionsFor,
+  publicSettingValue,
 } from "./bot-settings";
 import {
   AI_TIERS,
@@ -43,7 +47,7 @@ describe("registry invariants", () => {
   // Telegram rejects callback_data over 64 bytes. This is the permanent guard.
   test("every generated callback fits in 64 bytes", () => {
     for (const key of SETTING_KEYS) {
-      for (const prefix of ["view", "reset", "undo"]) {
+      for (const prefix of ["view", "reset", "undo", "regen", "regenok"]) {
         const data = callbackFor(prefix, key);
         expect(
           Buffer.byteLength(data, "utf8"),
@@ -51,6 +55,22 @@ describe("registry invariants", () => {
         ).toBeLessThanOrEqual(64);
       }
     }
+  });
+
+  test("the computer group exposes the public key and hides the private key", () => {
+    const keys = keysInGroup("computer");
+    expect(keys).toContain("computer.sshPublicKey");
+    expect(keys).not.toContain("computer.sshPrivateKey");
+    expect(BOT_SETTINGS["computer.sshPrivateKey"].hidden).toBe(true);
+    expect(BOT_SETTINGS["computer.sshPrivateKey"].secret).toBe(true);
+    expect(BOT_SETTINGS["computer.sshPublicKey"].readonly).toBe(true);
+    expect(BOT_SETTINGS["computer.sshPublicKey"].regenerable).toBe(true);
+    expect(isEditableSetting("computer.sshPrivateKey")).toBe(false);
+    expect(isEditableSetting("computer.sshPublicKey")).toBe(false);
+    expect(isEditableSetting("computer.sshHost")).toBe(true);
+    expect(EDITABLE_SETTING_KEYS).not.toContain("computer.sshPrivateKey");
+    expect(EDITABLE_SETTING_KEYS).not.toContain("computer.sshPublicKey");
+    expect(EDITABLE_SETTING_KEYS).toContain("computer.sshHost");
   });
 
   // An edit callback carries the chosen value, so it is much longer than the
@@ -100,14 +120,48 @@ describe("registry invariants", () => {
     }
   });
 
+  test("secret settings never format to their contents", () => {
+    for (const key of SETTING_KEYS) {
+      const def = BOT_SETTINGS[key];
+      if (!def.secret) continue;
+      const format = def.format as (v: unknown) => string;
+      const out = format("-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n");
+      expect(out).not.toContain("BEGIN");
+      expect(out).not.toContain("secret");
+    }
+  });
+
   test("format never throws on the default value", () => {
     for (const key of SETTING_KEYS) {
       const def = BOT_SETTINGS[key];
-      // Each entry's format is typed to its own value; across the key union
-      // that collapses to an uncallable intersection, so narrow once here.
       const format = def.format as (v: unknown) => string;
       expect(typeof format(def.default)).toBe("string");
     }
+  });
+});
+
+describe("publicSettingValue", () => {
+  test("passes ordinary values through", () => {
+    expect(publicSettingValue("chimeIn.enabled", true)).toBe(true);
+    expect(publicSettingValue("computer.sshHost", "vm.example")).toBe(
+      "vm.example",
+    );
+  });
+
+  test("never returns a secret's contents", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----";
+    expect(publicSettingValue("computer.sshPrivateKey", pem)).toBe("set");
+    expect(publicSettingValue("computer.sshPrivateKey", "")).toBe("not set");
+    expect(publicSettingValue("computer.sshPrivateKey", pem)).not.toContain(
+      "BEGIN",
+    );
+  });
+
+  test("the public key is shown as-is", () => {
+    const pub =
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake community-os-computer";
+    expect(publicSettingValue("computer.sshPublicKey", pub)).toBe(pub);
   });
 });
 

@@ -12,6 +12,7 @@ export const SETTING_GROUPS = [
   "cost",
   "behaviour",
   "welcome",
+  "computer",
 ] as const;
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
@@ -20,6 +21,7 @@ export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
   cost: "Cost",
   behaviour: "Behaviour",
   welcome: "Welcome",
+  computer: "Computer",
 };
 
 /** Tells the menu how to render the value editor for a setting. */
@@ -44,6 +46,27 @@ export interface SettingDef<T> {
   format: (v: T) => string;
   /** Minimum role that may change this. Defaults to "admin". */
   minRole?: Role;
+  /**
+   * The stored value is never shown in the menu, in history, or to the AI —
+   * only whether it is set. For private keys and similar secrets.
+   */
+  secret?: boolean;
+  /**
+   * Omitted from the menu, from `get_settings`, and from the AI's change
+   * vocabulary. Still stored and used internally — a private key the
+   * harness needs but an admin must never see.
+   */
+  hidden?: boolean;
+  /**
+   * Shown, but the menu and the AI cannot write it. The system fills it
+   * (generated keys) or it is derived from another setting.
+   */
+  readonly?: boolean;
+  /**
+   * Offer a Regenerate button on the setting's page. Only meaningful on a
+   * readonly setting whose value is produced by the system.
+   */
+  regenerable?: boolean;
 }
 
 /**
@@ -435,6 +458,62 @@ export const BOT_SETTINGS = {
     control: "toggle",
     format: onOff,
   }),
+
+  // ── computer ──
+  "computer.sshHost": def<string>({
+    schema: z.string().max(253),
+    default: "",
+    label: "SSH host",
+    description:
+      "Hostname or IP of the persistent Linux VM the agent runs commands on. Empty disables the exec tool.",
+    group: "computer",
+    control: "text",
+    format: (v) => (v.trim() === "" ? "not set" : v),
+  }),
+  "computer.sshUser": def<string>({
+    schema: z.string().max(64),
+    default: "",
+    label: "SSH user",
+    description:
+      "Linux user the harness logs in as when running a command on the remote VM. Empty disables the exec tool.",
+    group: "computer",
+    control: "text",
+    format: (v) => (v.trim() === "" ? "not set" : v),
+  }),
+  "computer.sshPublicKey": def<string>({
+    schema: z.string().max(2000),
+    default: "",
+    label: "SSH public key",
+    description:
+      "Add this line to authorized_keys on the VM so the bot can log in. The matching private key is generated once and never shown. Regenerating replaces the pair — update authorized_keys after.",
+    group: "computer",
+    control: "text",
+    readonly: true,
+    regenerable: true,
+    format: (v) => (v.trim() === "" ? "not generated" : previewText(v)),
+  }),
+  "computer.sshPrivateKey": def<string>({
+    schema: z.string().max(8000),
+    default: "",
+    label: "SSH private key",
+    description:
+      "Private key used to log into the VM. Generated automatically, stored, never shown back, and never given to the AI.",
+    group: "computer",
+    control: "text",
+    secret: true,
+    hidden: true,
+    format: (v) => (v.trim() === "" ? "not set" : "set"),
+  }),
+  "computer.sshPort": def<number>({
+    schema: z.coerce.number().int().min(1).max(65535),
+    default: 22,
+    label: "SSH port",
+    description:
+      "TCP port for SSH on the remote VM. 22 is the default; change it if the machine listens elsewhere.",
+    group: "computer",
+    control: "text",
+    format: (v) => String(v),
+  }),
 };
 
 export type SettingKey = keyof typeof BOT_SETTINGS;
@@ -455,11 +534,41 @@ export const SETTING_KEYS = Object.keys(BOT_SETTINGS) as [
 ];
 
 export function keysInGroup(group: SettingGroup): SettingKey[] {
-  return SETTING_KEYS.filter((k) => BOT_SETTINGS[k].group === group);
+  return SETTING_KEYS.filter(
+    (k) => BOT_SETTINGS[k].group === group && !BOT_SETTINGS[k].hidden,
+  );
 }
 
 export function isSettingKey(value: string): value is SettingKey {
   return value in BOT_SETTINGS;
+}
+
+/** Hidden and readonly settings cannot be written from the menu or the AI. */
+export function isEditableSetting(key: SettingKey): boolean {
+  const def = BOT_SETTINGS[key];
+  return !def.hidden && !def.readonly;
+}
+
+/**
+ * Keys the AI may propose a change for. Same non-empty-tuple trick as
+ * `SETTING_KEYS`, so it can seed a `z.enum` without a free string.
+ */
+export const EDITABLE_SETTING_KEYS = SETTING_KEYS.filter(isEditableSetting) as [
+  SettingKey,
+  ...SettingKey[],
+];
+
+/**
+ * A value safe to show an admin or the AI. Secret settings collapse to
+ * "set" / "not set" so a private key cannot leak through get_settings,
+ * history, or a confirmation card.
+ */
+export function publicSettingValue(key: SettingKey, value: unknown): unknown {
+  const def = BOT_SETTINGS[key];
+  if (!def.secret) return value;
+  const format = def.format as (v: unknown) => string;
+  const parsed = def.schema.safeParse(value);
+  return format(parsed.success ? parsed.data : def.default);
 }
 
 /**

@@ -26,6 +26,7 @@ import { membershipMiddleware, warmUpKnownIds } from "./lib/auto-register";
 import { photoSyncMiddleware } from "./lib/photo-sync";
 import { telegramMessageLoggerMiddleware } from "./lib/telegram-message-logger";
 import { env } from "../env";
+import { reapOrphanedComputerExecs } from "./ai/computer-reaper";
 
 const ALLOWED_UPDATES = [
   "message",
@@ -129,6 +130,13 @@ export async function initBot(): Promise<void> {
   });
 
   startDigestScheduler();
+
+  // Crash leftovers on the computer: hangup is ignored so a timed-out exec
+  // outlives our SSH, and a restart would otherwise leave them until the
+  // 10-minute timeout. Fire-and-forget — a missing host must not block polling.
+  reapOrphanedComputerExecs().catch((err) => {
+    console.error("[computer] exec reaper failed:", err);
+  });
 
   console.log(`Bot @${bot.botInfo.username} initialized`);
 }

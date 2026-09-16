@@ -10,13 +10,17 @@ import { db } from "../db";
 import { auditLog, botSettings, user } from "../db/schema";
 import { createAuditEntry } from "../middleware/audit";
 
-export type ChangeSource = "menu" | "ai_draft";
+export type ChangeSource = "menu" | "ai_draft" | "system";
 
 export interface Actor {
-  userId: string;
+  /** Null for a system write — generated keys have no human author. */
+  userId: string | null;
   source: ChangeSource;
   rationale?: string;
 }
+
+/** Auto-generated settings (the computer SSH pair) write as this. */
+export const SYSTEM_ACTOR: Actor = { userId: null, source: "system" };
 
 export interface AppliedChange {
   key: SettingKey;
@@ -118,7 +122,7 @@ async function audit(
     action,
     oldValue: { value: from },
     newValue: { value: to, source: actor.source, rationale: actor.rationale },
-    performedBy: actor.userId,
+    performedBy: actor.userId ?? undefined,
   });
 }
 

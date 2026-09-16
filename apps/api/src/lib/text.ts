@@ -45,6 +45,25 @@ export function clip(text: string, max: number): string {
 }
 
 /**
+ * Like `clip`, but keeps the tail. A long-running command's latest lines are
+ * what you need to know whether it is still making progress.
+ */
+export function clipTail(text: string, max: number): string {
+  if (text.length <= max) return text;
+  if (max <= 1) return "…".slice(0, max);
+
+  const budget = max - 1;
+  const segments = [...segmenter.segment(text)].map((s) => s.segment);
+  let out = "";
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const segment = segments[i]!;
+    if (out.length + segment.length > budget) break;
+    out = segment + out;
+  }
+  return `…${out}`;
+}
+
+/**
  * Compact number for display: 999 → "999", 16206 → "16.2K", 2.5e6 → "2.5M".
  *
  * `Intl` rather than manual thresholds — the hand-rolled version rendered
