@@ -3,6 +3,7 @@ import {
   clampExecTimeoutMs,
   DEFAULT_EXEC_TIMEOUT_MS,
   EXEC_TOOL_DESCRIPTION,
+  execConfigFromSnapshot,
   formatExecResult,
   MAX_EXEC_TIMEOUT_MS,
   MAX_STDERR_CHARS,
@@ -13,6 +14,10 @@ import {
   type ExecTransportResult,
   type RemoteExecConfig,
 } from "./exec";
+import {
+  BOT_SETTINGS,
+  type SettingsSnapshot,
+} from "@community-os/shared/bot-settings";
 
 const PEM = `-----BEGIN OPENSSH PRIVATE KEY-----
 abc
@@ -39,15 +44,15 @@ describe("remoteExecConfigFrom", () => {
     expect(remoteExecConfigFrom({})).toBeNull();
     expect(
       remoteExecConfigFrom({
-        EXEC_SSH_HOST: "vm.example",
-        EXEC_SSH_USER: "agent",
+        host: "vm.example",
+        username: "agent",
       }),
     ).toBeNull();
     expect(
       remoteExecConfigFrom({
-        EXEC_SSH_HOST: "  ",
-        EXEC_SSH_USER: "agent",
-        EXEC_SSH_PRIVATE_KEY: PEM,
+        host: "  ",
+        username: "agent",
+        privateKey: PEM,
       }),
     ).toBeNull();
   });
@@ -55,10 +60,37 @@ describe("remoteExecConfigFrom", () => {
   test("returns a config when all three are set", () => {
     expect(
       remoteExecConfigFrom({
-        EXEC_SSH_HOST: " vm.example ",
-        EXEC_SSH_USER: "agent",
-        EXEC_SSH_PRIVATE_KEY: PEM,
-        EXEC_SSH_PORT: 2222,
+        host: " vm.example ",
+        username: "agent",
+        privateKey: PEM,
+        port: 2222,
+      }),
+    ).toEqual({
+      host: "vm.example",
+      username: "agent",
+      privateKey: PEM,
+      port: 2222,
+    });
+  });
+});
+
+describe("execConfigFromSnapshot", () => {
+  const empty = Object.fromEntries(
+    Object.entries(BOT_SETTINGS).map(([key, def]) => [key, def.default]),
+  ) as SettingsSnapshot;
+
+  test("defaults are unconfigured", () => {
+    expect(execConfigFromSnapshot(empty)).toBeNull();
+  });
+
+  test("host, user and key together enable the computer", () => {
+    expect(
+      execConfigFromSnapshot({
+        ...empty,
+        "computer.sshHost": "vm.example",
+        "computer.sshUser": "agent",
+        "computer.sshPrivateKey": PEM,
+        "computer.sshPort": 2222,
       }),
     ).toEqual({
       host: "vm.example",

@@ -9,6 +9,7 @@ import {
   type PauseState,
   type SettingKey,
   optionsFor,
+  publicSettingValue,
 } from "./bot-settings";
 import {
   AI_TIERS,
@@ -100,14 +101,42 @@ describe("registry invariants", () => {
     }
   });
 
+  test("secret settings never format to their contents", () => {
+    for (const key of SETTING_KEYS) {
+      const def = BOT_SETTINGS[key];
+      if (!def.secret) continue;
+      const format = def.format as (v: unknown) => string;
+      const out = format("-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n");
+      expect(out).not.toContain("BEGIN");
+      expect(out).not.toContain("secret");
+    }
+  });
+
   test("format never throws on the default value", () => {
     for (const key of SETTING_KEYS) {
       const def = BOT_SETTINGS[key];
-      // Each entry's format is typed to its own value; across the key union
-      // that collapses to an uncallable intersection, so narrow once here.
       const format = def.format as (v: unknown) => string;
       expect(typeof format(def.default)).toBe("string");
     }
+  });
+});
+
+describe("publicSettingValue", () => {
+  test("passes ordinary values through", () => {
+    expect(publicSettingValue("chimeIn.enabled", true)).toBe(true);
+    expect(publicSettingValue("computer.sshHost", "vm.example")).toBe(
+      "vm.example",
+    );
+  });
+
+  test("never returns a secret's contents", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----";
+    expect(publicSettingValue("computer.sshPrivateKey", pem)).toBe("set");
+    expect(publicSettingValue("computer.sshPrivateKey", "")).toBe("not set");
+    expect(publicSettingValue("computer.sshPrivateKey", pem)).not.toContain(
+      "BEGIN",
+    );
   });
 });
 

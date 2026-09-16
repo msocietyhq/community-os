@@ -12,6 +12,7 @@ import { isRole, type Role } from "@community-os/shared/constants";
 import {
   BOT_SETTINGS,
   SETTING_KEYS,
+  publicSettingValue,
   optionsFor,
   isSettingKey,
   type SettingKey,
@@ -53,12 +54,11 @@ import {
   forgetMemoriesBySubject,
   incrementAccessCount,
 } from "../../services/memory.service";
-import { env } from "../../env";
 import {
   DEFAULT_EXEC_TIMEOUT_MS,
   EXEC_TOOL_DESCRIPTION,
+  execConfigFromSnapshot,
   remoteExec,
-  remoteExecConfigFrom,
 } from "./exec";
 
 export interface ToolContext {
@@ -233,7 +233,6 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
   const runVenuesAgent = createVenuesAgent(ctx);
   const runProjectsAgent = createProjectsAgent(ctx);
   const runResearchAgent = createResearchAgent(ctx);
-  const execConfig = remoteExecConfigFrom(env);
 
   return {
     graphql_query: tool({
@@ -352,36 +351,38 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       },
     }),
 
-    ...(execConfig
-      ? {
-          exec: tool({
-            description: EXEC_TOOL_DESCRIPTION,
-            inputSchema: z.object({
-              command: z
-                .string()
-                .describe(
-                  "Shell command to run on the remote VM. Executed automatically — do not wrap in ssh.",
-                ),
-              timeout_seconds: z
-                .number()
-                .min(1)
-                .max(300)
-                .optional()
-                .describe(
-                  "Seconds to wait before aborting (default 60, max 300)",
-                ),
-            }),
-            execute: async ({ command, timeout_seconds }) => {
-              console.log("[main-agent:exec]", command.slice(0, 120));
-              return remoteExec(command, execConfig, {
-                timeoutMs: timeout_seconds
-                  ? timeout_seconds * 1000
-                  : DEFAULT_EXEC_TIMEOUT_MS,
-              });
-            },
-          }),
+    exec: tool({
+      description: EXEC_TOOL_DESCRIPTION,
+      inputSchema: z.object({
+        command: z
+          .string()
+          .describe(
+            "Shell command to run on the remote VM. Executed automatically — do not wrap in ssh.",
+          ),
+        timeout_seconds: z
+          .number()
+          .min(1)
+          .max(300)
+          .optional()
+          .describe("Seconds to wait before aborting (default 60, max 300)"),
+      }),
+      execute: async ({ command, timeout_seconds }) => {
+        const config = execConfigFromSnapshot(await getSettings());
+        if (!config) {
+          return {
+            error:
+              "The computer is not configured. An admin can set the SSH host, user and private key under /settings → Computer.",
+          };
         }
-      : {}),
+
+        console.log("[main-agent:exec]", command.slice(0, 120));
+        return remoteExec(command, config, {
+          timeoutMs: timeout_seconds
+            ? timeout_seconds * 1000
+            : DEFAULT_EXEC_TIMEOUT_MS,
+        });
+      },
+    }),
 
     get_settings: tool({
       description:
@@ -402,7 +403,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
               description: def.description,
               group: def.group,
               current: format(snapshot[key]),
-              raw: snapshot[key],
+              raw: def.secret
+                ? undefined
+                : publicSettingValue(key, snapshot[key]),
               // The exact vocabulary for enum settings. `current` is a display
               // label ("Sonnet 5") while the stored value is a key
               // ("anthropic/sonnet-5"), so without this a change has to be
@@ -530,7 +533,18 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
           return { error: "Only admins can view settings history." };
 
         const scoped = key && isSettingKey(key) ? key : null;
-        return { history: await getHistory(scoped, limit ?? 20) };
+        const history = await getHistory(scoped, limit ?? 20);
+        return {
+          history: history.map((entry) => {
+            if (!isSettingKey(entry.key)) return entry;
+            if (!BOT_SETTINGS[entry.key].secret) return entry;
+            return {
+              ...entry,
+              from: publicSettingValue(entry.key, entry.from),
+              to: publicSettingValue(entry.key, entry.to),
+            };
+          }),
+        };
       },
     }),
 

@@ -2,8 +2,8 @@
  * Remote shell for the agent's `exec` tool.
  *
  * The model only sees a command; this module is the harness that SSHs to a
- * long-lived VM using host/user/key from env. Connection details never belong
- * in the tool schema or the prompt.
+ * long-lived VM using host/user/key from bot settings. Connection details
+ * never belong in the tool schema or the prompt.
  */
 
 import { spawn } from "node:child_process";
@@ -12,6 +12,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clip } from "../../lib/text";
+import type { SettingsSnapshot } from "@community-os/shared/bot-settings";
 
 export const DEFAULT_EXEC_TIMEOUT_MS = 60_000;
 export const MAX_EXEC_TIMEOUT_MS = 300_000;
@@ -70,22 +71,34 @@ export interface RemoteExecFailure {
 
 export type RemoteExecResult = RemoteExecSuccess | RemoteExecFailure;
 
-export function remoteExecConfigFrom(env: {
-  EXEC_SSH_HOST?: string;
-  EXEC_SSH_USER?: string;
-  EXEC_SSH_PRIVATE_KEY?: string;
-  EXEC_SSH_PORT?: number;
+export function remoteExecConfigFrom(input: {
+  host?: string | null;
+  username?: string | null;
+  privateKey?: string | null;
+  port?: number | null;
 }): RemoteExecConfig | null {
-  const host = env.EXEC_SSH_HOST?.trim();
-  const username = env.EXEC_SSH_USER?.trim();
-  const privateKey = env.EXEC_SSH_PRIVATE_KEY?.trim();
+  const host = input.host?.trim();
+  const username = input.username?.trim();
+  const privateKey = input.privateKey?.trim();
   if (!host || !username || !privateKey) return null;
   return {
     host,
     username,
     privateKey,
-    ...(env.EXEC_SSH_PORT ? { port: env.EXEC_SSH_PORT } : {}),
+    ...(input.port ? { port: input.port } : {}),
   };
+}
+
+/** Reads the Computer group out of a settings snapshot. */
+export function execConfigFromSnapshot(
+  settings: SettingsSnapshot,
+): RemoteExecConfig | null {
+  return remoteExecConfigFrom({
+    host: settings["computer.sshHost"],
+    username: settings["computer.sshUser"],
+    privateKey: settings["computer.sshPrivateKey"],
+    port: settings["computer.sshPort"],
+  });
 }
 
 /**

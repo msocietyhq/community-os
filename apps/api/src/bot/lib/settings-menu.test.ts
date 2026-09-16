@@ -66,7 +66,20 @@ describe("renderIndexPage", () => {
     const nav = page.keyboard.inline_keyboard.at(-2) ?? [];
     expect(nav).toHaveLength(2);
     expect(nav[0]?.text).toContain("Behaviour");
-    expect(nav[1]?.text).toContain("Availability");
+    expect(nav[1]?.text).toContain("Computer");
+  });
+
+  test("computer index shows host and set-state, not a collapsed custom word", () => {
+    const configured = {
+      ...snapshot,
+      "computer.sshHost": "vm.example",
+      "computer.sshPrivateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n",
+    };
+    const page = renderIndexPage("computer", configured);
+    expect(page.text).toContain("SSH host — <code>vm.example</code>");
+    expect(page.text).toContain("SSH private key — <code>set</code>");
+    expect(page.text).not.toContain("BEGIN");
+    expect(page.text).not.toContain("secret");
   });
 
   test("renders every group without throwing", () => {
@@ -131,6 +144,16 @@ describe("renderSettingPage", () => {
     const page = renderSettingPage("welcome.newMemberText", hostile, null);
     expect(page.text).toContain("&lt;b&gt;hi&lt;/b&gt; &amp; bye");
     expect(page.text).not.toContain("<b>hi</b>");
+  });
+
+  test("a secret setting is not dumped onto the page", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----";
+    const hostile = { ...snapshot, "computer.sshPrivateKey": pem };
+    const page = renderSettingPage("computer.sshPrivateKey", hostile, null);
+    expect(page.text).toContain("Current:  <code>set</code>");
+    expect(page.text).not.toContain("secret-material");
+    expect(page.text).not.toContain("BEGIN");
   });
 
   test("every generated callback fits Telegram's limit", () => {
@@ -392,6 +415,25 @@ describe("renderHistoryPage", () => {
     );
     expect(page.text).toContain("Welcome to MSOCIETY");
     expect(page.text).not.toContain("custom → custom");
+  });
+
+  test("a secret setting's history shows set, not the value", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----";
+    const page = renderHistoryPage(
+      [
+        row({
+          key: "computer.sshPrivateKey",
+          from: "",
+          to: pem,
+        }),
+      ],
+      null,
+    );
+    expect(page.text).toContain("not set");
+    expect(page.text).toContain("set");
+    expect(page.text).not.toContain("secret-material");
+    expect(page.text).not.toContain("BEGIN");
   });
 
   // A display name is whatever the member typed into Telegram, reaching a

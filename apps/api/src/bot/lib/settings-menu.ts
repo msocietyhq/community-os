@@ -79,7 +79,11 @@ function display(key: SettingKey, snapshot: SettingsSnapshot): string {
  */
 function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   const def = BOT_SETTINGS[key];
-  if (def.control !== "text") return formatValue(key, snapshot[key]);
+  // Computer values are short (a host, "set", a port) and useful on the
+  // index. Welcome templates are not — they collapse to a state word.
+  if (def.secret || def.group === "computer" || def.control !== "text") {
+    return formatValue(key, snapshot[key]);
+  }
 
   const value = snapshot[key];
   if (value === null) return "silent";
@@ -310,9 +314,10 @@ export function renderSettingPage(
 
   // The full value for text settings, in a <pre> block. Entities aren't parsed
   // inside <pre>, so the admin's own markup shows as written rather than being
-  // interpreted — which is what you want when editing a template.
+  // interpreted — which is what you want when editing a template. Secrets are
+  // never dumped: only "set" / "not set" belongs on this page.
   const body =
-    def.control === "text"
+    def.control === "text" && !def.secret
       ? `\n<pre>${escapeHtml(String(snapshot[key] ?? "(silent)"))}</pre>\n`
       : "";
 
@@ -457,6 +462,18 @@ function formatHistoricValue(key: string, value: unknown): string {
   if (!def) return rawHistoricValue(value);
 
   const parsed = def.schema.safeParse(value);
+
+  // Secrets stay collapsed even when the stored value no longer parses —
+  // a private key must not appear in the trail an admin screenshots.
+  if (def.secret) {
+    if (!parsed.success) {
+      return typeof value === "string" && value.trim() !== ""
+        ? "set"
+        : "not set";
+    }
+    return formatValue(key as SettingKey, parsed.data);
+  }
+
   if (!parsed.success) return rawHistoricValue(value);
 
   // A text setting's own `format` collapses to "custom", which as a history

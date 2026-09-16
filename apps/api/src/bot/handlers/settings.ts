@@ -411,9 +411,16 @@ async function settingsTextConversation(
   ctx: BotContext,
   key: SettingKey,
 ): Promise<void> {
+  const def = BOT_SETTINGS[key];
+  const hint = def.secret
+    ? "Paste the full value. It is stored and never shown back."
+    : key.startsWith("welcome.")
+      ? "Placeholders: {name}, {first_name}, {username}"
+      : "Send the value as you want it stored.";
+
   await ctx.reply(
-    `Send the new text for <b>${escapeHtml(BOT_SETTINGS[key].label)}</b>, or /cancel.\n\n` +
-      `Placeholders: {name}, {first_name}, {username}`,
+    `Send the new text for <b>${escapeHtml(def.label)}</b>, or /cancel.\n\n` +
+      hint,
     { parse_mode: "HTML" },
   );
 
