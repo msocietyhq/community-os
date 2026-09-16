@@ -111,13 +111,16 @@ async function denied(ctx: BotContext): Promise<void> {
 
 async function snapshotForGroup(
   group: SettingGroup,
-): Promise<SettingsSnapshot> {
-  if (group !== "computer") return getSettings();
+): Promise<{ snapshot: SettingsSnapshot; errorToast?: string }> {
+  if (group !== "computer") return { snapshot: await getSettings() };
   try {
-    return await ensureComputerSshKey();
+    return { snapshot: await ensureComputerSshKey() };
   } catch (err) {
     console.error("[settings] ssh key generation failed:", err);
-    return getSettings();
+    return {
+      snapshot: await getSettings(),
+      errorToast: "Could not generate a key.",
+    };
   }
 }
 
@@ -168,8 +171,8 @@ settingsHandler.callbackQuery(/^set:idx:(\w+)$/, async (ctx) => {
     return;
   }
 
-  const snapshot = await snapshotForGroup(group);
-  await showPage(ctx, renderIndexPage(group, snapshot));
+  const { snapshot, errorToast } = await snapshotForGroup(group);
+  await showPage(ctx, renderIndexPage(group, snapshot), errorToast);
 });
 
 // ── Setting detail ──────────────────────────────────────────
@@ -189,7 +192,7 @@ settingsHandler.callbackQuery(/^set:view:(.+)$/, async (ctx) => {
     return;
   }
 
-  const [snapshot, history] = await Promise.all([
+  const [{ snapshot, errorToast }, history] = await Promise.all([
     snapshotForGroup(BOT_SETTINGS[key].group),
     getHistory(key, 1),
   ]);
@@ -201,7 +204,7 @@ settingsHandler.callbackQuery(/^set:view:(.+)$/, async (ctx) => {
     latest ? { by: latest.actor?.name ?? null, at: latest.at } : null,
   );
 
-  await showPage(ctx, page);
+  await showPage(ctx, page, errorToast);
 });
 
 // ── SSH key regeneration ────────────────────────────────────

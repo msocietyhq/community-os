@@ -1,0 +1,4 @@
+# The computer exec transport shells out to `ssh`. Nixpacks' Bun image does
+# not include openssh-client. Key generation no longer needs ssh-keygen.
+[phases.setup]
+aptPkgs = ["openssh-client"]
