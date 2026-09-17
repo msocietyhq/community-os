@@ -87,6 +87,8 @@ describe("renderIndexPage", () => {
     expect(page.text).not.toContain("secret");
     expect(labels(page)).not.toContain("SSH private key");
     expect(labels(page)).toContain("SSH public key");
+    expect(labels(page)).toContain("Model");
+    expect(page.text).toContain("Model — <code>Haiku 4.5</code>");
   });
 
   test("renders every group without throwing", () => {
@@ -302,6 +304,15 @@ describe("model setting page", () => {
   test("does not leak the quiet-hours presets onto a model page", () => {
     const buttons = labels(renderSettingPage("ai.model.deep", snapshot, null));
     expect(buttons).not.toContain("23:00-07:00");
+  });
+
+  test("the computer model page offers the whole catalog", () => {
+    const buttons = labels(
+      renderSettingPage("ai.model.computer", snapshot, null),
+    );
+    for (const key of modelKeysForTier("computer")) {
+      expect(buttons, key).toContain(AI_CATALOG[key].label);
+    }
   });
 });
 

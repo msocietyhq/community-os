@@ -309,7 +309,7 @@ export const BOT_SETTINGS = {
     default: DEFAULT_TIER_MODELS.fast,
     label: "Fast model",
     description:
-      "The main chat agent and every sub-agent, each running up to ten tool-calling steps. Any model may be chosen; a model that handles single calls well can still drift over ten. If a change leaves the bot unable to hold a conversation, change it back from this menu — the menu never asks the AI anything.",
+      "The main chat agent and every sub-agent except computer, each running up to ten tool-calling steps. Any model may be chosen; a model that handles single calls well can still drift over ten. If a change leaves the bot unable to hold a conversation, change it back from this menu — the menu never asks the AI anything.",
     group: "cost",
     control: "choice",
     format: (v) => AI_CATALOG[v].label,
@@ -460,6 +460,16 @@ export const BOT_SETTINGS = {
   }),
 
   // ── computer ──
+  "ai.model.computer": def<AiModelKey>({
+    schema: z.enum(modelKeysForTier("computer")),
+    default: DEFAULT_TIER_MODELS.computer,
+    label: "Model",
+    description:
+      "The computer sub-agent that runs commands on the remote VM, up to thirty tool-calling steps. Independent of the fast chat model so VM work can use a stronger (or cheaper) model without changing how the bot talks. Recoverable from this menu if a change goes badly.",
+    group: "computer",
+    control: "choice",
+    format: (v) => AI_CATALOG[v].label,
+  }),
   "computer.sshHost": def<string>({
     schema: z.string().max(253),
     default: "",

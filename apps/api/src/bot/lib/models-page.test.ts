@@ -33,7 +33,14 @@ describe("renderModelsPage", () => {
   });
 
   test("marks which tiers currently use a model", () => {
-    expect(page()).toContain("in use: fast");
+    expect(page()).toContain("in use: fast, computer");
+    expect(page()).toContain("in use: smart");
+    expect(page()).toContain("in use: deep");
+  });
+
+  test("points computer-model changes at the Computer settings group", () => {
+    expect(page()).toContain("/settings → Computer");
+    expect(page()).toContain("/settings → Cost");
   });
 
   // micro is pinned and has no control, so naming it would invite a request

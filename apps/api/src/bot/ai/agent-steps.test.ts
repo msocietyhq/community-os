@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { isConfigurableTier } from "@community-os/shared/ai-catalog";
 import {
   COMPUTER_AGENT_STEPS,
+  COMPUTER_AGENT_TIER,
   DEFAULT_AGENT_STEPS,
   computerAwareStepLimit,
   stepsUsedComputer,
@@ -14,6 +16,11 @@ describe("agent step budgets", () => {
   test("the default stays small; computer work may run longer", () => {
     expect(DEFAULT_AGENT_STEPS).toBe(10);
     expect(COMPUTER_AGENT_STEPS).toBe(30);
+  });
+
+  test("the computer sub-agent has its own configurable model tier", () => {
+    expect(COMPUTER_AGENT_TIER).toBe("computer");
+    expect(isConfigurableTier(COMPUTER_AGENT_TIER)).toBe(true);
   });
 });
 

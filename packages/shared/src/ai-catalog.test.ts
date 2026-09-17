@@ -184,7 +184,7 @@ describe("TIER_FALLBACK_ORDER", () => {
   });
 
   test("the non-micro tiers cover all three providers", () => {
-    for (const tier of ["fast", "smart", "deep"] as const) {
+    for (const tier of ["fast", "smart", "deep", "computer"] as const) {
       expect(TIER_FALLBACK_ORDER[tier].length, tier).toBe(3);
     }
   });

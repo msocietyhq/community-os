@@ -12,7 +12,7 @@ import {
   trackToolCalls,
   type SubagentActivity,
 } from "../../lib/subagent-progress";
-import { COMPUTER_AGENT_STEPS } from "../agent-steps";
+import { COMPUTER_AGENT_STEPS, COMPUTER_AGENT_TIER } from "../agent-steps";
 import { ensureComputerSshKey } from "../computer-ssh";
 import {
   DEFAULT_EXEC_TIMEOUT_MS,
@@ -97,7 +97,7 @@ export async function runComputerAgent(
       stopWhen: stepCountIs(COMPUTER_AGENT_STEPS),
       maxOutputTokens: 1024,
     },
-    { caller: "computer-agent", tier: "fast", ...trackingCtx },
+    { caller: "computer-agent", tier: COMPUTER_AGENT_TIER, ...trackingCtx },
   );
 
   console.log(

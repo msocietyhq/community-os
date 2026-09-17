@@ -94,6 +94,7 @@ describe("tiersSelecting", () => {
     fast: "deepseek/v4-flash",
     smart: "deepseek/v4-pro",
     deep: "anthropic/opus-5",
+    computer: "anthropic/haiku-4-5",
   };
   const selectedFor = (tier: AiTier) => selection[tier]!;
 
@@ -102,9 +103,14 @@ describe("tiersSelecting", () => {
   });
 
   // micro is pinned in code rather than stored in settings, but an outage on
-  // its provider still affects it, so it must be reported.
+  // its provider still affects it, so it must be reported. computer is
+  // configurable and listed with the others it shares a provider with.
   test("includes the pinned micro tier", () => {
-    expect(tiersSelecting("anthropic", selectedFor)).toEqual(["micro", "deep"]);
+    expect(tiersSelecting("anthropic", selectedFor)).toEqual([
+      "micro",
+      "deep",
+      "computer",
+    ]);
   });
 
   test("returns empty for a provider nothing selects", () => {

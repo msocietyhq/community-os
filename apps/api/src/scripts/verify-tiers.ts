@@ -51,7 +51,7 @@ for (const tier of AI_TIERS) {
   const key = keyOf(tier);
   const def = AI_CATALOG[key];
   console.log(
-    `${tier.padEnd(7)} ${key.padEnd(22)} ${def.modelId.padEnd(19)} ` +
+    `${tier.padEnd(8)} ${key.padEnd(22)} ${def.modelId.padEnd(19)} ` +
       `${String(def.pricing.input).padStart(4)}/${String(def.pricing.output).padEnd(6)} ` +
       `${(isConfigurableTier(tier) ? "yes" : "PINNED").padEnd(9)} ` +
       `${hasCredentials(key) ? "yes" : "NO — falls back to default"}`,
@@ -64,7 +64,7 @@ for (const tier of AI_TIERS) {
   const key = keyOf(tier);
   const cost = estimateCost(key, 1_000_000, 1_000_000);
   console.log(
-    `  ${tier.padEnd(7)} ${key.padEnd(22)} $${cost.toFixed(2)}` +
+    `  ${tier.padEnd(8)} ${key.padEnd(22)} $${cost.toFixed(2)}` +
       (cost === 0 ? "  ← BROKEN: caps would not bind" : ""),
   );
 }

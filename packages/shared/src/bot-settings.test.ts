@@ -17,6 +17,7 @@ import {
 import {
   AI_TIERS,
   CONFIGURABLE_TIERS,
+  DEFAULT_TIER_MODELS,
   isConfigurableTier,
   modelKeysForTier,
 } from "./ai-catalog";
@@ -71,6 +72,19 @@ describe("registry invariants", () => {
     expect(EDITABLE_SETTING_KEYS).not.toContain("computer.sshPrivateKey");
     expect(EDITABLE_SETTING_KEYS).not.toContain("computer.sshPublicKey");
     expect(EDITABLE_SETTING_KEYS).toContain("computer.sshHost");
+  });
+
+  test("the computer sub-agent has its own model setting", () => {
+    expect(keysInGroup("computer")).toContain("ai.model.computer");
+    expect(keysInGroup("cost")).not.toContain("ai.model.computer");
+    expect(BOT_SETTINGS["ai.model.computer"].group).toBe("computer");
+    expect(BOT_SETTINGS["ai.model.computer"].control).toBe("choice");
+    expect(BOT_SETTINGS["ai.model.computer"].label).toBe("Model");
+    expect(BOT_SETTINGS["ai.model.computer"].default).toBe(
+      DEFAULT_TIER_MODELS.computer,
+    );
+    expect(isEditableSetting("ai.model.computer")).toBe(true);
+    expect(EDITABLE_SETTING_KEYS).toContain("ai.model.computer");
   });
 
   // An edit callback carries the chosen value, so it is much longer than the
