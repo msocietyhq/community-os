@@ -27,7 +27,7 @@ import {
 
 export { COMPUTER_AGENT_SYSTEM, COMPUTER_TOOL_DESCRIPTION };
 
-export const execInputSchema = z.object({
+const execInputSchema = z.object({
   command: z
     .string()
     .describe(
@@ -43,7 +43,7 @@ export const execInputSchema = z.object({
     ),
 });
 
-export async function executeComputerExec({
+async function executeComputerExec({
   command,
   timeout_seconds,
 }: {

@@ -8,7 +8,8 @@ export const COMPUTER_TOOL_DESCRIPTION = [
   "delegate again with the missing context included. Inspect the machine and review",
   "output the same way — another computer briefing, not a command of your own. Do",
   "not take a report on trust: send a verification check before telling the user it",
-  "is done. If a command times out it may still be running for up to 10 minutes,",
+  "is done. Once a verification report confirms the work, stop; do not keep",
+  "re-checking. If a command times out it may still be running for up to 10 minutes,",
   "then it is killed: ask the user to check back later rather than polling. Do not",
   "SSH or manage keys yourself.",
 ].join(" ");

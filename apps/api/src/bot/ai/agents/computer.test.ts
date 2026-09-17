@@ -24,6 +24,7 @@ describe("COMPUTER_TOOL_DESCRIPTION", () => {
   test("tells the parent to inspect and verify by delegating again, not with exec", () => {
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("verification");
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("another computer briefing");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("do not keep re-checking");
     expect(COMPUTER_TOOL_DESCRIPTION).not.toContain("with exec");
   });
 });

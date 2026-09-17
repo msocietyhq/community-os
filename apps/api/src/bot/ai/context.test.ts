@@ -672,6 +672,7 @@ describe("system prompt composition", () => {
       "All machine access goes through computer",
     );
     expect(withComputer.system).toContain("verification briefing");
+    expect(withComputer.system).toContain("do not keep re-checking");
     expect(withComputer.system).not.toContain("You also have exec");
     expect(withComputer.system).not.toContain("check it with exec");
     expect(withComputer.system).toContain(
