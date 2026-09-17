@@ -209,15 +209,17 @@ aiChatHandler.on("message:text", async (ctx) => {
         : { replyToId: row.replyToMessageId }),
     })),
   );
-  if (meta.replyTo && !conversation.parentMessage)
+  if (meta.replyTo && !conversation.parentMessage) {
+    const replyFrom = meta.replyTo.from;
     conversation.parentMessage = {
       id: meta.replyTo.messageId,
       text: meta.replyTo.text ?? "(non-text message)",
-      from: meta.replyTo.from.username
-        ? `@${meta.replyTo.from.username}`
-        : meta.replyTo.from.firstName,
+      from: replyFrom?.username
+        ? `@${replyFrom.username}`
+        : (replyFrom?.firstName ?? "someone"),
       at: new Date(meta.replyTo.date * 1000).toISOString(),
     };
+  }
   const enrichedQuery = buildEnrichedQuery(query, conversation);
 
   // Build ModelMessage[] from DB rows + session AI context
