@@ -3,22 +3,11 @@ import { clip } from "../../lib/text";
 import type { ModelMessage } from "ai";
 import type { TelegramMeta } from "../types";
 import type { telegramMessages } from "../../db/schema/bot";
+import type { ConversationContext } from "./conversation-context";
+export { HISTORY_MESSAGE_LIMIT, HISTORY_WINDOW_MS } from "./conversation-context";
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
 
-/**
- * How much of a conversation the agent is given, and for how long back.
- *
- * A message leaves the agent's sight when either bound is crossed: it ages past
- * HISTORY_WINDOW_MS, or HISTORY_MESSAGE_LIMIT newer messages push it out. Both
- * are scoped to one chat and one forum topic.
- *
- * Exported because memory extraction batches against them — while a message is
- * still in here the agent can read it directly, so a fact drawn from it is
- * redundant. See `memory-batch.ts`.
- */
-export const HISTORY_MESSAGE_LIMIT = 50;
-export const HISTORY_WINDOW_MS = ONE_HOUR_MS;
 
 const REPLY_TEXT_MAX = 120;
 
@@ -257,18 +246,8 @@ function buildReplyAttrs(
 /**
  * Formats a list of DB message rows into a readable transcript for group context.
  */
-export function formatGroupHistory(messages: TelegramMessageRow[]): string {
-  const lines = messages.map((msg) => {
-    const time = formatTelegramDate(Math.floor(msg.date.getTime() / 1000));
-    const name = msg.fromUsername
-      ? `@${msg.fromUsername}`
-      : (msg.fromFirstName ?? "unknown");
-    const content =
-      msg.text ??
-      msg.caption ??
-      (msg.mediaType ? `[${msg.mediaType}]` : "[message]");
-    return `${time} ${name}: ${content}`;
-  });
+export function formatGroupHistory(context: ConversationContext): string {
+  const lines = context.recentHistory.map((msg) => `<msg id="${msg.id}" from="${encodeXML(msg.from)}" at="${encodeXML(msg.at)}">\n${escapeContent(msg.text)}\n</msg>`);
   return `[Recent group conversation:]\n${lines.join("\n")}\n---`;
 }
 
@@ -276,32 +255,12 @@ export function formatGroupHistory(messages: TelegramMessageRow[]): string {
  * Returns the query string prefixed with a compact context header containing
  * sender info, timestamp, and optional reply chain.
  */
-export function buildEnrichedQuery(
-  query: string,
-  meta: TelegramMeta,
-  chatId?: string,
-): string {
-  const datePart = `${formatTelegramDateFull(meta.date)}, ${formatTelegramDate(meta.date)}`;
-
-  let header: string;
-
-  const senderPart = displayName(meta.from);
-
-  if (meta.replyTo) {
-    const replyFrom = meta.replyTo.from
-      ? displayName(meta.replyTo.from)
-      : "someone";
-    const replyTime = formatTelegramDate(meta.replyTo.date);
-    let replyText = meta.replyTo.text ?? "(non-text message)";
-    if (replyText.length > REPLY_TEXT_MAX) {
-      replyText = `${replyText.slice(0, REPLY_TEXT_MAX)}…`;
-    }
-    header = `[${datePart} | ${senderPart} → replying to ${replyFrom} at ${replyTime}: "${replyText}"${chatId ? ` | chat_id: ${chatId}` : ""}]`;
-  } else {
-    header = `[${datePart} | ${senderPart}${chatId ? ` | chat_id: ${chatId}` : ""}]`;
-  }
-
-  return `${header}\n${query}`;
+export function buildEnrichedQuery(query: string, context: ConversationContext): string {
+  const current = context.currentMessage;
+  const parent = context.parentMessage;
+  const parentPart = parent ? ` | <reply-to-id>${parent.id}</reply-to-id> replying to ${encodeXML(parent.from)} at ${encodeXML(parent.at)}: <quoted>${sanitizeSnippet(parent.text, REPLY_TEXT_MAX)}</quoted>` : "";
+  const groupPart = context.metadata.isGroupChat ? ` | chat_id: ${encodeXML(context.chatId)}` : "";
+  return `<msg id="${current.id}" from="${encodeXML(current.from)}" at="${encodeXML(current.at)}"${groupPart}>${parentPart}\n${escapeContent(query)}\n</msg>`;
 }
 
 function getDateString(date: Date): string {
@@ -317,45 +276,16 @@ function getDateString(date: Date): string {
  * Bot messages are enriched with tool call chains from aiResponses when available.
  * Includes the date only when it differs from the previous message's date.
  */
-export function buildMessagesFromHistory(
-  rows: TelegramMessageRow[],
-  botUserId: number,
-  aiResponses: Record<number, ModelMessage[]>,
-): ModelMessage[] {
+export function buildMessagesFromHistory(context: ConversationContext, botUserId: number, aiResponses: Record<number, ModelMessage[]>): ModelMessage[] {
   const messages: ModelMessage[] = [];
-  const byMessageId = new Map(rows.map((r) => [r.messageId, r]));
-  let lastDateStr = "";
-
-  for (const row of rows) {
-    if (row.fromUserId === botUserId) {
-      // Bot message — use stored AI context if available
-      const stored = aiResponses[row.messageId];
-      if (stored && stored.length > 0) {
-        messages.push(...stored);
-      } else if (row.text) {
-        messages.push({ role: "assistant", content: row.text });
-      }
-    } else {
-      // Human message — sender, timestamp and reply link as envelope
-      // attributes, so multi-line or adversarial content can't impersonate
-      // the structure around it.
-      const name = encodeXML(rowDisplayName(row));
-      const time = formatTelegramDate(Math.floor(row.date.getTime() / 1000));
-      const dateStr = getDateString(row.date);
-      const datePart = dateStr !== lastDateStr ? `${dateStr} ` : "";
-      const { attrs, quoted } = buildReplyAttrs(row, byMessageId);
-      const content =
-        row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : "");
-      if (content) {
-        const quotedLine = quoted ? `<quoted>${quoted}</quoted>\n` : "";
-        messages.push({
-          role: "user",
-          content: `<msg from="${name}" at="${datePart}${time}"${attrs}>\n${quotedLine}${escapeContent(content)}\n</msg>`,
-        });
-      }
-    }
-    lastDateStr = getDateString(row.date);
+  for (const message of context.recentHistory) {
+    const isBot = message.senderId === botUserId || message.from === String(botUserId);
+    const stored = isBot ? aiResponses[message.id] : undefined;
+    if (stored?.length) { messages.push(...stored); continue; }
+    const parent = message.replyToId === context.parentMessage?.id ? context.parentMessage : context.recentHistory.find((candidate) => candidate.id === message.replyToId);
+    const replyTag = message.replyToId === undefined ? "" : `<reply-to-id>${message.replyToId}</reply-to-id>\n`;
+    const quoted = parent ? `<quoted>${sanitizeSnippet(parent.text, HISTORY_REPLY_TEXT_MAX)}</quoted>\n` : "";
+    messages.push({ role: isBot ? "assistant" : "user", content: `<msg id="${message.id}" from="${encodeXML(message.from)}" at="${encodeXML(message.at)}">\n${replyTag}${quoted}${escapeContent(message.text)}\n</msg>` });
   }
-
   return messages;
 }
