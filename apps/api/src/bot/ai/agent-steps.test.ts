@@ -40,8 +40,8 @@ describe("stepsUsedComputer", () => {
     ).toBe(true);
   });
 
-  test("true once any step called exec, so the parent can verify", () => {
-    expect(stepsUsedComputer([step("exec")])).toBe(true);
+  test("exec on the parent does not raise the budget — it has no exec", () => {
+    expect(stepsUsedComputer([step("exec")])).toBe(false);
   });
 });
 

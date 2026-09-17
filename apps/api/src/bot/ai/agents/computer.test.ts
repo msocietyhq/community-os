@@ -3,9 +3,6 @@ import {
   COMPUTER_AGENT_SYSTEM,
   COMPUTER_QUERY_DESCRIPTION,
   COMPUTER_TOOL_DESCRIPTION,
-  PARENT_EXEC_TOOL_DESCRIPTION,
-  PARENT_VERIFY_ASK,
-  withParentVerifyAsk,
 } from "./computer-prompt";
 import { COMPUTER_AGENT_STEPS } from "../agent-steps";
 
@@ -24,9 +21,19 @@ describe("COMPUTER_TOOL_DESCRIPTION", () => {
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("all relevant context");
   });
 
-  test("tells the parent to verify the report with exec", () => {
-    expect(COMPUTER_TOOL_DESCRIPTION).toContain("verify");
-    expect(COMPUTER_TOOL_DESCRIPTION).toContain("exec");
+  test("tells the parent to inspect and verify by delegating again, not with exec", () => {
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("verification");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("another computer briefing");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("do not keep re-checking");
+    expect(COMPUTER_TOOL_DESCRIPTION).not.toContain("with exec");
+  });
+
+  test("tells the parent that git work never lands on main, and to pack the branch", () => {
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain(
+      "never commits to main or master",
+    );
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("draft PR on the first push");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("pack the branch");
   });
 });
 
@@ -36,15 +43,7 @@ describe("COMPUTER_QUERY_DESCRIPTION", () => {
     expect(COMPUTER_QUERY_DESCRIPTION).toContain("only this string");
     expect(COMPUTER_QUERY_DESCRIPTION).toContain("outcome");
     expect(COMPUTER_QUERY_DESCRIPTION).toContain("constraints");
-  });
-});
-
-describe("PARENT_EXEC_TOOL_DESCRIPTION", () => {
-  test("is for inspecting and verifying, not carrying out the task", () => {
-    expect(PARENT_EXEC_TOOL_DESCRIPTION).toContain("inspect");
-    expect(PARENT_EXEC_TOOL_DESCRIPTION).toContain("verify");
-    expect(PARENT_EXEC_TOOL_DESCRIPTION).toContain("computer");
-    expect(PARENT_EXEC_TOOL_DESCRIPTION).toContain("multi-step");
+    expect(COMPUTER_QUERY_DESCRIPTION).toContain("git branch");
   });
 });
 
@@ -64,24 +63,19 @@ describe("COMPUTER_AGENT_SYSTEM", () => {
     expect(COMPUTER_AGENT_SYSTEM).toContain("unstated");
   });
 
-  test("tells the sub-agent to ask the parent to verify with exec", () => {
-    expect(COMPUTER_AGENT_SYSTEM).toContain(
-      "ask the parent to verify with exec",
-    );
-    expect(COMPUTER_AGENT_SYSTEM).toContain("what to check");
-  });
-});
-
-describe("withParentVerifyAsk", () => {
-  test("appends the ask when the report omitted it", () => {
-    const out = withParentVerifyAsk("Installed nginx.");
-    expect(out).toContain("Installed nginx.");
-    expect(out).toContain(PARENT_VERIFY_ASK);
+  test("reports evidence the parent can use for a computer verification pass", () => {
+    expect(COMPUTER_AGENT_SYSTEM).toContain("evidence it succeeded");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("verification pass");
+    expect(COMPUTER_AGENT_SYSTEM).not.toContain("verify with exec");
   });
 
-  test("does not duplicate the ask", () => {
-    const once = withParentVerifyAsk("Done.\n\nPlease verify this with exec.");
-    expect(once.match(/verify this with exec/g)?.length).toBe(1);
+  test("never commits to main or master; branches, conventional-commits, and opens a draft PR", () => {
+    expect(COMPUTER_AGENT_SYSTEM).toContain("never commit to main or master");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("branch the briefing named");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("conventional commits");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("each logical juncture");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("draft pull request");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("first push");
   });
 });
 

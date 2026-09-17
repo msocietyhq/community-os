@@ -668,8 +668,13 @@ describe("system prompt composition", () => {
     );
     expect(withComputer.system).toContain("cannot see this conversation");
     expect(withComputer.system).toContain("all relevant context");
-    expect(withComputer.system).toContain("verify the sub-agent's work");
-    expect(withComputer.system).toContain("check it with exec");
+    expect(withComputer.system).toContain(
+      "All machine access goes through computer",
+    );
+    expect(withComputer.system).toContain("verification briefing");
+    expect(withComputer.system).toContain("do not keep re-checking");
+    expect(withComputer.system).not.toContain("You also have exec");
+    expect(withComputer.system).not.toContain("check it with exec");
     expect(withComputer.system).toContain(
       "Running commands on a persistent remote Linux VM",
     );
@@ -677,6 +682,8 @@ describe("system prompt composition", () => {
     expect(withComputer.system).toContain("check back later");
     expect(withComputer.system).toContain("10 minutes");
     expect(withComputer.system).toContain("delegate again");
+    expect(withComputer.system).toContain("never commits to main or master");
+    expect(withComputer.system).toContain("draft PR on the first push");
     expect(without.system).not.toContain("persistent Linux VM");
   });
 
