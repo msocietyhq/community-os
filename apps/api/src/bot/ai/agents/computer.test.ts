@@ -27,6 +27,14 @@ describe("COMPUTER_TOOL_DESCRIPTION", () => {
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("do not keep re-checking");
     expect(COMPUTER_TOOL_DESCRIPTION).not.toContain("with exec");
   });
+
+  test("tells the parent that git work never lands on main, and to pack the branch", () => {
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain(
+      "never commits to main or master",
+    );
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("draft PR on the first push");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("pack the branch");
+  });
 });
 
 describe("COMPUTER_QUERY_DESCRIPTION", () => {
@@ -35,6 +43,7 @@ describe("COMPUTER_QUERY_DESCRIPTION", () => {
     expect(COMPUTER_QUERY_DESCRIPTION).toContain("only this string");
     expect(COMPUTER_QUERY_DESCRIPTION).toContain("outcome");
     expect(COMPUTER_QUERY_DESCRIPTION).toContain("constraints");
+    expect(COMPUTER_QUERY_DESCRIPTION).toContain("git branch");
   });
 });
 
@@ -58,6 +67,15 @@ describe("COMPUTER_AGENT_SYSTEM", () => {
     expect(COMPUTER_AGENT_SYSTEM).toContain("evidence it succeeded");
     expect(COMPUTER_AGENT_SYSTEM).toContain("verification pass");
     expect(COMPUTER_AGENT_SYSTEM).not.toContain("verify with exec");
+  });
+
+  test("never commits to main or master; branches, conventional-commits, and opens a draft PR", () => {
+    expect(COMPUTER_AGENT_SYSTEM).toContain("never commit to main or master");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("branch the briefing named");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("conventional commits");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("each logical juncture");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("draft pull request");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("first push");
   });
 });
 

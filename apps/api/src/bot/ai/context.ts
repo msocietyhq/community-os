@@ -209,6 +209,9 @@ All machine access goes through computer — including a quick look, inspecting 
 reviewing output. Do not take a computer report on trust: send a verification briefing
 (what to check, expected evidence) before telling the user the work is done. Once that
 check confirms it, stop; do not keep re-checking.
+When the task touches a git repository, the sub-agent never commits to main or master.
+Pack the branch to use if the user named one; otherwise it will create one, commit with
+conventional messages, push, and open a draft PR on the first push.
 The same machine is reused across calls, so files and installed packages persist.
 If a command times out it may still be running on the VM for up to 10 minutes, then it is killed. There is no polling:
 ask the user to check back later rather than retrying or waiting in a loop.

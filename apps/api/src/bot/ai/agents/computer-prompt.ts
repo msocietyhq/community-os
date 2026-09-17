@@ -9,7 +9,9 @@ export const COMPUTER_TOOL_DESCRIPTION = [
   "output the same way — another computer briefing, not a command of your own. Do",
   "not take a report on trust: send a verification check before telling the user it",
   "is done. Once a verification report confirms the work, stop; do not keep",
-  "re-checking. If a command times out it may still be running for up to 10 minutes,",
+  "re-checking. If the work is in a git repository, pack the branch the user named —",
+  "the sub-agent never commits to main or master; it opens a draft PR on the first push.",
+  "If a command times out it may still be running for up to 10 minutes,",
   "then it is killed: ask the user to check back later rather than polling. Do not",
   "SSH or manage keys yourself.",
 ].join(" ");
@@ -17,7 +19,8 @@ export const COMPUTER_TOOL_DESCRIPTION = [
 export const COMPUTER_QUERY_DESCRIPTION = [
   "A self-contained briefing. The sub-agent sees only this string — not the chat,",
   "not earlier tool results. Include the outcome to achieve plus all relevant context:",
-  "constraints, file paths, commands already tried, errors, URLs, and user preferences.",
+  "constraints, file paths, commands already tried, errors, URLs, user preferences,",
+  "and the git branch if the user named one.",
 ].join(" ");
 
 export const COMPUTER_AGENT_SYSTEM = `You complete tasks on a remote, persistent Linux VM by running shell commands.
@@ -32,4 +35,5 @@ Rules:
 - Each exec starts a fresh shell in the home directory. Working directory and environment variables do not carry over unless you persist them (chain with &&, write to disk, or update a profile file).
 - Read the output before the next command.
 - If a command times out it may still be running for up to 10 minutes, then it is killed. There is no polling: stop, say so in your report, and tell the parent to ask the user to check back later. Do not retry or wait in a loop.
+- When working in a git repository, never commit to main or master. Use the branch the briefing named, or create one that fits the request. Commit at each logical juncture using conventional commits (feat, fix, docs, chore, …). Push after each commit. Open a draft pull request on the first push; do not wait until the work is finished.
 - When you are done, report what you did and the evidence it succeeded (or why it failed). Include exact paths, commands, and expected output the parent can use for a verification pass. Be concise. Format for Telegram Markdown.`;
