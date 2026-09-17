@@ -4,7 +4,11 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { botMemories } from "../db/schema/bot";
-import { duplicateSimilaritySql } from "./memory-duplicate-sql";
+import {
+  CROSS_CATEGORY_DUPLICATE_SIMILARITY,
+  DUPLICATE_SIMILARITY,
+  duplicateSimilaritySql,
+} from "./memory-duplicate-sql";
 
 const embedding = new Array(512).fill(0);
 
@@ -26,9 +30,11 @@ describe("duplicateSimilaritySql", () => {
    * so the comparison has no operator unless the branches are cast.
    */
   test("casts CASE thresholds so postgres does not type them as text", () => {
-    const { sql: compiled } = compiledDuplicateSql();
+    const { sql: compiled, params } = compiledDuplicateSql();
     expect(compiled).toMatch(/THEN \$(\d+)::float8/);
     expect(compiled).toMatch(/ELSE \$(\d+)::float8/);
+    expect(params).toContain(DUPLICATE_SIMILARITY);
+    expect(params).toContain(CROSS_CATEGORY_DUPLICATE_SIMILARITY);
   });
 
   test("runs against postgres without a double precision > text error", async () => {
@@ -42,7 +48,12 @@ describe("duplicateSimilaritySql", () => {
       await client`CREATE EXTENSION IF NOT EXISTS vector`;
     } catch (err) {
       await client.end().catch(() => undefined);
-      if (!process.env.DATABASE_URL) return;
+      if (!process.env.DATABASE_URL) {
+        console.warn(
+          "skipping live postgres check: no DATABASE_URL and local postgres unavailable",
+        );
+        return;
+      }
       throw err;
     }
 
@@ -66,7 +77,7 @@ describe("duplicateSimilaritySql", () => {
         )}`,
       );
 
-      expect(rows).toBeDefined();
+      expect(rows).toHaveLength(1);
     } finally {
       await client.end();
     }
