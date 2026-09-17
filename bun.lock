@@ -28,6 +28,7 @@
         "@elysiajs/eden": "^1.4.8",
         "@elysiajs/openapi": "^1.2.0",
         "@grammyjs/parse-mode": "^2.3.0",
+        "@grammyjs/runner": "^2.0.3",
         "@graphql-tools/schema": "^10.0.31",
         "@mozilla/readability": "^0.6.0",
         "@resvg/resvg-js": "^2.6.2",
@@ -283,6 +284,8 @@
     "@grammyjs/conversations": ["@grammyjs/conversations@2.1.1", "", { "peerDependencies": { "grammy": "^1.20.1" } }, "sha512-hoxqwSkaXDeU7mzXulpk3A4Cmd6UZO3HU4aPoITX5ekSHK7ZcUEmMl7RhKKkqw3z6zVbbAShQreJoVV5/dDSLA=="],
 
     "@grammyjs/parse-mode": ["@grammyjs/parse-mode@2.3.0", "", { "peerDependencies": { "grammy": "^1.41.0" } }, "sha512-kEEM1B5z4lNH/99HEzXvw6wuJEAmadZ4cfcNn/F5UMOsCRogFK5lMYrA4GLLoNQ0kY3e/GJkGUBTCagfyHzn4g=="],
+
+    "@grammyjs/runner": ["@grammyjs/runner@2.0.3", "", { "dependencies": { "abort-controller": "^3.0.0" }, "peerDependencies": { "grammy": "^1.13.1" } }, "sha512-nckmTs1dPWfVQteK9cxqxzE+0m1VRvluLWB8UgFzsjg62w3qthPJt0TYtJBEdG7OedvfQq4vnFAyE6iaMkR42A=="],
 
     "@grammyjs/types": ["@grammyjs/types@3.25.0", "", {}, "sha512-iN9i5p+8ZOu9OMxWNcguojQfz4K/PDyMPOnL7PPCON+SoA/F8OKMH3uR7CVUkYfdNe0GCz8QOzAWrnqusQYFOg=="],
 

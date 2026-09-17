@@ -1,6 +1,8 @@
 import { session } from "grammy";
 import { conversations } from "@grammyjs/conversations";
+import { run, sequentialize, type RunnerHandle } from "@grammyjs/runner";
 import { bot } from "./bot";
+import { concurrencyKey } from "./lib/concurrency";
 import { helpHandler } from "./handlers/help";
 import { eventsHandler } from "./handlers/events";
 import { projectsHandler } from "./handlers/projects";
@@ -36,9 +38,12 @@ const ALLOWED_UPDATES = [
   "my_chat_member",
 ] as const;
 
+/** Set while long polling; cleared after a graceful stop. */
+let runner: RunnerHandle | undefined;
+
 /**
  * Initialize the Telegram bot: register handlers, init bot info,
- * and start long polling.
+ * and start concurrent long polling.
  */
 export async function initBot(): Promise<void> {
   if (!env.TELEGRAM_GROUP_ID) {
@@ -81,9 +86,16 @@ export async function initBot(): Promise<void> {
   // Sync profile photo on any interaction (at most once per 24h)
   bot.use(photoSyncMiddleware);
 
+  // Same-chat updates stay ordered so session writes cannot race. Other chats
+  // run in parallel — a long computer turn must not stall a DM.
+  bot.use(sequentialize(concurrencyKey));
   // Session must be registered before conversations and handlers
   bot.use(
-    session({ initial: () => ({}), storage: new PostgresSessionStorage() }),
+    session({
+      initial: () => ({}),
+      getSessionKey: concurrencyKey,
+      storage: new PostgresSessionStorage(),
+    }),
   );
   // Conversations plugin must be registered before conversation handlers
   bot.use(conversations());
@@ -125,8 +137,11 @@ export async function initBot(): Promise<void> {
     }),
   ]).catch((err) => console.error("Failed to publish command menu:", err));
 
-  // Start long polling (fire-and-forget — resolves only when bot stops)
-  bot.start({ allowed_updates: [...ALLOWED_UPDATES] }).catch((err) => {
+  // Concurrent long polling (fire-and-forget — the handle resolves on stop)
+  runner = run(bot, {
+    runner: { fetch: { allowed_updates: [...ALLOWED_UPDATES] } },
+  });
+  runner.task()?.catch((err) => {
     console.error("Bot polling error:", err);
   });
 
@@ -155,5 +170,8 @@ export async function shutdownBot(): Promise<void> {
   await flushAllConversations().catch((err) => {
     console.error("[memory-batch] shutdown flush failed:", err);
   });
-  await bot.stop();
+  if (runner) {
+    await runner.stop();
+    runner = undefined;
+  }
 }
