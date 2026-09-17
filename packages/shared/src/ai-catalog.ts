@@ -182,10 +182,13 @@ export const AI_MODEL_KEYS = Object.keys(AI_CATALOG) as [
 /**
  * `micro` is one-shot structured output with no tools — the chime-in judge,
  * the memory extractor and the memory backfill. `fast` runs the main chat
- * agent and every sub-agent in a ten-step tool loop. `smart` and `deep` are
- * the advisor escalations and the long-form background jobs.
+ * agent and every sub-agent except computer in a ten-step tool loop.
+ * `computer` is the VM exec sub-agent's thirty-step loop, independently
+ * selectable so a stronger (or cheaper) model can do remote work without
+ * changing how the bot talks. `smart` and `deep` are the advisor escalations
+ * and the long-form background jobs.
  */
-export const AI_TIERS = ["micro", "fast", "smart", "deep"] as const;
+export const AI_TIERS = ["micro", "fast", "smart", "deep", "computer"] as const;
 export type AiTier = (typeof AI_TIERS)[number];
 
 /**
@@ -200,7 +203,12 @@ export type AiTier = (typeof AI_TIERS)[number];
  * failures are silent: the chime-in judge resolves errors to silence and the
  * memory extractor logs and moves on. Not a knob worth exposing.
  */
-export const CONFIGURABLE_TIERS = ["fast", "smart", "deep"] as const;
+export const CONFIGURABLE_TIERS = [
+  "fast",
+  "smart",
+  "deep",
+  "computer",
+] as const;
 export type ConfigurableTier = (typeof CONFIGURABLE_TIERS)[number];
 
 export function isConfigurableTier(tier: AiTier): tier is ConfigurableTier {
@@ -226,6 +234,9 @@ export const DEFAULT_TIER_MODELS: Record<AiTier, AiModelKey> = {
   fast: "anthropic/haiku-4-5",
   smart: "anthropic/sonnet-5",
   deep: "anthropic/opus-5",
+  // Same as `fast` so enabling the computer does not silently raise spend.
+  // Admins who want a stronger VM agent change this from /settings.
+  computer: "anthropic/haiku-4-5",
 };
 
 /**
@@ -253,4 +264,5 @@ export const TIER_FALLBACK_ORDER: Record<
   fast: ["anthropic/haiku-4-5", "openai/gpt-5.6-luna", "deepseek/v4-flash"],
   smart: ["anthropic/sonnet-5", "openai/gpt-5.6-terra", "deepseek/v4-pro"],
   deep: ["anthropic/opus-5", "openai/gpt-5.6-sol", "deepseek/v4-pro"],
+  computer: ["anthropic/haiku-4-5", "openai/gpt-5.6-luna", "deepseek/v4-flash"],
 };

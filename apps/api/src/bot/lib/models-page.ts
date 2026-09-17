@@ -64,7 +64,8 @@ export function renderModelsPage(input: ModelsPageInput): string {
   return (
     `<b>Available models</b>\n\n` +
     `${sections.join("\n\n")}\n\n` +
-    `<i>Change a tier from /settings → Cost. Prices are list rates; ` +
+    `<i>Change a conversation tier from /settings → Cost, or the computer ` +
+    `agent from /settings → Computer. Prices are list rates; ` +
     `providers with time-of-day pricing are recorded at their peak rate so ` +
     `spend caps bind early rather than late.</i>`
   );

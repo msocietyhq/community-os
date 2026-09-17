@@ -10,6 +10,8 @@
 
 export const DEFAULT_AGENT_STEPS = 10;
 export const COMPUTER_AGENT_STEPS = 30;
+/** Own tier so an admin can pick a model without changing chat. */
+export const COMPUTER_AGENT_TIER = "computer" as const;
 
 export function stepsUsedComputer(
   steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ toolName: string }> }>,
