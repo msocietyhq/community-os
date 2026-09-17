@@ -6,12 +6,13 @@ import {
   generateEmbedding,
   generateQueryEmbedding,
 } from "./embeddings.service";
+import { getSettings } from "./bot-settings.service";
+import { duplicateSimilaritySql } from "./memory-duplicate-sql";
 import {
   applyRelativeCutoff,
   rankByConfidenceAndRecency,
 } from "./memory-ranking";
 import { getSimilarityFloor } from "./recall-calibration";
-import { getSettings } from "./bot-settings.service";
 import { fuseByRRF } from "./reciprocal-rank-fusion";
 
 export interface MemoryInput {
@@ -43,21 +44,6 @@ export interface RecalledMemory {
 }
 
 /**
- * Cosine floor above which a new fact is treated as a restatement of one
- * already held, and supersedes it.
- *
- * Measured against the corpus: pairs between 0.80 and 0.85 are overwhelmingly
- * distinct facts that happen to share vocabulary — "Mud expressed interest in
- * attending an event but cannot go" against "Mud is bringing snacks for an
- * event" scores 0.801. Lowering this to catch more restatements would silently
- * delete real information, so it stays where it is.
- */
-const DUPLICATE_SIMILARITY = 0.85;
-
-/** The same floor for a pair the model gave different categories. */
-const CROSS_CATEGORY_DUPLICATE_SIMILARITY = 0.92;
-
-/**
  * Check for an existing semantically similar memory about the
  * same subject, in the same category.
  *
@@ -83,14 +69,9 @@ async function findDuplicate(
   subjectTelegramId: number | null | undefined,
   category: string,
 ): Promise<{ id: string; content: string } | null> {
-  const vectorLiteral = `[${embedding.join(",")}]`;
-
   const conditions = [
     isNull(botMemories.supersededBy),
-    sql`1 - (${botMemories.embedding} <=> ${vectorLiteral}::vector) >
-        CASE WHEN ${botMemories.category} = ${category}
-             THEN ${DUPLICATE_SIMILARITY}
-             ELSE ${CROSS_CATEGORY_DUPLICATE_SIMILARITY} END`,
+    duplicateSimilaritySql(embedding, category),
   ];
 
   if (subjectTelegramId != null) {
