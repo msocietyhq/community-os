@@ -896,12 +896,23 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
         if (filtered.length === 0) return { messages: [] };
         const transcript = formatGroupHistory({
           chatId: chat_id,
-          currentMessage: { id: 0, text: "", from: "system", at: new Date().toISOString() },
+          currentMessage: {
+            id: 0,
+            text: "",
+            from: "system",
+            at: new Date().toISOString(),
+          },
           recentHistory: filtered.map((r) => ({
-            id: r.messageId, text: r.text ?? r.caption ?? "",
-            from: r.fromUsername ? `@${r.fromUsername}` : (r.fromFirstName ?? "Unknown"),
-            at: r.date.toISOString(), senderId: r.fromUserId ?? undefined,
-            ...(r.replyToMessageId == null ? {} : { replyToId: r.replyToMessageId }),
+            id: r.messageId,
+            text: r.text ?? r.caption ?? "",
+            from: r.fromUsername
+              ? `@${r.fromUsername}`
+              : (r.fromFirstName ?? "Unknown"),
+            at: r.date.toISOString(),
+            senderId: r.fromUserId ?? undefined,
+            ...(r.replyToMessageId == null
+              ? {}
+              : { replyToId: r.replyToMessageId }),
           })),
           metadata: { isGroupChat: true },
         });

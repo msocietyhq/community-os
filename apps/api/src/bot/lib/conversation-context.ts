@@ -33,9 +33,14 @@ export interface TelegramConversationMetadata {
 }
 
 /** A reader for the specific-message mode of the `chat_history` tool. */
-export type ChatHistoryFetcher = (messageId: number, chatId?: string) => Promise<ConversationMessage | null | undefined>;
+export type ChatHistoryFetcher = (
+  messageId: number,
+  chatId?: string,
+) => Promise<ConversationMessage | null | undefined>;
 
-function withoutReplyId(message: ConversationMessage): Omit<ConversationMessage, "replyToId"> {
+function withoutReplyId(
+  message: ConversationMessage,
+): Omit<ConversationMessage, "replyToId"> {
   const { replyToId: _replyToId, ...parent } = message;
   return parent;
 }
@@ -66,7 +71,8 @@ export async function resolveReplyParent(
 
 function normalizeAt(at: string | Date | number): string {
   if (at instanceof Date) return at.toISOString();
-  if (typeof at === "number") return new Date(at < 10_000_000_000 ? at * 1000 : at).toISOString();
+  if (typeof at === "number")
+    return new Date(at < 10_000_000_000 ? at * 1000 : at).toISOString();
   return at;
 }
 
@@ -81,9 +87,16 @@ export async function buildConversationContext(
     text: metadata.text ?? "",
     from: metadata.from,
     at: normalizeAt(metadata.at),
-    ...(metadata.replyToId === undefined ? {} : { replyToId: metadata.replyToId }),
+    ...(metadata.replyToId === undefined
+      ? {}
+      : { replyToId: metadata.replyToId }),
   };
-  const parentMessage = await resolveReplyParent(currentMessage, recentHistory, fetchChatHistory, metadata.chatId);
+  const parentMessage = await resolveReplyParent(
+    currentMessage,
+    recentHistory,
+    fetchChatHistory,
+    metadata.chatId,
+  );
   return {
     chatId: metadata.chatId,
     currentMessage,
@@ -92,7 +105,9 @@ export async function buildConversationContext(
     metadata: {
       isGroupChat: metadata.isGroupChat,
       ...(metadata.topicId === undefined ? {} : { topicId: metadata.topicId }),
-      ...(metadata.chatTitle === undefined ? {} : { chatTitle: metadata.chatTitle }),
+      ...(metadata.chatTitle === undefined
+        ? {}
+        : { chatTitle: metadata.chatTitle }),
     },
   };
 }

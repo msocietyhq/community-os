@@ -35,7 +35,10 @@ import { inQuietHours } from "../lib/chime-in";
 import { shouldSendDenial } from "../lib/dm-access";
 import { resolveUser } from "../lib/auth";
 import { buildConversationContext } from "../lib/conversation-context";
-import { HISTORY_MESSAGE_LIMIT, HISTORY_WINDOW_MS } from "../lib/conversation-context";
+import {
+  HISTORY_MESSAGE_LIMIT,
+  HISTORY_WINDOW_MS,
+} from "../lib/conversation-context";
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -176,19 +179,45 @@ aiChatHandler.on("message:text", async (ctx) => {
 
   // Normalize the update and stored rows into one transport-independent context.
   const recentMessages = await getRecentChatMessages(
-    String(ctx.chat.id), ctx.message.message_thread_id ?? null,
-    HISTORY_WINDOW_MS, HISTORY_MESSAGE_LIMIT, ctx.message.message_id,
+    String(ctx.chat.id),
+    ctx.message.message_thread_id ?? null,
+    HISTORY_WINDOW_MS,
+    HISTORY_MESSAGE_LIMIT,
+    ctx.message.message_id,
   );
   const conversation = await buildConversationContext(
-    { chatId: String(ctx.chat.id), messageId: meta.messageId, text: query,
+    {
+      chatId: String(ctx.chat.id),
+      messageId: meta.messageId,
+      text: query,
       from: meta.from.username ? `@${meta.from.username}` : meta.from.firstName,
-      at: meta.date, isGroupChat: isGroup, topicId: ctx.message.message_thread_id },
-    recentMessages.map((row) => ({ id: row.messageId, text: row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
-      from: row.fromUsername ? `@${row.fromUsername}` : (row.fromFirstName ?? "unknown"),
-      at: row.date.toISOString(), senderId: row.fromUserId ?? undefined,
-      ...(row.replyToMessageId == null ? {} : { replyToId: row.replyToMessageId }) })),
+      at: meta.date,
+      isGroupChat: isGroup,
+      topicId: ctx.message.message_thread_id,
+    },
+    recentMessages.map((row) => ({
+      id: row.messageId,
+      text:
+        row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
+      from: row.fromUsername
+        ? `@${row.fromUsername}`
+        : (row.fromFirstName ?? "unknown"),
+      at: row.date.toISOString(),
+      senderId: row.fromUserId ?? undefined,
+      ...(row.replyToMessageId == null
+        ? {}
+        : { replyToId: row.replyToMessageId }),
+    })),
   );
-  if (meta.replyTo && !conversation.parentMessage) conversation.parentMessage = { id: meta.replyTo.messageId, text: meta.replyTo.text ?? "(non-text message)", from: meta.replyTo.from.username ? `@${meta.replyTo.from.username}` : meta.replyTo.from.firstName, at: new Date(meta.replyTo.date * 1000).toISOString() };
+  if (meta.replyTo && !conversation.parentMessage)
+    conversation.parentMessage = {
+      id: meta.replyTo.messageId,
+      text: meta.replyTo.text ?? "(non-text message)",
+      from: meta.replyTo.from.username
+        ? `@${meta.replyTo.from.username}`
+        : meta.replyTo.from.firstName,
+      at: new Date(meta.replyTo.date * 1000).toISOString(),
+    };
   const enrichedQuery = buildEnrichedQuery(query, conversation);
 
   // Build ModelMessage[] from DB rows + session AI context
@@ -409,7 +438,22 @@ async function shouldChimeIn(
 
   const decision = await judgeChimeIn({
     message: text,
-    transcript: formatGroupHistory({ chatId, currentMessage: { id: 0, text, from: "unknown", at: new Date(now).toISOString() }, recentHistory: context.map((row) => ({ id: row.messageId, text: row.text ?? row.caption ?? "", from: row.fromUsername ?? row.fromFirstName ?? "unknown", at: row.date.toISOString() })), metadata: { isGroupChat: true } }),
+    transcript: formatGroupHistory({
+      chatId,
+      currentMessage: {
+        id: 0,
+        text,
+        from: "unknown",
+        at: new Date(now).toISOString(),
+      },
+      recentHistory: context.map((row) => ({
+        id: row.messageId,
+        text: row.text ?? row.caption ?? "",
+        from: row.fromUsername ?? row.fromFirstName ?? "unknown",
+        at: row.date.toISOString(),
+      })),
+      metadata: { isGroupChat: true },
+    }),
     chatId,
     telegramUserId: ctx.from?.id ?? null,
     minConfidence: settings["chimeIn.minConfidence"],
