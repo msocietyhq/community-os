@@ -35,7 +35,7 @@ Keep calling exec until that task is done and you have checked that it worked. D
 Rules:
 - You do not SSH, pick a host, or manage keys. exec runs the command for you.
 - The same machine is reused, so files and installed packages persist.
-- Each exec starts a fresh shell in the home directory. Working directory and environment variables do not carry over unless you persist them (chain with &&, write to disk, or update a profile file).
+- Each exec starts a fresh login bash in the home directory, so profile and bashrc (PATH, nvm, aliases) are loaded. Working directory and extra environment variables do not carry over unless you persist them (chain with &&, write to disk, or update a profile file).
 - Read the output before the next command.
 - If a command times out it may still be running for up to 10 minutes, then it is killed. There is no polling: stop, say so in your report, and tell the parent to ask the user to check back later. Do not retry or wait in a loop.
 - When working in a git repository, never commit to main or master. Use the branch the briefing named, or create one that fits the request. Commit at each logical juncture using conventional commits (feat, fix, docs, chore, …). Push after each commit. Open a draft pull request on the first push; do not wait until the work is finished.

@@ -59,7 +59,7 @@ describe("COMPUTER_AGENT_SYSTEM", () => {
     expect(COMPUTER_AGENT_SYSTEM).toContain(
       "until that task is done and you have checked that it worked",
     );
-    expect(COMPUTER_AGENT_SYSTEM).toContain("fresh shell");
+    expect(COMPUTER_AGENT_SYSTEM).toContain("fresh login bash");
     expect(COMPUTER_AGENT_SYSTEM).toContain("no polling");
     expect(COMPUTER_AGENT_SYSTEM).toContain("check back later");
     expect(COMPUTER_AGENT_SYSTEM).toContain("10 minutes");
