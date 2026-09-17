@@ -6,9 +6,10 @@ import {
   trackToolCalls,
   type SubagentActivity,
 } from "../../lib/subagent-progress";
+import { DEFAULT_GITHUB_ORG, GITHUB_AGENT_SYSTEM } from "./github-prompt";
 
 const GITHUB_API = "https://api.github.com";
-const DEFAULT_ORG = "msocietyhq";
+const DEFAULT_ORG = DEFAULT_GITHUB_ORG;
 
 async function githubFetch(path: string): Promise<unknown> {
   const headers: Record<string, string> = {
@@ -174,9 +175,7 @@ export async function runGithubAgent(
 ): Promise<string> {
   const result = await aiService.generateText(
     {
-      system: `You are a GitHub assistant. You can browse any public GitHub repository, org, or user.
-The MSOCIETY community's default org is ${DEFAULT_ORG} — use it when no owner is specified.
-Be concise. Format for Telegram Markdown. Present lists as compact one-liners.`,
+      system: GITHUB_AGENT_SYSTEM,
       messages: [{ role: "user", content: query }],
       tools: trackToolCalls(githubTools, activity),
       stopWhen: stepCountIs(5),
