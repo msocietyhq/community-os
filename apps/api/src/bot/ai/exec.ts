@@ -38,7 +38,8 @@ export const EXEC_TOOL_DESCRIPTION = [
   "Execute a shell command on a remote, persistent Linux VM that you have access to.",
   "The command is run for you automatically — you do not SSH, pick a host, or manage keys.",
   "The same machine is reused across calls, so files, installed packages, and services persist.",
-  "Each call starts a fresh shell in the home directory: working directory and environment",
+  "Each call starts a fresh login bash in the home directory, so profile and",
+  "bashrc (PATH, nvm, aliases) are loaded. Working directory and extra environment",
   "variables do not carry over unless you persist them (chain with &&, write to disk, or",
   "update a profile file).",
   "There is no way to poll a running command. If it times out, it may still be running on",
@@ -180,8 +181,16 @@ export function formatExecResult(raw: ExecTransportResult): RemoteExecSuccess {
   // On timeout the latest lines are the progress; a completed flood still
   // keeps the start so a huge listing is readable from the top.
   const clipFn = raw.timedOut ? clipTail : clip;
-  const stdout = clipOutput(raw.stdout, MAX_STDOUT_CHARS, clipFn);
-  const stderr = clipOutput(raw.stderr, MAX_STDERR_CHARS, clipFn);
+  const stdout = clipOutput(
+    stripBashInitNoise(raw.stdout),
+    MAX_STDOUT_CHARS,
+    clipFn,
+  );
+  const stderr = clipOutput(
+    stripBashInitNoise(raw.stderr),
+    MAX_STDERR_CHARS,
+    clipFn,
+  );
   return {
     exitCode: raw.timedOut ? null : raw.exitCode,
     stdout: stdout.text,
@@ -210,6 +219,12 @@ function clipOutput(
  * The user command is base64-encoded rather than interpolated, so pipes,
  * quotes and `timeout` itself cannot break out of the wrapper.
  *
+ * `bash +H -ilc` is an interactive login bash (same files as `ssh host` with
+ * no command): `/etc/profile`, `~/.profile`, and `~/.bashrc`. A non-interactive
+ * `ssh host cmd` skips those, and Ubuntu's bashrc then `return`s because `$-`
+ * has no `i`. Piping into `sh` made that worse — dash never reads bashrc.
+ * `+H` turns off history expansion so `!` in a command is literal.
+ *
  * `MSOCIETY_AGENT_EXEC=1` marks the process tree so a bot restart can reap
  * leftovers whose SSH parent died in a crash, without waiting out the 10
  * minute lifetime.
@@ -218,8 +233,27 @@ export function wrapRemoteCommand(command: string): string {
   const encoded = Buffer.from(command, "utf8").toString("base64");
   return [
     `trap "" HUP`,
-    `printf '%s' '${encoded}' | base64 -d | env ${EXEC_MARKER_ENV}=1 timeout --kill-after=${EXEC_KILL_GRACE_SEC}s ${EXEC_MAX_LIFETIME_SEC} sh`,
+    `cmd=$(printf '%s' '${encoded}' | base64 -d)`,
+    `env ${EXEC_MARKER_ENV}=1 timeout --kill-after=${EXEC_KILL_GRACE_SEC}s ${EXEC_MAX_LIFETIME_SEC} bash +H -ilc "$cmd"`,
   ].join("; ");
+}
+
+/**
+ * Interactive bash without a TTY prints job-control warnings on stderr, and
+ * Ubuntu's `/etc/bash.bashrc` may print a sudo hint on stdout. Neither is
+ * command output.
+ */
+export function stripBashInitNoise(text: string): string {
+  return text
+    .replace(
+      /^bash: cannot set terminal process group \(\d+\): Inappropriate ioctl for device\r?\n/gm,
+      "",
+    )
+    .replace(/^bash: no job control in this shell\r?\n/gm, "")
+    .replace(
+      /^To run a command as administrator \(user "root"\), use "sudo <command>"\.\r?\n(?:See "man sudo_root" for details\.\r?\n)?(?:\r?\n)?/gm,
+      "",
+    );
 }
 
 /**

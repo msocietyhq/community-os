@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +15,7 @@ import {
   normalizePrivateKey,
   remoteExec,
   remoteExecConfigFrom,
+  stripBashInitNoise,
   wrapRemoteCommand,
   EXEC_MAX_LIFETIME_SEC,
   EXEC_KILL_GRACE_SEC,
@@ -39,6 +40,48 @@ const CONFIG: RemoteExecConfig = {
   username: "agent",
   privateKey: PEM,
 };
+
+/** Ubuntu-style home: .profile sources .bashrc, .bashrc is interactive-only. */
+async function mkLoginHome(): Promise<string> {
+  const home = await mkdtemp(join(tmpdir(), "exec-login-"));
+  await writeFile(join(home, ".hushlogin"), "");
+  await writeFile(
+    join(home, ".bashrc"),
+    [
+      "case $- in",
+      "    *i*) ;;",
+      "      *) return;;",
+      "esac",
+      'export PATH="$HOME/bin:$PATH"',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(home, ".profile"),
+    [
+      'if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then',
+      '  . "$HOME/.bashrc"',
+      "fi",
+      "",
+    ].join("\n"),
+  );
+  await mkdir(join(home, "bin"));
+  await writeFile(join(home, "bin", "mytool"), "#!/bin/sh\necho mytool-ok\n", {
+    mode: 0o755,
+  });
+  await chmod(join(home, "bin", "mytool"), 0o755);
+  return home;
+}
+
+function loginHomeEnv(home: string): Record<string, string> {
+  return {
+    HOME: home,
+    PATH: "/usr/bin:/bin",
+    USER: "agent",
+    TERM: "xterm",
+    LANG: "C",
+  };
+}
 
 const ok = (
   overrides: Partial<ExecTransportResult> = {},
@@ -172,6 +215,20 @@ describe("clampExecTimeoutMs", () => {
 });
 
 describe("formatExecResult", () => {
+  test("strips bash init noise before returning streams", () => {
+    const out = formatExecResult(
+      ok({
+        stdout:
+          'To run a command as administrator (user "root"), use "sudo <command>".\nSee "man sudo_root" for details.\n\nhello\n',
+        stderr:
+          "bash: cannot set terminal process group (9): Inappropriate ioctl for device\nbash: no job control in this shell\nwarn\n",
+      }),
+    );
+    expect(out.stdout).toBe("hello\n");
+    expect(out.stderr).toBe("warn\n");
+    expect(out.truncated).toBe(false);
+  });
+
   test("clips oversized streams and marks truncated", () => {
     const out = formatExecResult(
       ok({
@@ -296,7 +353,8 @@ describe("EXEC_TOOL_DESCRIPTION", () => {
     expect(EXEC_TOOL_DESCRIPTION).toContain("remote, persistent Linux VM");
     expect(EXEC_TOOL_DESCRIPTION).toContain("automatically");
     expect(EXEC_TOOL_DESCRIPTION).toContain("do not SSH");
-    expect(EXEC_TOOL_DESCRIPTION).toContain("fresh shell");
+    expect(EXEC_TOOL_DESCRIPTION).toContain("fresh login bash");
+    expect(EXEC_TOOL_DESCRIPTION).toContain("bashrc");
   });
 
   test("tells the model not to poll a timeout, and that leftovers die after 10 minutes", () => {
@@ -333,11 +391,43 @@ describe("wrapRemoteCommand", () => {
     expect(Buffer.from(payload, "base64").toString("utf8")).toBe(command);
   });
 
-  test("the wrapper actually runs the encoded command", () => {
-    const wrapped = wrapRemoteCommand("printf 'ok-from-wrapper\\n'");
-    const result = Bun.spawnSync(["sh", "-c", wrapped], { stdout: "pipe" });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toBe("ok-from-wrapper\n");
+  test("the wrapper actually runs the encoded command", async () => {
+    const home = await mkLoginHome();
+    try {
+      const wrapped = wrapRemoteCommand("printf 'ok-from-wrapper\\n'");
+      const result = Bun.spawnSync(["sh", "-c", wrapped], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: loginHomeEnv(home),
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toBe("ok-from-wrapper\n");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("runs in an interactive login bash so a typical bashrc PATH is loaded", async () => {
+    const home = await mkLoginHome();
+    try {
+      const wrapped = wrapRemoteCommand("command -v mytool");
+      const result = Bun.spawnSync(["sh", "-c", wrapped], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: loginHomeEnv(home),
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString().trim()).toBe(`${home}/bin/mytool`);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("does not pipe the command to sh — that skips bashrc", () => {
+    const wrapped = wrapRemoteCommand("true");
+    expect(wrapped).toContain("bash +H -ilc");
+    expect(wrapped).not.toMatch(/\bsh$/);
+    expect(wrapped).not.toMatch(/timeout [^;]* sh\b/);
   });
 
   test("marks the process so a restart can reap leftovers", () => {
@@ -345,6 +435,24 @@ describe("wrapRemoteCommand", () => {
     expect(wrapRemoteCommand("true")).toContain(
       `env ${EXEC_MARKER_ENV}=1 timeout`,
     );
+  });
+});
+
+describe("stripBashInitNoise", () => {
+  test("drops interactive-bash job-control warnings from stderr", () => {
+    expect(
+      stripBashInitNoise(
+        "bash: cannot set terminal process group (1234): Inappropriate ioctl for device\nbash: no job control in this shell\nreal error\n",
+      ),
+    ).toBe("real error\n");
+  });
+
+  test("drops the Ubuntu sudo hint that login bash prints on stdout", () => {
+    expect(
+      stripBashInitNoise(
+        'To run a command as administrator (user "root"), use "sudo <command>".\nSee "man sudo_root" for details.\n\nok\n',
+      ),
+    ).toBe("ok\n");
   });
 });
 
