@@ -1,7 +1,7 @@
 /**
  * Computer sub-agent: runs shell commands on the remote VM until a task is
- * done, then reports back. The parent keeps the conversation and can
- * delegate again if the report isn't enough.
+ * done, then reports back. The parent has no exec of its own — inspect and
+ * verify by delegating again.
  */
 
 import { stepCountIs, tool } from "ai";
@@ -23,7 +23,6 @@ import {
 import {
   COMPUTER_AGENT_SYSTEM,
   COMPUTER_TOOL_DESCRIPTION,
-  withParentVerifyAsk,
 } from "./computer-prompt";
 
 export { COMPUTER_AGENT_SYSTEM, COMPUTER_TOOL_DESCRIPTION };
@@ -107,7 +106,5 @@ export async function runComputerAgent(
     result.text?.slice(0, 120),
   );
 
-  return withParentVerifyAsk(
-    result.text || "I couldn't complete that on the computer.",
-  );
+  return result.text || "I couldn't complete that on the computer.";
 }

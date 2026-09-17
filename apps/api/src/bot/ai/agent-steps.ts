@@ -2,8 +2,8 @@
  * How long a tool loop may run.
  *
  * Ten steps is the usual budget for the main agent and advisors. A turn that
- * has already called `computer` or `exec` gets thirty — the sub-agent reports
- * back, and the parent may need to verify with exec or delegate again. The
+ * has already called `computer` gets thirty — the sub-agent reports back, and
+ * the parent may need to send a verification briefing or delegate again. The
  * computer sub-agent itself also gets thirty so it can run, inspect, and
  * check in one go; the next user message is a new conversation.
  */
@@ -15,9 +15,7 @@ export function stepsUsedComputer(
   steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ toolName: string }> }>,
 ): boolean {
   return steps.some((step) =>
-    step.toolCalls.some(
-      (call) => call.toolName === "computer" || call.toolName === "exec",
-    ),
+    step.toolCalls.some((call) => call.toolName === "computer"),
   );
 }
 

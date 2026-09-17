@@ -5,10 +5,12 @@ export const COMPUTER_TOOL_DESCRIPTION = [
   "query: the outcome, constraints, paths, prior attempts, errors, and anything else",
   "it needs to succeed. Describe the outcome you want, not the commands — the",
   "sub-agent picks those and keeps going. You get a report back; if it is incomplete,",
-  "delegate again with the missing context included. Then verify the result yourself",
-  "with exec — do not take the report on trust. If a command times out it may still",
-  "be running for up to 10 minutes, then it is killed: ask the user to check back",
-  "later rather than polling. Do not SSH or manage keys yourself.",
+  "delegate again with the missing context included. Inspect the machine and review",
+  "output the same way — another computer briefing, not a command of your own. Do",
+  "not take a report on trust: send a verification check before telling the user it",
+  "is done. If a command times out it may still be running for up to 10 minutes,",
+  "then it is killed: ask the user to check back later rather than polling. Do not",
+  "SSH or manage keys yourself.",
 ].join(" ");
 
 export const COMPUTER_QUERY_DESCRIPTION = [
@@ -16,24 +18,6 @@ export const COMPUTER_QUERY_DESCRIPTION = [
   "not earlier tool results. Include the outcome to achieve plus all relevant context:",
   "constraints, file paths, commands already tried, errors, URLs, and user preferences.",
 ].join(" ");
-
-export const PARENT_EXEC_TOOL_DESCRIPTION = [
-  "Run a shell command on the remote persistent Linux VM to inspect it or to verify",
-  "work the computer sub-agent reported. Do not use this to carry out a multi-step",
-  "task — delegate that to computer. Each call is a fresh shell in the home directory.",
-  "You do not SSH or manage keys. If a command times out it may still be running for",
-  "up to 10 minutes, then it is killed; ask the user to check back later, do not poll.",
-].join(" ");
-
-export const PARENT_VERIFY_ASK =
-  "Please verify this with exec before treating it as done. Do not trust this report alone.";
-
-/** Ensures the computer sub-agent's tool output always asks the parent to check. */
-export function withParentVerifyAsk(report: string): string {
-  const body = report.trim() || "I couldn't complete that on the computer.";
-  if (body.includes("verify this with exec")) return body;
-  return `${body}\n\n${PARENT_VERIFY_ASK}`;
-}
 
 export const COMPUTER_AGENT_SYSTEM = `You complete tasks on a remote, persistent Linux VM by running shell commands.
 
@@ -47,4 +31,4 @@ Rules:
 - Each exec starts a fresh shell in the home directory. Working directory and environment variables do not carry over unless you persist them (chain with &&, write to disk, or update a profile file).
 - Read the output before the next command.
 - If a command times out it may still be running for up to 10 minutes, then it is killed. There is no polling: stop, say so in your report, and tell the parent to ask the user to check back later. Do not retry or wait in a loop.
-- When you are done, report what you did and the evidence it succeeded (or why it failed). Always ask the parent to verify with exec, and say exactly what to check (paths, commands, expected output). Be concise. Format for Telegram Markdown.`;
+- When you are done, report what you did and the evidence it succeeded (or why it failed). Include exact paths, commands, and expected output the parent can use for a verification pass. Be concise. Format for Telegram Markdown.`;
