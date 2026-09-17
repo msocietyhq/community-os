@@ -21,6 +21,10 @@ import {
 } from "@community-os/shared/bot-settings";
 import { getHistory, getSettings } from "../../services/bot-settings.service";
 import { runGithubAgent } from "./agents/github";
+import {
+  GITHUB_QUERY_DESCRIPTION,
+  GITHUB_TOOL_DESCRIPTION,
+} from "./agents/github-prompt";
 import { runComputerAgent } from "./agents/computer";
 import {
   COMPUTER_QUERY_DESCRIPTION,
@@ -582,10 +586,9 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
     }),
 
     github: tool({
-      description:
-        "Browse any public GitHub repo, org, or user: list repos, get repo details, view issues and pull requests. Defaults to the `msocietyhq` org when no owner is specified.",
+      description: GITHUB_TOOL_DESCRIPTION,
       inputSchema: z.object({
-        query: z.string().describe("What to look up on GitHub"),
+        query: z.string().describe(GITHUB_QUERY_DESCRIPTION),
       }),
       execute: async ({ query }) => {
         return withProgress(ctx, "GitHub", query, (activity) =>

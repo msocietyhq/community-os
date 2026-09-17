@@ -684,7 +684,24 @@ describe("system prompt composition", () => {
     expect(withComputer.system).toContain("delegate again");
     expect(withComputer.system).toContain("never commits to main or master");
     expect(withComputer.system).toContain("draft PR on the first push");
+    expect(withComputer.system).toContain(
+      "go to github — not computer, not gh",
+    );
+    expect(withComputer.system).toContain("cannot read files, run gh");
     expect(without.system).not.toContain("persistent Linux VM");
+  });
+
+  test("a responder turn scopes github to the lookups the sub-agent can do", async () => {
+    const { recaller } = makeRecaller();
+    const ctx = await buildAgentContext(
+      baseInput({ chimingIn: false, hasComputer: false }),
+      recaller,
+    );
+
+    expect(ctx.system).toContain("orgs, repos, issues, PRs");
+    expect(ctx.system).toContain("cannot");
+    expect(ctx.system).toContain("files");
+    expect(ctx.system).toContain("gh");
   });
 
   test("chime-in does not mention the computer even when it is configured", async () => {

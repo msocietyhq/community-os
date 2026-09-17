@@ -35,6 +35,13 @@ describe("COMPUTER_TOOL_DESCRIPTION", () => {
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("draft PR on the first push");
     expect(COMPUTER_TOOL_DESCRIPTION).toContain("pack the branch");
   });
+
+  test("keeps org, repo, issue, and PR list lookups off computer and on github", () => {
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("github's job");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("not gh");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("file contents");
+    expect(COMPUTER_TOOL_DESCRIPTION).toContain("CI");
+  });
 });
 
 describe("COMPUTER_QUERY_DESCRIPTION", () => {
