@@ -3,6 +3,11 @@ import { clip } from "../../lib/text";
 import type { ModelMessage } from "ai";
 import type { TelegramMeta } from "../types";
 import type { telegramMessages } from "../../db/schema/bot";
+import type { ConversationContext } from "./conversation-context";
+export {
+  HISTORY_MESSAGE_LIMIT,
+  HISTORY_WINDOW_MS,
+} from "./conversation-context";
 
 export const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -17,8 +22,6 @@ export const ONE_HOUR_MS = 60 * 60 * 1000;
  * still in here the agent can read it directly, so a fact drawn from it is
  * redundant. See `memory-batch.ts`.
  */
-export const HISTORY_MESSAGE_LIMIT = 50;
-export const HISTORY_WINDOW_MS = ONE_HOUR_MS;
 
 const REPLY_TEXT_MAX = 120;
 
@@ -257,7 +260,25 @@ function buildReplyAttrs(
 /**
  * Formats a list of DB message rows into a readable transcript for group context.
  */
-export function formatGroupHistory(messages: TelegramMessageRow[]): string {
+export function formatGroupHistory(messages: TelegramMessageRow[]): string;
+export function formatGroupHistory(context: ConversationContext): string;
+export function formatGroupHistory(
+  input: TelegramMessageRow[] | ConversationContext,
+): string {
+  const messages: TelegramMessageRow[] = Array.isArray(input)
+    ? input
+    : input.recentHistory.map(
+        (m) =>
+          ({
+            messageId: m.id,
+            fromUsername: m.from.startsWith("@") ? m.from.slice(1) : null,
+            fromFirstName: m.from.startsWith("@") ? null : m.from,
+            text: m.text,
+            caption: null,
+            mediaType: null,
+            date: new Date(m.at),
+          }) as TelegramMessageRow,
+      );
   const lines = messages.map((msg) => {
     const time = formatTelegramDate(Math.floor(msg.date.getTime() / 1000));
     const name = msg.fromUsername
@@ -280,7 +301,37 @@ export function buildEnrichedQuery(
   query: string,
   meta: TelegramMeta,
   chatId?: string,
+): string;
+export function buildEnrichedQuery(
+  query: string,
+  context: ConversationContext,
+): string;
+export function buildEnrichedQuery(
+  query: string,
+  input: TelegramMeta | ConversationContext,
+  chatId?: string,
 ): string {
+  const meta: TelegramMeta =
+    "currentMessage" in input
+      ? {
+          messageId: input.currentMessage.id,
+          date: Math.floor(Date.parse(input.currentMessage.at) / 1000),
+          from: { id: 0, firstName: input.currentMessage.from },
+          chatType: input.metadata.isGroupChat ? "group" : "private",
+          ...(input.parentMessage
+            ? {
+                replyTo: {
+                  messageId: input.parentMessage.id,
+                  date: Math.floor(Date.parse(input.parentMessage.at) / 1000),
+                  from: { id: 0, firstName: input.parentMessage.from },
+                  text: input.parentMessage.text,
+                },
+              }
+            : {}),
+        }
+      : input;
+  const effectiveChatId =
+    "currentMessage" in input ? input.chatId || undefined : chatId;
   const datePart = `${formatTelegramDateFull(meta.date)}, ${formatTelegramDate(meta.date)}`;
 
   let header: string;
@@ -296,9 +347,9 @@ export function buildEnrichedQuery(
     if (replyText.length > REPLY_TEXT_MAX) {
       replyText = `${replyText.slice(0, REPLY_TEXT_MAX)}…`;
     }
-    header = `[${datePart} | ${senderPart} → replying to ${replyFrom} at ${replyTime}: "${replyText}"${chatId ? ` | chat_id: ${chatId}` : ""}]`;
+    header = `[${datePart} | ${senderPart} → replying to ${replyFrom} at ${replyTime}: "${replyText}"${effectiveChatId ? ` | chat_id: ${effectiveChatId}` : ""}]`;
   } else {
-    header = `[${datePart} | ${senderPart}${chatId ? ` | chat_id: ${chatId}` : ""}]`;
+    header = `[${datePart} | ${senderPart}${effectiveChatId ? ` | chat_id: ${effectiveChatId}` : ""}]`;
   }
 
   return `${header}\n${query}`;
@@ -321,7 +372,34 @@ export function buildMessagesFromHistory(
   rows: TelegramMessageRow[],
   botUserId: number,
   aiResponses: Record<number, ModelMessage[]>,
+): ModelMessage[];
+export function buildMessagesFromHistory(
+  context: ConversationContext,
+  botUserId: number,
+  aiResponses: Record<number, ModelMessage[]>,
+): ModelMessage[];
+export function buildMessagesFromHistory(
+  input: TelegramMessageRow[] | ConversationContext,
+  botUserId: number,
+  aiResponses: Record<number, ModelMessage[]>,
 ): ModelMessage[] {
+  const rows: TelegramMessageRow[] = Array.isArray(input)
+    ? input
+    : input.recentHistory.map(
+        (m) =>
+          ({
+            messageId: m.id,
+            fromUserId: m.senderId ?? 0,
+            fromUsername: m.from.startsWith("@") ? m.from.slice(1) : null,
+            fromFirstName: m.from.startsWith("@") ? null : m.from,
+            text: m.text,
+            caption: null,
+            mediaType: null,
+            replyToMessageId: m.replyToId ?? null,
+            messageThreadId: null,
+            date: new Date(m.at),
+          }) as TelegramMessageRow,
+      );
   const messages: ModelMessage[] = [];
   const byMessageId = new Map(rows.map((r) => [r.messageId, r]));
   let lastDateStr = "";

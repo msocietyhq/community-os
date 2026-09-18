@@ -7,8 +7,6 @@ import {
   buildTelegramMeta,
   buildEnrichedQuery,
   buildMessagesFromHistory,
-  HISTORY_MESSAGE_LIMIT,
-  HISTORY_WINDOW_MS,
   ONE_HOUR_MS,
 } from "../lib/chat-context";
 import {
@@ -36,6 +34,11 @@ import { getSettings } from "../../services/bot-settings.service";
 import { inQuietHours } from "../lib/chime-in";
 import { shouldSendDenial } from "../lib/dm-access";
 import { resolveUser } from "../lib/auth";
+import { buildConversationContext } from "../lib/conversation-context";
+import {
+  HISTORY_MESSAGE_LIMIT,
+  HISTORY_WINDOW_MS,
+} from "../lib/conversation-context";
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -174,28 +177,55 @@ aiChatHandler.on("message:text", async (ctx) => {
     chatType as "private" | "group" | "supergroup",
   );
 
-  const enrichedQuery = buildEnrichedQuery(
-    query,
-    meta,
-    isGroup ? String(ctx.chat.id) : undefined,
-  );
-
-  // Fetch recent messages from DB.
-  // `message_thread_id` is undefined outside forum topics; coerce to null so
-  // General-topic messages are scoped to General rather than skipping the
-  // thread filter entirely and pulling in every topic's chatter.
+  // Normalize the update and stored rows into one transport-independent context.
   const recentMessages = await getRecentChatMessages(
     String(ctx.chat.id),
     ctx.message.message_thread_id ?? null,
     HISTORY_WINDOW_MS,
     HISTORY_MESSAGE_LIMIT,
-    ctx.message.message_id, // exclude current (it's in enrichedQuery)
+    ctx.message.message_id,
   );
+  const conversation = await buildConversationContext(
+    {
+      chatId: String(ctx.chat.id),
+      messageId: meta.messageId,
+      text: query,
+      from: meta.from.username ? `@${meta.from.username}` : meta.from.firstName,
+      at: meta.date,
+      isGroupChat: isGroup,
+      topicId: ctx.message.message_thread_id,
+    },
+    recentMessages.map((row) => ({
+      id: row.messageId,
+      text:
+        row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
+      from: row.fromUsername
+        ? `@${row.fromUsername}`
+        : (row.fromFirstName ?? "unknown"),
+      at: row.date.toISOString(),
+      senderId: row.fromUserId ?? undefined,
+      ...(row.replyToMessageId == null
+        ? {}
+        : { replyToId: row.replyToMessageId }),
+    })),
+  );
+  if (meta.replyTo && !conversation.parentMessage) {
+    const replyFrom = meta.replyTo.from;
+    conversation.parentMessage = {
+      id: meta.replyTo.messageId,
+      text: meta.replyTo.text ?? "(non-text message)",
+      from: replyFrom?.username
+        ? `@${replyFrom.username}`
+        : (replyFrom?.firstName ?? "someone"),
+      at: new Date(meta.replyTo.date * 1000).toISOString(),
+    };
+  }
+  const enrichedQuery = buildEnrichedQuery(query, conversation);
 
   // Build ModelMessage[] from DB rows + session AI context
   const aiResponses = ctx.session.aiResponses ?? {};
   const chatHistory = buildMessagesFromHistory(
-    recentMessages,
+    conversation,
     ctx.me.id,
     aiResponses,
   );
@@ -410,7 +440,22 @@ async function shouldChimeIn(
 
   const decision = await judgeChimeIn({
     message: text,
-    transcript: formatGroupHistory(context),
+    transcript: formatGroupHistory({
+      chatId,
+      currentMessage: {
+        id: 0,
+        text,
+        from: "unknown",
+        at: new Date(now).toISOString(),
+      },
+      recentHistory: context.map((row) => ({
+        id: row.messageId,
+        text: row.text ?? row.caption ?? "",
+        from: row.fromUsername ?? row.fromFirstName ?? "unknown",
+        at: row.date.toISOString(),
+      })),
+      metadata: { isGroupChat: true },
+    }),
     chatId,
     telegramUserId: ctx.from?.id ?? null,
     minConfidence: settings["chimeIn.minConfidence"],
