@@ -7,6 +7,7 @@ import { publicMemberRoutes } from "./routes/public-members";
 import { memberRoutes } from "./routes/members";
 import { eventRoutes } from "./routes/events";
 import { projectRoutes } from "./routes/projects";
+import { datasetRoutes } from "./routes/datasets";
 import { infraRoutes } from "./routes/infra";
 import { fundRoutes } from "./routes/funds";
 import { reputationRoutes } from "./routes/reputation";
@@ -106,6 +107,7 @@ export const app = new Elysia()
   .use(memberRoutes)
   .use(eventRoutes)
   .use(projectRoutes)
+  .use(datasetRoutes)
   .use(infraRoutes)
   .use(fundRoutes)
   .use(venueRoutes)

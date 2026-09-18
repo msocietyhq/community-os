@@ -183,6 +183,13 @@
       "when": 1788089832850,
       "tag": "0025_mute_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789719265359,
+      "tag": "0026_many_yellow_claw",
+      "breakpoints": true
     }
   ]
 }
