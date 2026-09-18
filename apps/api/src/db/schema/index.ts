@@ -9,3 +9,4 @@ export * from "./reputation";
 export * from "./audit";
 export * from "./bot";
 export * from "./provider-health";
+export * from "./datasets";

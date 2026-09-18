@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as EventsIndexRouteImport } from './routes/events/index'
+import { Route as DatasetsIndexRouteImport } from './routes/datasets/index'
 import { Route as ProjectsSlugRouteImport } from './routes/projects/$slug'
 import { Route as MemberUsernameRouteImport } from './routes/member/$username'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
@@ -46,6 +47,11 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
 const EventsIndexRoute = EventsIndexRouteImport.update({
   id: '/events/',
   path: '/events/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatasetsIndexRoute = DatasetsIndexRouteImport.update({
+  id: '/datasets/',
+  path: '/datasets/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsSlugRoute = ProjectsSlugRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/member/$username': typeof MemberUsernameRoute
   '/projects/$slug': typeof ProjectsSlugRoute
+  '/datasets/': typeof DatasetsIndexRoute
   '/events/': typeof EventsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/member/$username': typeof MemberUsernameRoute
   '/projects/$slug': typeof ProjectsSlugRoute
+  '/datasets': typeof DatasetsIndexRoute
   '/events': typeof EventsIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/member/$username': typeof MemberUsernameRoute
   '/projects/$slug': typeof ProjectsSlugRoute
+  '/datasets/': typeof DatasetsIndexRoute
   '/events/': typeof EventsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/_authenticated/dashboard/events': typeof AuthenticatedDashboardEventsRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/member/$username'
     | '/projects/$slug'
+    | '/datasets/'
     | '/events/'
     | '/projects/'
     | '/dashboard/events'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/member/$username'
     | '/projects/$slug'
+    | '/datasets'
     | '/events'
     | '/projects'
     | '/dashboard/events'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/member/$username'
     | '/projects/$slug'
+    | '/datasets/'
     | '/events/'
     | '/projects/'
     | '/_authenticated/dashboard/events'
@@ -203,6 +215,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MemberUsernameRoute: typeof MemberUsernameRoute
   ProjectsSlugRoute: typeof ProjectsSlugRoute
+  DatasetsIndexRoute: typeof DatasetsIndexRoute
   EventsIndexRoute: typeof EventsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
 }
@@ -242,6 +255,13 @@ declare module '@tanstack/react-router' {
       path: '/events'
       fullPath: '/events/'
       preLoaderRoute: typeof EventsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/datasets/': {
+      id: '/datasets/'
+      path: '/datasets'
+      fullPath: '/datasets/'
+      preLoaderRoute: typeof DatasetsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/$slug': {
@@ -340,6 +360,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MemberUsernameRoute: MemberUsernameRoute,
   ProjectsSlugRoute: ProjectsSlugRoute,
+  DatasetsIndexRoute: DatasetsIndexRoute,
   EventsIndexRoute: EventsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
 }
