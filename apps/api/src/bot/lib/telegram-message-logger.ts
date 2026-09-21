@@ -9,6 +9,7 @@ import { setMessageEmbedding } from "../../services/messages.service";
 import { observeMessage } from "./memory-batch";
 import { shouldExtractMemory } from "./memory-extractor";
 import { getSettings } from "../../services/bot-settings.service";
+import { upsertTopicName } from "../../services/topics.service";
 
 type MediaType =
   | "photo"
@@ -179,6 +180,25 @@ export const telegramMessageLoggerMiddleware: MiddlewareFn<BotContext> = async (
       .catch((err: unknown) => {
         console.error("[message-logger] failed to persist message:", err);
       });
+
+    // A topic's name arrives as a service message, not as a setting anyone
+    // configures — captured here, alongside the rest of the message, so
+    // topic-drift detection has something to judge against. Skips a name
+    // Telegram marks as implicit (auto-filled from the first message rather
+    // than chosen), since that carries no real signal about the topic's
+    // subject.
+    const topicName =
+      (msg.forum_topic_created && !msg.forum_topic_created.is_name_implicit
+        ? msg.forum_topic_created.name
+        : undefined) ?? msg.forum_topic_edited?.name;
+    if (topicName) {
+      const threadId = msg.message_thread_id ?? msg.message_id;
+      upsertTopicName(String(chat.id), threadId, topicName).catch(
+        (err: unknown) => {
+          console.error("[message-logger] failed to persist topic name:", err);
+        },
+      );
+    }
 
     // Embedding generation is fire-and-forget
     const content = row.text ?? row.caption;

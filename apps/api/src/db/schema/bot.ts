@@ -119,6 +119,26 @@ export const telegramMessages = pgTable(
   ],
 );
 
+/**
+ * Telegram forum topic names, keyed by (chatId, threadId).
+ *
+ * Populated from `forum_topic_created`/`forum_topic_edited` service messages
+ * as they're seen — there is no bulk API to backfill topics that existed
+ * before this table did, so a topic's name is unknown here until the next
+ * time it's created or renamed. Used as the "what is this topic about"
+ * signal for topic-drift detection (see `bot/lib/topic-drift.ts`).
+ */
+export const telegramTopics = pgTable(
+  "telegram_topics",
+  {
+    chatId: text("chat_id").notNull(),
+    threadId: integer("thread_id").notNull(),
+    name: text("name").notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.chatId, table.threadId] })],
+);
+
 export const aiUsage = pgTable(
   "ai_usage",
   {

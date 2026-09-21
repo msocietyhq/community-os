@@ -204,6 +204,20 @@
       "when": 1789972151657,
       "tag": "0028_curvy_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789978472789,
+      "tag": "0029_pink_scrambler",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1789990465927,
+      "tag": "0030_lakebase_text_migration",
+      "breakpoints": true
     }
   ]
 }

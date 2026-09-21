@@ -26,6 +26,18 @@ import {
   CHIME_IN_CONTEXT_MESSAGES,
 } from "../lib/chime-in";
 import { judgeChimeIn } from "../lib/chime-in-judge";
+import {
+  preFilter as driftPreFilter,
+  topicKey,
+  recordOffTopic,
+  resetStreak,
+  lastReminderAt,
+  recordReminder,
+  renderReminder,
+  TOPIC_DRIFT_CONTEXT_MESSAGES,
+} from "../lib/topic-drift";
+import { judgeTopicDrift } from "../lib/topic-drift-judge";
+import { getTopicName } from "../../services/topics.service";
 import { policyFor, permittedCallbacks, deliver } from "../lib/turn";
 import { toTelegramMarkdown } from "../lib/markdown";
 import { renderDraftCard } from "../lib/settings-menu";
@@ -34,11 +46,57 @@ import { getSettings } from "../../services/bot-settings.service";
 import { inQuietHours } from "../lib/chime-in";
 import { shouldSendDenial } from "../lib/dm-access";
 import { resolveUser } from "../lib/auth";
-import { buildConversationContext } from "../lib/conversation-context";
 import {
+  buildConversationContext,
   HISTORY_MESSAGE_LIMIT,
   HISTORY_WINDOW_MS,
+  type ChatHistoryFetcher,
+  type ConversationMessage,
 } from "../lib/conversation-context";
+import { getMessagesByIds } from "../../services/messages.service";
+
+type RecentChatMessageRow = Awaited<
+  ReturnType<typeof getRecentChatMessages>
+>[number];
+
+function rowToConversationMessage(
+  row: RecentChatMessageRow,
+): ConversationMessage {
+  return {
+    id: row.messageId,
+    text:
+      row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
+    from: row.fromUsername
+      ? `@${row.fromUsername}`
+      : (row.fromFirstName ?? "unknown"),
+    at: row.date.toISOString(),
+    senderId: row.fromUserId ?? undefined,
+    ...(row.replyToMessageId == null
+      ? {}
+      : { replyToId: row.replyToMessageId }),
+  };
+}
+
+/**
+ * Resolves an out-of-window reply parent by primary-key lookup — the same
+ * lookup the `chat_history` tool's `message_ids` mode uses. Lets both the
+ * main agent and the chime-in judge see a parent that aged out of the
+ * rolling window instead of only what Telegram happened to embed inline.
+ */
+const fetchChatHistory: ChatHistoryFetcher = async (messageId, chatId) => {
+  if (chatId === undefined) return null;
+  const [message] = await getMessagesByIds(chatId, [messageId]);
+  if (!message) return null;
+  return {
+    id: message.messageId,
+    text: message.text ?? "",
+    from: message.from,
+    at: message.date.toISOString(),
+    ...(message.replyToMessageId == null
+      ? {}
+      : { replyToId: message.replyToMessageId }),
+  };
+};
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -139,7 +197,14 @@ aiChatHandler.on("message:text", async (ctx) => {
 
     if (!isMentioned && !isReplyToBot && !resuming) {
       chimingIn = await shouldChimeIn(ctx, text, now);
-      if (!chimingIn) return;
+      if (!chimingIn) {
+        // A separate judgement from chime-in: not "should the bot answer
+        // this", but "has this topic drifted". Only reachable here — a turn
+        // the bot is already about to answer or speak in this cycle isn't
+        // also a candidate for a drift reminder in the same breath.
+        await maybeRemindTopicDrift(ctx, text, now);
+        return;
+      }
     }
 
     query = isMentioned
@@ -192,22 +257,12 @@ aiChatHandler.on("message:text", async (ctx) => {
       text: query,
       from: meta.from.username ? `@${meta.from.username}` : meta.from.firstName,
       at: meta.date,
+      replyToId: meta.replyTo?.messageId,
       isGroupChat: isGroup,
       topicId: ctx.message.message_thread_id,
     },
-    recentMessages.map((row) => ({
-      id: row.messageId,
-      text:
-        row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
-      from: row.fromUsername
-        ? `@${row.fromUsername}`
-        : (row.fromFirstName ?? "unknown"),
-      at: row.date.toISOString(),
-      senderId: row.fromUserId ?? undefined,
-      ...(row.replyToMessageId == null
-        ? {}
-        : { replyToId: row.replyToMessageId }),
-    })),
+    recentMessages.map(rowToConversationMessage),
+    fetchChatHistory,
   );
   if (meta.replyTo && !conversation.parentMessage) {
     const replyFrom = meta.replyTo.from;
@@ -403,6 +458,48 @@ aiChatHandler.on("message:text", async (ctx) => {
 });
 
 /**
+ * Fetches recent history and builds the same transcript the main agent path
+ * uses — resolved reply parents included, via `buildConversationContext`
+ * and `fetchChatHistory`, rather than a hand-built stand-in — for a judge to
+ * read. Shared by chime-in and topic-drift, which differ only in how many
+ * messages of context they judge with.
+ */
+async function buildJudgeTranscript(
+  ctx: BotContext,
+  chatId: string,
+  text: string,
+  now: number,
+  contextMessages: number,
+): Promise<string> {
+  const recentMessages = await getRecentChatMessages(
+    chatId,
+    ctx.message!.message_thread_id ?? null,
+    ONE_HOUR_MS,
+    contextMessages,
+    ctx.message!.message_id,
+  );
+
+  const conversation = await buildConversationContext(
+    {
+      chatId,
+      messageId: ctx.message!.message_id,
+      text,
+      from: ctx.from?.username
+        ? `@${ctx.from.username}`
+        : (ctx.from?.first_name ?? "unknown"),
+      at: now,
+      replyToId: ctx.message!.reply_to_message?.message_id,
+      isGroupChat: true,
+      topicId: ctx.message!.message_thread_id,
+    },
+    recentMessages.map(rowToConversationMessage),
+    fetchChatHistory,
+  );
+
+  return formatGroupHistory(conversation);
+}
+
+/**
  * Three gates in series, cheapest first: a free pre-filter, a hard cooldown
  * that no model can override, then a Haiku judgement with conversation
  * context. Any failure resolves to silence.
@@ -430,32 +527,17 @@ async function shouldChimeIn(
   if (!offCooldown(lastChimeAt(chatId), now, cooldownMs)) return false;
 
   // Judged with surrounding conversation — "yeah probably" is unjudgeable alone.
-  const context = await getRecentChatMessages(
+  const transcript = await buildJudgeTranscript(
+    ctx,
     chatId,
-    ctx.message!.message_thread_id ?? null,
-    ONE_HOUR_MS,
+    text,
+    now,
     CHIME_IN_CONTEXT_MESSAGES,
-    ctx.message!.message_id,
   );
 
   const decision = await judgeChimeIn({
     message: text,
-    transcript: formatGroupHistory({
-      chatId,
-      currentMessage: {
-        id: 0,
-        text,
-        from: "unknown",
-        at: new Date(now).toISOString(),
-      },
-      recentHistory: context.map((row) => ({
-        id: row.messageId,
-        text: row.text ?? row.caption ?? "",
-        from: row.fromUsername ?? row.fromFirstName ?? "unknown",
-        at: row.date.toISOString(),
-      })),
-      metadata: { isGroupChat: true },
-    }),
+    transcript,
     chatId,
     telegramUserId: ctx.from?.id ?? null,
     minConfidence: settings["chimeIn.minConfidence"],
@@ -471,4 +553,110 @@ async function shouldChimeIn(
   );
 
   return decision.respond;
+}
+
+/**
+ * Notices sustained off-topic drift in a forum topic and posts a reminder.
+ *
+ * Same gate order as chime-in, cheapest first: a free pre-filter, skip
+ * anything not a named forum topic, a hard per-topic cooldown, then a Haiku
+ * judgement per message that only fires the reminder once it accumulates a
+ * long enough consecutive streak. Wrapped so it never throws — a DB hiccup
+ * or judge failure here must not take down ordinary chat traffic, so every
+ * step degrades to "do nothing" rather than propagating to the handler.
+ */
+async function maybeRemindTopicDrift(
+  ctx: BotContext,
+  text: string,
+  now: number,
+): Promise<void> {
+  try {
+    await remindOnTopicDrift(ctx, text, now);
+  } catch (err) {
+    console.error("[topic-drift] failed:", err);
+  }
+}
+
+async function remindOnTopicDrift(
+  ctx: BotContext,
+  text: string,
+  now: number,
+): Promise<void> {
+  const threadId = ctx.message?.message_thread_id;
+  if (threadId === undefined) return; // not a forum topic message
+
+  const chatId = String(ctx.chat!.id);
+  const settings = await getSettings();
+
+  if (!settings["topicDrift.enabled"]) return;
+
+  // Same quiet-hours rule as chime-in: this is the bot volunteering, not
+  // answering, so it stays out of the room overnight.
+  if (inQuietHours(settings["availability.quietHours"], new Date(now))) {
+    return;
+  }
+
+  // Free checks first — isBot, command, too-short — before either DB round
+  // trip, so ordinary traffic that would be rejected anyway never pays for
+  // one.
+  const skip = driftPreFilter({ text, isBot: ctx.from?.is_bot ?? false });
+  if (skip) return;
+
+  // The cooldown needs only chatId/threadId, not the topic's name — checked
+  // before the name lookup so the whole cooldown window (topicDrift.cooldownMinutes,
+  // 2 hours by default) skips that query too, not just the reminder send.
+  const key = topicKey(chatId, threadId);
+  const cooldownMs = settings["topicDrift.cooldownMinutes"] * 60_000;
+  if (!offCooldown(lastReminderAt(key), now, cooldownMs)) return;
+
+  const topicName = await getTopicName(chatId, threadId);
+  if (topicName === null) return;
+
+  const transcript = await buildJudgeTranscript(
+    ctx,
+    chatId,
+    text,
+    now,
+    TOPIC_DRIFT_CONTEXT_MESSAGES,
+  );
+
+  const decision = await judgeTopicDrift({
+    message: text,
+    transcript,
+    topicName,
+    chatId,
+    telegramUserId: ctx.from?.id ?? null,
+    minConfidence: settings["topicDrift.minConfidence"],
+  });
+
+  if (decision === null) {
+    // A judge failure says nothing about whether the topic actually came
+    // back on subject — leave a build-up streak alone rather than wipe it,
+    // so a transient outage can't quietly reset the count mid-derailment.
+    return;
+  }
+
+  console.log(
+    `[topic-drift] ${decision.offTopic ? "off-topic" : "on-topic"} (${decision.confidence.toFixed(2)}) — ${decision.reason} — "${text.slice(0, 200)}"`,
+  );
+
+  if (!decision.offTopic) {
+    resetStreak(key);
+    return;
+  }
+
+  const streak = recordOffTopic(key);
+  if (streak < settings["topicDrift.consecutiveOffTopic"]) return;
+
+  // Only counted as sent — cooldown started, streak cleared — once the
+  // message actually goes out. A failed send leaves the streak at
+  // threshold, so the very next off-topic message retries it rather than
+  // silencing the topic for a full cooldown window over nothing sent.
+  const reminder = renderReminder(
+    settings["topicDrift.reminderText"],
+    topicName,
+  );
+  const sent = await ctx.reply(reminder);
+  recordReminder(key, now);
+  logBotMessage(sent, ctx.me, ctx.chat!.type, reminder);
 }

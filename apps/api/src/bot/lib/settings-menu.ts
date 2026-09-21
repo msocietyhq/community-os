@@ -81,7 +81,15 @@ function indexValue(key: SettingKey, snapshot: SettingsSnapshot): string {
   const def = BOT_SETTINGS[key];
   // Computer values are short (a host, "set", a port) and useful on the
   // index. Welcome templates are not — they collapse to a state word.
-  if (def.secret || def.group === "computer" || def.control !== "text") {
+  // `previewOnIndex` is the same exemption for a short text setting outside
+  // the computer group, rather than exempting every text setting it shares
+  // a group with.
+  if (
+    def.secret ||
+    def.group === "computer" ||
+    def.previewOnIndex ||
+    def.control !== "text"
+  ) {
     return formatValue(key, snapshot[key]);
   }
 
