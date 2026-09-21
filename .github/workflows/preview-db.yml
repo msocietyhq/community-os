@@ -17,13 +17,18 @@ name: Preview Database
 # versions and input names against https://neon.com/docs/guides/branching-github-actions
 # before relying on it, and watch the first real run closely.
 #
-# This only provisions the database side. The API/web preview deploy itself
-# is Railway's own "PR Environments" feature — a toggle in the Railway
-# project dashboard (requires the Railway GitHub App installed on this repo),
-# not a workflow file. Once that's on, wire this job's `db_url` output into
-# that PR environment's DATABASE_URL (Railway dashboard, or
-# `railway variables set DATABASE_URL=... --environment pr-<n>` from a CLI
-# authenticated against this project).
+# The "push to Railway" step below assumes Railway's "PR Environments"
+# feature is already turned on in the Railway project dashboard (that part
+# is a toggle + the Railway GitHub App installed on this repo, not something
+# this file can do). The `railway variable set` / `railway environment list`
+# flags are copied verbatim from `railway --help` on CLI v5.58.0, so those
+# are real — but the JSON shape of `environment list --json` (assumed to
+# have a `.name` field) and how PR environments are actually named (assumed
+# to contain the PR number somewhere) are both unverified: this sandbox
+# can't reach Railway's API to test against a live project. The step is
+# written to fail soft (log + exit 0) rather than break the job if its
+# assumptions are wrong, but it needs a real run against your Railway
+# project to confirm it actually finds and sets the right thing.
 
 on:
   pull_request:
@@ -36,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NEON_CONFIGURED: ${{ secrets.NEON_API_KEY != '' && secrets.NEON_PROJECT_ID != '' }}
+      RAILWAY_CONFIGURED: ${{ secrets.RAILWAY_TOKEN != '' && secrets.RAILWAY_PROJECT_ID != '' && secrets.RAILWAY_SERVICE != '' }}
     steps:
       - name: Skip — preview DB secrets not configured
         if: env.NEON_CONFIGURED != 'true'
@@ -68,6 +74,41 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
         run: bun run db:migrate
+
+      - name: Skip — Railway secrets not configured
+        if: env.NEON_CONFIGURED == 'true' && env.RAILWAY_CONFIGURED != 'true'
+        run: echo "RAILWAY_TOKEN / RAILWAY_PROJECT_ID / RAILWAY_SERVICE not set — skipping DATABASE_URL handoff to Railway."
+
+      # Finds this PR's Railway "PR Environment" by name and sets its
+      # DATABASE_URL to the Neon branch just created. Fails soft: if
+      # Railway's PR Environments feature isn't on yet, or the naming
+      # assumption below is wrong, this logs and exits 0 rather than
+      # failing the whole job over a step whose exact shape is unverified
+      # (see the file-level note above).
+      - name: Push DATABASE_URL to the matching Railway PR environment
+        if: env.NEON_CONFIGURED == 'true' && env.RAILWAY_CONFIGURED == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DB_URL: ${{ steps.neon-branch.outputs.db_url }}
+        run: |
+          set -euo pipefail
+          ENV_NAME=$(npx -y @railway/cli environment list --project "$RAILWAY_PROJECT_ID" --json \
+            | jq -r --arg pr "$PR_NUMBER" '[.[] | select(.name | contains($pr))][0].name // empty')
+
+          if [ -z "$ENV_NAME" ]; then
+            echo "No Railway environment name contains PR #$PR_NUMBER — skipping. Either PR Environments isn't enabled yet, or its naming doesn't match this assumption (check manually)."
+            exit 0
+          fi
+
+          echo "Setting DATABASE_URL on Railway environment: $ENV_NAME"
+          npx -y @railway/cli variable set "DATABASE_URL=$DB_URL" \
+            --service "$RAILWAY_SERVICE" \
+            --environment "$ENV_NAME" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --skip-deploys --json
 
   delete:
     if: github.event.action == 'closed'
