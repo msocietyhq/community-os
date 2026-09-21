@@ -17,6 +17,7 @@
     "lint": "biome check --error-on-warnings .",
     "lint:fix": "biome check --write --error-on-warnings .",
     "type-check": "bun run --filter '*' type-check",
+    "test": "bun test",
     "db:generate": "bun run --filter @community-os/api db:generate",
     "db:migrate": "bun run --filter @community-os/api db:migrate",
     "db:seed": "bun run --filter @community-os/api db:seed"

@@ -4,6 +4,7 @@ export * from "./venues";
 export * from "./events";
 export * from "./projects";
 export * from "./infra";
+export * from "./dev-environments";
 export * from "./funds";
 export * from "./reputation";
 export * from "./audit";

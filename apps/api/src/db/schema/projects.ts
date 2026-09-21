@@ -23,6 +23,7 @@ export const projectStatusEnum = pgEnum("project_status", [
 
 export const projectMemberRoleEnum = pgEnum("project_member_role", [
   "owner",
+  "maintainer",
   "contributor",
 ]);
 

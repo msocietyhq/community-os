@@ -97,3 +97,31 @@ export const subdomains = pgTable("subdomains", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+/**
+ * Secrets generated during provisioning (DB connection strings, deploy
+ * tokens, etc). Values are AES-256-GCM encrypted in the app layer before
+ * they ever reach this table — `ciphertext`/`iv`/`authTag` are never
+ * plaintext. Never select `ciphertext` into a general list/read response;
+ * only the dedicated reveal endpoint decrypts, and every reveal is audited.
+ */
+export const resourceSecrets = pgTable(
+  "resource_secrets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provisionedResourceId: uuid("provisioned_resource_id")
+      .notNull()
+      .references(() => provisionedResources.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    ciphertext: text("ciphertext").notNull(),
+    iv: text("iv").notNull(),
+    authTag: text("auth_tag").notNull(),
+    createdBy: text("created_by").references(() => user.id),
+    rotatedAt: timestamp("rotated_at"),
+    lastRevealedAt: timestamp("last_revealed_at"),
+    lastRevealedBy: text("last_revealed_by").references(() => user.id),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [unique().on(table.provisionedResourceId, table.key)],
+);

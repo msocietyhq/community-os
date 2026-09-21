@@ -76,6 +76,7 @@ bun build                # Build all apps
 bun lint                 # Run Biome linter
 bun lint:fix             # Auto-fix lint issues
 bun type-check           # TypeScript type checking
+bun test                 # Run the test suite (no DB/secrets required)
 bun db:generate          # Generate Drizzle migration files
 bun db:migrate           # Apply migrations to database
 bun db:seed              # Seed database with initial data

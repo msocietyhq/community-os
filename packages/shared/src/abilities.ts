@@ -4,7 +4,7 @@ import {
   type ForcedSubject,
   type MongoAbility,
 } from "@casl/ability";
-import type { Role } from "./constants";
+import type { ProjectMemberRole, Role } from "./constants";
 
 // Tagged interfaces for subjects that need ownership conditions.
 // CASL uses __caslSubjectType__ to match instances to their subject type.
@@ -14,6 +14,19 @@ export interface MemberSubject extends ForcedSubject<"Member"> {
 export interface ProjectSubject extends ForcedSubject<"Project"> {
   ownerId: string;
 }
+/**
+ * `projectRole` is the caller's own project_members.role for the environment's
+ * project ("none" if they aren't a member at all) — resolved per-request from
+ * the DB, since project roles aren't part of the global ability. `ownerId` is
+ * the environment's own owner, so a caller can always manage their own.
+ */
+export interface DevEnvironmentSubject extends ForcedSubject<"DevEnvironment"> {
+  ownerId: string;
+  projectRole: ProjectMemberRole | "none";
+}
+export interface SharedSecretSubject extends ForcedSubject<"SharedSecret"> {
+  projectRole: ProjectMemberRole | "none";
+}
 
 export type Subjects =
   | "Event"
@@ -22,6 +35,10 @@ export type Subjects =
   | "Project"
   | ProjectSubject
   | "Infra"
+  | "DevEnvironment"
+  | DevEnvironmentSubject
+  | "SharedSecret"
+  | SharedSecretSubject
   | "Venue"
   | "Fund"
   | "Reputation"
@@ -41,7 +58,9 @@ export type Actions =
   | "provision"
   | "deprovision"
   | "ban"
-  | "manage_role";
+  | "manage_role"
+  | "revoke"
+  | "issue";
 
 export type AppAbility = MongoAbility<[Actions, Subjects]>;
 
@@ -81,6 +100,9 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     // Infra
     can("read", "Infra");
     can("provision", "Infra");
+    // Dev environments & shared secrets — full control of any project's
+    can("manage", "DevEnvironment");
+    can("manage", "SharedSecret");
     // Funds
     can("read", "Fund");
     can("create", "Fund");
@@ -107,6 +129,21 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("read", "Venue");
     can("read", "Reputation");
     can("create", "Reputation");
+    // Any project member can create their own dev environment; managing it
+    // (reveal, store vars, issue/revoke agent keys, revoke the environment)
+    // is scoped to its owner. Maintainers/owners of the project additionally
+    // manage every environment in it and the project's shared secrets.
+    can("create", "DevEnvironment", {
+      projectRole: { $in: ["owner", "maintainer", "contributor"] },
+    });
+    can("manage", "DevEnvironment", { ownerId: user.id });
+    can("manage", "DevEnvironment", {
+      projectRole: { $in: ["owner", "maintainer"] },
+    });
+    can("read", "SharedSecret", { projectRole: { $ne: "none" } });
+    can("manage", "SharedSecret", {
+      projectRole: { $in: ["owner", "maintainer"] },
+    });
   }
 
   return build();

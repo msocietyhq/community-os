@@ -4,6 +4,8 @@ import type {
   AppAbility,
   MemberSubject,
   ProjectSubject,
+  DevEnvironmentSubject,
+  SharedSecretSubject,
 } from "@community-os/shared";
 
 /**
@@ -35,7 +37,11 @@ export function checkPermission(
 }
 
 // Union of subject interfaces that carry ownership fields
-type SubjectInstance = MemberSubject | ProjectSubject;
+type SubjectInstance =
+  | MemberSubject
+  | ProjectSubject
+  | DevEnvironmentSubject
+  | SharedSecretSubject;
 
 /**
  * Instance-level permission guard with ownership check. Fetches the resource
@@ -43,6 +49,11 @@ type SubjectInstance = MemberSubject | ProjectSubject;
  *
  * The `getResource` callback must return a tagged subject instance (with
  * `__caslSubjectType__` set) so CASL can evaluate ownership conditions.
+ * `body`/`query` are included (unvalidated at the type level — Elysia has
+ * already run schema validation on them by the time `beforeHandle` runs) for
+ * resolvers that need to know a not-yet-existing resource's parent, e.g.
+ * `projectId` on a create request or a project-scoped list, where there's no
+ * URL param to resolve it from.
  *
  * Usage:
  * ```ts
@@ -59,6 +70,8 @@ export function checkPermissionOn<S extends SubjectInstance>(
     status: (code: number, body: unknown) => unknown;
     user: { id: string };
     params: Record<string, string>;
+    body: unknown;
+    query: unknown;
   }) => Promise<S | null>,
 ) {
   return async (ctx: {
@@ -66,6 +79,8 @@ export function checkPermissionOn<S extends SubjectInstance>(
     status: (code: number, body: unknown) => unknown;
     user: { id: string };
     params: Record<string, string>;
+    body: unknown;
+    query: unknown;
   }) => {
     const resource = await getResource(ctx);
     if (!resource) {
