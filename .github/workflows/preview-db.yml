@@ -1,11 +1,14 @@
 name: Preview Database
 
 # Gives each PR its own Neon database branch, copy-on-write from the parent
-# branch, kept schema-current and torn down when the PR closes.
+# branch, kept schema-current and torn down when the PR closes, and pushes
+# its connection string into the matching Railway PR environment's
+# DATABASE_URL — so PR previews get an isolated database instead of sharing
+# (and risking corrupting) production's.
 #
-# Inert until NEON_API_KEY and NEON_PROJECT_ID are set as repo secrets — every
-# job below no-ops (skips entirely) without them, so this file is safe to
-# merge before that setup is done. `if:` conditions can't reference the
+# Inert until NEON_API_KEY (secret) and NEON_PROJECT_ID (variable) are set —
+# every job below no-ops (skips entirely) without them, so this file is safe
+# to merge before that setup is done. `if:` conditions can't reference the
 # `secrets` context directly (GitHub Actions rejects the whole workflow file
 # at parse time if they do), so the check goes through a job-level `env:`
 # var instead.
@@ -17,18 +20,24 @@ name: Preview Database
 # versions and input names against https://neon.com/docs/guides/branching-github-actions
 # before relying on it, and watch the first real run closely.
 #
-# The "push to Railway" step below assumes Railway's "PR Environments"
-# feature is already turned on in the Railway project dashboard (that part
-# is a toggle + the Railway GitHub App installed on this repo, not something
-# this file can do). The `railway variable set` / `railway environment list`
-# flags are copied verbatim from `railway --help` on CLI v5.58.0, so those
-# are real — but the JSON shape of `environment list --json` (assumed to
-# have a `.name` field) and how PR environments are actually named (assumed
-# to contain the PR number somewhere) are both unverified: this sandbox
-# can't reach Railway's API to test against a live project. The step is
-# written to fail soft (log + exit 0) rather than break the job if its
-# assumptions are wrong, but it needs a real run against your Railway
-# project to confirm it actually finds and sets the right thing.
+# The "push to Railway" step assumes Railway's "PR Environments" feature is
+# already turned on in the Railway project dashboard (a toggle + the Railway
+# GitHub App installed on this repo — not something this file can do).
+#
+# It authenticates with RAILWAY_API_TOKEN (an account/workspace-level token),
+# not RAILWAY_TOKEN (a project token) — project tokens are scoped to one
+# *existing* environment (e.g. production or staging) at creation time, and
+# can't reach a pr-<n> environment that doesn't exist yet when the token is
+# made. The `railway variable set` / `railway environment list` flags
+# themselves are copied verbatim from `railway --help` on the actual
+# installed CLI (v5.58.0), so those are real — but the JSON shape of
+# `environment list --json` (assumed to have a `.name` field) and how PR
+# environments are actually named (assumed to contain the PR number
+# somewhere) are both unverified: this sandbox can't reach Railway's API to
+# test against a live project. The step fails soft (log + exit 0) rather
+# than break the job if those assumptions are wrong, but it needs a real run
+# against your Railway project to confirm it actually finds and sets the
+# right thing.
 
 on:
   pull_request:
@@ -40,8 +49,8 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     env:
-      NEON_CONFIGURED: ${{ secrets.NEON_API_KEY != '' && secrets.NEON_PROJECT_ID != '' }}
-      RAILWAY_CONFIGURED: ${{ secrets.RAILWAY_TOKEN != '' && secrets.RAILWAY_PROJECT_ID != '' && secrets.RAILWAY_SERVICE != '' }}
+      NEON_CONFIGURED: ${{ secrets.NEON_API_KEY != '' && vars.NEON_PROJECT_ID != '' }}
+      RAILWAY_CONFIGURED: ${{ secrets.RAILWAY_API_TOKEN != '' && vars.RAILWAY_PROJECT_ID != '' && vars.RAILWAY_SERVICE != '' }}
     steps:
       - name: Skip — preview DB secrets not configured
         if: env.NEON_CONFIGURED != 'true'
@@ -52,7 +61,7 @@ jobs:
         id: neon-branch
         uses: neondatabase/create-branch-action@v5
         with:
-          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}
           branch_name: preview/pr-${{ github.event.pull_request.number }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
@@ -75,9 +84,9 @@ jobs:
           DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
         run: bun run db:migrate
 
-      - name: Skip — Railway secrets not configured
+      - name: Skip — Railway variables not configured
         if: env.NEON_CONFIGURED == 'true' && env.RAILWAY_CONFIGURED != 'true'
-        run: echo "RAILWAY_TOKEN / RAILWAY_PROJECT_ID / RAILWAY_SERVICE not set — skipping DATABASE_URL handoff to Railway."
+        run: echo "RAILWAY_API_TOKEN / RAILWAY_PROJECT_ID / RAILWAY_SERVICE not set — skipping DATABASE_URL handoff to Railway."
 
       # Finds this PR's Railway "PR Environment" by name and sets its
       # DATABASE_URL to the Neon branch just created. Fails soft: if
@@ -88,9 +97,9 @@ jobs:
       - name: Push DATABASE_URL to the matching Railway PR environment
         if: env.NEON_CONFIGURED == 'true' && env.RAILWAY_CONFIGURED == 'true'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           DB_URL: ${{ steps.neon-branch.outputs.db_url }}
         run: |
@@ -114,7 +123,7 @@ jobs:
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
     env:
-      NEON_CONFIGURED: ${{ secrets.NEON_API_KEY != '' && secrets.NEON_PROJECT_ID != '' }}
+      NEON_CONFIGURED: ${{ secrets.NEON_API_KEY != '' && vars.NEON_PROJECT_ID != '' }}
     steps:
       - name: Skip — preview DB secrets not configured
         if: env.NEON_CONFIGURED != 'true'
@@ -124,6 +133,6 @@ jobs:
         if: env.NEON_CONFIGURED == 'true'
         uses: neondatabase/delete-branch-action@v3
         with:
-          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}
           branch: preview/pr-${{ github.event.pull_request.number }}
           api_key: ${{ secrets.NEON_API_KEY }}
