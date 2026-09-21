@@ -13,12 +13,9 @@ name: Preview Database
 # at parse time if they do), so the check goes through a job-level `env:`
 # var instead.
 #
-# NOTE: the exact `neondatabase/create-branch-action` / `delete-branch-action`
-# inputs/outputs below are written from documented usage, not verified against
-# a live run — this sandbox's network policy blocks neon.com, so I couldn't
-# fetch current docs or exercise this end-to-end. Sanity-check the action
-# versions and input names against https://neon.com/docs/guides/branching-github-actions
-# before relying on it, and watch the first real run closely.
+# The `neondatabase/create-branch-action` step has run for real against a
+# live Neon project (branch created, migrations applied) — that part's
+# confirmed working, not just written-from-docs.
 #
 # The "push to Railway" step assumes Railway's "PR Environments" feature is
 # already turned on in the Railway project dashboard (a toggle + the Railway
@@ -28,16 +25,18 @@ name: Preview Database
 # not RAILWAY_TOKEN (a project token) — project tokens are scoped to one
 # *existing* environment (e.g. production or staging) at creation time, and
 # can't reach a pr-<n> environment that doesn't exist yet when the token is
-# made. The `railway variable set` / `railway environment list` flags
-# themselves are copied verbatim from `railway --help` on the actual
-# installed CLI (v5.58.0), so those are real — but the JSON shape of
-# `environment list --json` (assumed to have a `.name` field) and how PR
-# environments are actually named (assumed to contain the PR number
-# somewhere) are both unverified: this sandbox can't reach Railway's API to
-# test against a live project. The step fails soft (log + exit 0) rather
-# than break the job if those assumptions are wrong, but it needs a real run
-# against your Railway project to confirm it actually finds and sets the
-# right thing.
+# made. Every `railway` flag used below is verified against `--help` on the
+# actual installed CLI (v5.58.0) run locally — including a real bug from the
+# first live run: `environment list` has no `--project` flag (unlike
+# `variable set`, which does), so it needs `railway link` first. What's
+# still unverified against a live project: the JSON shape of `environment
+# list --json` (assumed to have a `.name` field), whether `railway link
+# --project <id> --json` truly resolves non-interactively with no other
+# disambiguating info, and whether a PR environment's name actually contains
+# the PR number (used to pick the right one among possibly several
+# `--ephemeral` environments). A genuine CLI error still aborts the job
+# (set -e) rather than being hidden — only "ran fine, found no match" is the
+# soft-skip path.
 
 on:
   pull_request:
@@ -88,12 +87,12 @@ jobs:
         if: env.NEON_CONFIGURED == 'true' && env.RAILWAY_CONFIGURED != 'true'
         run: echo "RAILWAY_API_TOKEN / RAILWAY_PROJECT_ID / RAILWAY_SERVICE not set — skipping DATABASE_URL handoff to Railway."
 
-      # Finds this PR's Railway "PR Environment" by name and sets its
-      # DATABASE_URL to the Neon branch just created. Fails soft: if
-      # Railway's PR Environments feature isn't on yet, or the naming
-      # assumption below is wrong, this logs and exits 0 rather than
-      # failing the whole job over a step whose exact shape is unverified
-      # (see the file-level note above).
+      # Finds this PR's Railway "PR Environment" (Railway calls these
+      # "ephemeral" environments in the CLI — --ephemeral filters to just
+      # those, so this can't accidentally match production/staging even if
+      # one of them happened to contain the PR number). Fails soft on "no
+      # match found"; a real CLI error still aborts the job (set -e) rather
+      # than being swallowed, so a genuine break stays visible.
       - name: Push DATABASE_URL to the matching Railway PR environment
         if: env.NEON_CONFIGURED == 'true' && env.RAILWAY_CONFIGURED == 'true'
         env:
@@ -104,11 +103,16 @@ jobs:
           DB_URL: ${{ steps.neon-branch.outputs.db_url }}
         run: |
           set -euo pipefail
-          ENV_NAME=$(npx -y @railway/cli environment list --project "$RAILWAY_PROJECT_ID" --json \
+          # `environment list` has no --project flag of its own (unlike
+          # `variable set`) — it reads the linked project instead, so link
+          # it first.
+          npx -y @railway/cli link --project "$RAILWAY_PROJECT_ID" --json
+
+          ENV_NAME=$(npx -y @railway/cli environment list --ephemeral --json \
             | jq -r --arg pr "$PR_NUMBER" '[.[] | select(.name | contains($pr))][0].name // empty')
 
           if [ -z "$ENV_NAME" ]; then
-            echo "No Railway environment name contains PR #$PR_NUMBER — skipping. Either PR Environments isn't enabled yet, or its naming doesn't match this assumption (check manually)."
+            echo "No ephemeral (PR) Railway environment matching PR #$PR_NUMBER found — skipping. Either PR Environments isn't enabled yet, or its naming doesn't match this assumption (check manually)."
             exit 0
           fi
 
