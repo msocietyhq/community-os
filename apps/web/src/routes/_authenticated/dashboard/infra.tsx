@@ -204,6 +204,8 @@ function ProjectInfraSections({
         projectId={projectId}
         canManage={canManageInfra}
       />
+      <UsageSection projectId={projectId} canManage={canManageInfra} />
+      <ActivitySection projectId={projectId} members={project?.members ?? []} />
     </div>
   );
 }
@@ -690,6 +692,209 @@ function PrPreviewEnvironmentsSection({
                   )}
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const METRIC_LABELS: Record<string, string> = {
+  compute_unit_seconds: "Compute (unit-seconds)",
+  root_branch_bytes_month: "Storage (bytes-month)",
+  child_branch_bytes_month: "Storage (bytes-month)",
+};
+
+function formatMetricValue(metricName: string, value: number): string {
+  if (metricName.endsWith("_bytes_month")) {
+    const mb = value / (1024 * 1024);
+    return `${mb.toLocaleString(undefined, { maximumFractionDigits: 1 })} MB`;
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
+
+function UsageSection({
+  projectId,
+  canManage,
+}: {
+  projectId: string;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+
+  const environmentsQuery = useQuery({
+    queryKey: ["dev-environments", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1["dev-environments"].get({
+        query: { projectId },
+      });
+      if (res.error) throw new Error("Failed to fetch environments");
+      return res.data;
+    },
+  });
+
+  const usageQuery = useQuery({
+    queryKey: ["project-usage", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"].usage.get({ query: { sinceDays: 30 } });
+      if (res.error) throw new Error("Failed to fetch usage");
+      return res.data;
+    },
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"].usage.refresh.post();
+      if (res.error) throw new Error("Failed to refresh usage");
+      return res.data;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["project-usage", projectId],
+      }),
+  });
+
+  const environmentById = new Map(
+    (environmentsQuery.data?.environments ?? []).map((e) => [e.id, e]),
+  );
+  const rows = (usageQuery.data?.environments ?? []).filter(
+    (row) => row.devEnvironmentId !== null,
+  );
+
+  return (
+    <div className="bg-card rounded-xl border shadow-sm p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">
+            Usage (Neon)
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Raw consumption metrics from Neon's own API over the trailing 30
+            days, per PR preview branch. Not a dollar estimate — see ADR-010.
+            Railway has no equivalent per-environment usage API today.
+          </p>
+        </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border text-foreground hover:bg-accent transition-colors disabled:opacity-50 flex-shrink-0"
+          >
+            {refreshMutation.isPending ? "Refreshing..." : "Refresh now"}
+          </button>
+        )}
+      </div>
+
+      {usageQuery.isLoading ? (
+        <div className="mt-4 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading...</span>
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          No usage data yet. This needs a Neon account on a usage-based plan —
+          click Refresh to try a live pull, or wait for tonight's automatic
+          collection.
+        </p>
+      ) : (
+        <div className="mt-4 divide-y divide-border">
+          {rows.map((row) => {
+            const environment = environmentById.get(row.devEnvironmentId!);
+            return (
+              <div key={row.devEnvironmentId} className="py-3">
+                <p className="text-sm font-medium text-foreground">
+                  {environment?.prNumber
+                    ? `PR #${environment.prNumber}`
+                    : (environment?.label ?? row.devEnvironmentId)}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-x-6 gap-y-1">
+                  {Object.entries({ ...row.totals, ...row.latest }).map(
+                    ([metric, value]) => (
+                      <span
+                        key={metric}
+                        className="text-xs text-muted-foreground"
+                      >
+                        {METRIC_LABELS[metric] ?? metric}:{" "}
+                        <span className="text-foreground">
+                          {formatMetricValue(metric, value)}
+                        </span>
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivitySection({
+  projectId,
+  members,
+}: {
+  projectId: string;
+  members: Array<{ id: string; name: string }>;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["project-infra-activity", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"].activity.get();
+      if (res.error) throw new Error("Failed to fetch activity");
+      return res.data;
+    },
+  });
+
+  const nameFor = (userId: string | null) => {
+    if (!userId) return "—";
+    if (userId === "system-bootstrap") return "community-os (automated)";
+    return members.find((m) => m.id === userId)?.name ?? userId;
+  };
+
+  const entries = data?.entries ?? [];
+
+  return (
+    <div className="bg-card rounded-xl border shadow-sm p-5">
+      <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Audit trail for this project's infra config and dev environments.
+      </p>
+
+      {isLoading ? (
+        <div className="mt-4 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading...</span>
+        </div>
+      ) : entries.length === 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          No activity recorded yet.
+        </p>
+      ) : (
+        <div className="mt-4 divide-y divide-border">
+          {entries.map((entry) => (
+            <div
+              key={entry.id}
+              className="py-2.5 flex items-center justify-between gap-3"
+            >
+              <span className="text-sm text-foreground">
+                <span className="font-medium">
+                  {nameFor(entry.performedBy)}
+                </span>{" "}
+                {entry.action}d {entry.entityType.replace(/_/g, " ")}
+              </span>
+              <span className="text-xs text-muted-foreground flex-shrink-0">
+                {formatDate(entry.createdAt)}
+              </span>
             </div>
           ))}
         </div>

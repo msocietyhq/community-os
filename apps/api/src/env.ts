@@ -12,6 +12,9 @@ const envSchema = z.object({
   CLOUDFLARE_ZONE_ID: z.string().optional(),
   // This platform's own Neon account key. See ADR-008/009.
   NEON_API_KEY: z.string().optional(),
+  // Required by Neon's consumption-metrics endpoints (ADR-010's usage/cost
+  // foundation) — find it at console.neon.tech under your org's settings.
+  NEON_ORG_ID: z.string().optional(),
   // Shared by every endorsed-project repo's reusable preview.yml workflow
   // (issue #52) — one org-wide credential, not per-repo, so a new project
   // needs zero GitHub secrets of its own to get PR preview databases.

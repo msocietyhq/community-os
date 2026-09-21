@@ -71,6 +71,44 @@ interface NeonConnectionUriResponse {
   uri: string;
 }
 
+export type NeonConsumptionMetric =
+  | "compute_unit_seconds"
+  | "root_branch_bytes_month"
+  | "child_branch_bytes_month"
+  | "instant_restore_bytes_month"
+  | "public_network_transfer_bytes"
+  | "private_network_transfer_bytes";
+
+export interface NeonBranchConsumption {
+  branchId: string;
+  periodStart: string;
+  periodEnd: string;
+  metricName: string;
+  value: number;
+}
+
+interface NeonConsumptionHistoryResponse {
+  branches: Array<{
+    branch_id: string;
+    periods: Array<{
+      period_start: string;
+      period_end: string;
+      consumption: Array<{
+        metrics: Array<{ metric_name: string; value: number }>;
+      }>;
+    }>;
+  }>;
+}
+
+function requireOrgId(): string {
+  if (!env.NEON_ORG_ID) {
+    throw new Error(
+      "NEON_ORG_ID is not configured — cannot fetch Neon consumption metrics",
+    );
+  }
+  return env.NEON_ORG_ID;
+}
+
 export const neonClient = {
   /** Every Neon project on this account — so an admin can link an existing one instead of typing an ID. */
   async listProjects(): Promise<NeonProject[]> {
@@ -133,6 +171,61 @@ export const neonClient = {
     await neonRequest(`/projects/${neonProjectId}/branches/${branchId}`, {
       method: "DELETE",
     });
+  },
+
+  /**
+   * Real per-branch compute/storage consumption for a time window — the one
+   * piece of PR-preview cost that's actually attributable to a specific
+   * branch via a documented API (issue #52 follow-up / ADR-010). Requires a
+   * paid usage-based Neon plan; returns an empty array on plans that don't
+   * expose it rather than throwing, so a foundation feature doesn't break
+   * provisioning for accounts that don't have it.
+   */
+  async getBranchConsumption(input: {
+    neonProjectId: string;
+    branchIds: string[];
+    from: Date;
+    to: Date;
+    granularity: "hourly" | "daily" | "monthly";
+    metrics: NeonConsumptionMetric[];
+  }): Promise<NeonBranchConsumption[]> {
+    if (input.branchIds.length === 0) return [];
+
+    const params = new URLSearchParams();
+    params.set("org_id", requireOrgId());
+    params.append("project_ids", input.neonProjectId);
+    for (const id of input.branchIds) params.append("branch_ids", id);
+    for (const m of input.metrics) params.append("metrics", m);
+    params.set("from", input.from.toISOString());
+    params.set("to", input.to.toISOString());
+    params.set("granularity", input.granularity);
+
+    let data: NeonConsumptionHistoryResponse;
+    try {
+      data = await neonRequest<NeonConsumptionHistoryResponse>(
+        `/consumption_history/v2/branches?${params.toString()}`,
+      );
+    } catch (err) {
+      console.warn(
+        `Neon consumption metrics unavailable for project ${input.neonProjectId} (likely not on a usage-based plan):`,
+        err,
+      );
+      return [];
+    }
+
+    return data.branches.flatMap((branch) =>
+      branch.periods.flatMap((period) =>
+        period.consumption.flatMap((c) =>
+          c.metrics.map((m) => ({
+            branchId: branch.branch_id,
+            periodStart: period.period_start,
+            periodEnd: period.period_end,
+            metricName: m.metric_name,
+            value: m.value,
+          })),
+        ),
+      ),
+    );
   },
 };
 

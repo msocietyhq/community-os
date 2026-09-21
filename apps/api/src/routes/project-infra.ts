@@ -2,8 +2,10 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermissionOn } from "../middleware/permissions";
+import { auditLogService } from "../services/audit-log.service";
 import { projectInfraService } from "../services/project-infra.service";
 import { projectsService } from "../services/projects.service";
+import { usageService } from "../services/usage.service";
 import { devEnvironmentModel } from "./models/dev-environment";
 
 // Param name must match `projects.ts`'s own `:id` (not `:projectId`) — Eden
@@ -11,6 +13,9 @@ import { devEnvironmentModel } from "./models/dev-environment";
 // param at the same segment breaks that merge for every route under
 // `/api/v1/projects/:id`, not just this file's.
 const projectIdParams = z.object({ id: z.string().uuid() });
+const usageQuery = z.object({
+  sinceDays: z.coerce.number().int().positive().max(365).default(30),
+});
 
 async function resolveProjectInfraSubject(
   projectId: string | undefined,
@@ -163,6 +168,61 @@ export const projectInfraRoutes = new Elysia({
         tags: ["Project Infra"],
         summary:
           "List environments in the linked Railway project (to pick which one PR previews clone from)",
+      },
+    },
+  )
+  .get(
+    "/usage",
+    async ({ params: { id }, query }) => ({
+      environments: await usageService.getUsageSummary(id, query.sinceDays),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("read", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      query: usageQuery,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "Per-environment Neon consumption over a trailing window (raw provider metrics, no dollar conversion — see ADR-010)",
+      },
+    },
+  )
+  .post(
+    "/usage/refresh",
+    async ({ params: { id } }) => ({
+      metricsStored: await usageService.collectNeonUsageForProject(id),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "On-demand pull of this project's Neon consumption metrics (normally runs nightly)",
+      },
+    },
+  )
+  .get(
+    "/activity",
+    async ({ params: { id } }) => ({
+      entries: await auditLogService.listForProjectInfra(id),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("read", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "Recent audit trail for this project's infra config and dev environments",
       },
     },
   );
