@@ -197,6 +197,13 @@
       "when": 1789972118273,
       "tag": "0027_fearless_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1789972151657,
+      "tag": "0028_curvy_whizzer",
+      "breakpoints": true
     }
   ]
 }

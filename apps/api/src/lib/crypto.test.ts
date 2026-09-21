@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { decrypt, encrypt } from "./crypto";
+import {
+  decrypt,
+  encrypt,
+  generateAgentKeyToken,
+  hashAgentKeyToken,
+} from "./crypto";
 
 const KEY_A = "a".repeat(64);
 const KEY_B = "b".repeat(64);
@@ -34,5 +39,27 @@ describe("encrypt/decrypt", () => {
 
   test("rejects a key that isn't 32 bytes", () => {
     expect(() => encrypt("value", "not-a-valid-key")).toThrow();
+  });
+});
+
+describe("generateAgentKeyToken/hashAgentKeyToken", () => {
+  test("generates unique tokens", () => {
+    expect(generateAgentKeyToken()).not.toBe(generateAgentKeyToken());
+  });
+
+  test("hash is deterministic for the same token", () => {
+    const token = generateAgentKeyToken();
+    expect(hashAgentKeyToken(token)).toBe(hashAgentKeyToken(token));
+  });
+
+  test("different tokens hash differently", () => {
+    expect(hashAgentKeyToken(generateAgentKeyToken())).not.toBe(
+      hashAgentKeyToken(generateAgentKeyToken()),
+    );
+  });
+
+  test("the raw token is never reconstructable from the hash's shape", () => {
+    const hash = hashAgentKeyToken(generateAgentKeyToken());
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
 });

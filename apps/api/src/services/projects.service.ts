@@ -4,6 +4,7 @@ import type {
   ProjectListQuery,
   UpdateProjectInput,
 } from "@community-os/shared/validators";
+import type { ProjectMemberRole } from "@community-os/shared/constants";
 import { and, count, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { projectMembers, projects } from "../db/schema";
@@ -328,5 +329,23 @@ export const projectsService = {
       );
 
     return owners.map((o) => o.userId);
+  },
+
+  /** This user's project_members.role for `projectId`, or "none" if they aren't a member. */
+  async getMemberRole(
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectMemberRole | "none"> {
+    const [row] = await db
+      .select({ role: projectMembers.role })
+      .from(projectMembers)
+      .where(
+        and(
+          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.userId, userId),
+        ),
+      );
+
+    return row?.role ?? "none";
   },
 };

@@ -109,8 +109,22 @@ export type ProjectPlatform = (typeof PROJECT_PLATFORMS)[number];
 export const PROJECT_STATUSES = ["active", "paused", "archived"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
-export const PROJECT_MEMBER_ROLES = ["owner", "contributor"] as const;
+export const PROJECT_MEMBER_ROLES = [
+  "owner",
+  "maintainer",
+  "contributor",
+] as const;
 export type ProjectMemberRole = (typeof PROJECT_MEMBER_ROLES)[number];
+
+/** Project roles that can manage shared secrets and other members' dev environments. */
+export const PROJECT_MAINTAINER_ROLES = ["owner", "maintainer"] as const;
+
+export const DEV_ENVIRONMENT_STATUSES = [
+  "active",
+  "revoked",
+  "expired",
+] as const;
+export type DevEnvironmentStatus = (typeof DEV_ENVIRONMENT_STATUSES)[number];
 
 export const RESOURCE_STATUSES = [
   "provisioning",
@@ -154,6 +168,8 @@ export const AUDIT_ACTIONS = [
   "undo",
   "reveal",
   "rotate",
+  "revoke",
+  "issue",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -169,6 +185,9 @@ export const AUDIT_ENTITY_TYPES = [
   "bot_setting",
   "ai_provider",
   "resource_secret",
+  "dev_environment",
+  "shared_secret",
+  "agent_key",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

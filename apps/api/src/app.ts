@@ -9,6 +9,8 @@ import { eventRoutes } from "./routes/events";
 import { projectRoutes } from "./routes/projects";
 import { datasetRoutes } from "./routes/datasets";
 import { infraRoutes } from "./routes/infra";
+import { devEnvironmentRoutes } from "./routes/dev-environments";
+import { sharedSecretRoutes } from "./routes/shared-secrets";
 import { fundRoutes } from "./routes/funds";
 import { reputationRoutes } from "./routes/reputation";
 import { venueRoutes } from "./routes/venues";
@@ -109,6 +111,8 @@ export const app = new Elysia()
   .use(projectRoutes)
   .use(datasetRoutes)
   .use(infraRoutes)
+  .use(devEnvironmentRoutes)
+  .use(sharedSecretRoutes)
   .use(fundRoutes)
   .use(venueRoutes)
   .use(reputationRoutes)

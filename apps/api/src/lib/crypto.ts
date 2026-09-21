@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
@@ -52,4 +57,19 @@ export function decrypt(payload: EncryptedPayload, hexKey: string): string {
   ]);
 
   return plaintext.toString("utf8");
+}
+
+const AGENT_KEY_PREFIX = "devenv_";
+
+/** A bearer token for an agent key. Shown to the caller once, at mint time. */
+export function generateAgentKeyToken(): string {
+  return `${AGENT_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+}
+
+/**
+ * One-way hash of an agent key token, for storage and lookup — we never
+ * store the raw token, only enough to recognize it when redeemed again.
+ */
+export function hashAgentKeyToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
 }
