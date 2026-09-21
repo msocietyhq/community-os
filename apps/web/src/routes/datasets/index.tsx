@@ -5,7 +5,7 @@ import { api } from "../../lib/api-client";
 import { PublicHeader } from "../../components/public-header";
 
 type Dataset = NonNullable<
-  Awaited<ReturnType<typeof api.api.datasets.get>>["data"]
+  Awaited<ReturnType<typeof api.api.v1.datasets.get>>["data"]
 >[number];
 
 type Category = Dataset["category"];
@@ -115,7 +115,7 @@ function DatasetsPage() {
   const query = useQuery({
     queryKey: ["datasets"],
     queryFn: async () => {
-      const r = await api.api.datasets.get();
+      const r = await api.api.v1.datasets.get();
       if (r.error) throw r.error;
       return r.data ?? [];
     },

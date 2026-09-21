@@ -34,6 +34,7 @@ import { createEventsAgent } from "./agents/events";
 import { createMembersAgent } from "./agents/members";
 import { createVenuesAgent } from "./agents/venues";
 import { createProjectsAgent } from "./agents/projects";
+import { createDatasetsAgent } from "./agents/datasets";
 import { createResearchAgent } from "./agents/research";
 import {
   NEXT_TIER,
@@ -240,6 +241,7 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
   const runMembersAgent = createMembersAgent(ctx);
   const runVenuesAgent = createVenuesAgent(ctx);
   const runProjectsAgent = createProjectsAgent(ctx);
+  const runDatasetsAgent = createDatasetsAgent(ctx);
   const runResearchAgent = createResearchAgent(ctx);
 
   return {
@@ -335,9 +337,28 @@ export function createTools(ctx: ToolContext, tier: AgentTier = "main") {
       },
     }),
 
+    datasets: tool({
+      description:
+        "Look up or manage the SG Muslim Datasets directory: list, view, create, update, or delete open dataset entries",
+      inputSchema: z.object({
+        query: z.string().describe("What to look up or do with datasets"),
+      }),
+      execute: async ({ query }) => {
+        console.log("[main-agent] → datasets sub-agent, query:", query);
+        const result = await withProgress(ctx, "Datasets", query, (activity) =>
+          runDatasetsAgent(query, activity),
+        );
+        console.log(
+          "[main-agent] ← datasets sub-agent, response:",
+          result.slice(0, 120),
+        );
+        return result;
+      },
+    }),
+
     research: tool({
       description:
-        "Search the live web and read pages. Use for anything outside community data that you don't already know: news, documentation, release notes, prices, or a link someone shared. Not for questions about MSOCIETY members, events, projects or venues.",
+        "Search the live web and read pages. Use for anything outside community data that you don't already know: news, documentation, release notes, prices, or a link someone shared. Not for questions about MSOCIETY members, events, projects, venues or datasets.",
       inputSchema: z.object({
         query: z.string().describe("What to research"),
       }),

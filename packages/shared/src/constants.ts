@@ -119,6 +119,16 @@ export type ProjectMemberRole = (typeof PROJECT_MEMBER_ROLES)[number];
 /** Project roles that can manage shared secrets and other members' dev environments. */
 export const PROJECT_MAINTAINER_ROLES = ["owner", "maintainer"] as const;
 
+export const DATASET_CATEGORIES = [
+  "religious_infrastructure",
+  "community_data",
+  "educational",
+  "health_wellness",
+  "business_economy",
+  "other",
+] as const;
+export type DatasetCategory = (typeof DATASET_CATEGORIES)[number];
+
 export const DEV_ENVIRONMENT_STATUSES = [
   "active",
   "revoked",
@@ -188,6 +198,7 @@ export const AUDIT_ENTITY_TYPES = [
   "dev_environment",
   "shared_secret",
   "agent_key",
+  "dataset",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

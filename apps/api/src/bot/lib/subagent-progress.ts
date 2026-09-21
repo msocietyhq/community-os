@@ -19,6 +19,7 @@ import type { EventsToolName } from "../ai/agents/events";
 import type { MembersToolName } from "../ai/agents/members";
 import type { VenuesToolName } from "../ai/agents/venues";
 import type { ProjectsToolName } from "../ai/agents/projects";
+import type { DatasetsToolName } from "../ai/agents/datasets";
 import type { GithubToolName } from "../ai/agents/github";
 import type { ComputerToolName } from "../ai/agents/computer";
 import type { ResearchToolName } from "../ai/agents/research";
@@ -186,6 +187,7 @@ export type TrackedToolName =
   | MembersToolName
   | VenuesToolName
   | ProjectsToolName
+  | DatasetsToolName
   | GithubToolName
   | ComputerToolName
   | ResearchToolName;
@@ -215,6 +217,11 @@ const TOOL_LABELS: Record<TrackedToolName, string> = {
   delete_project: "removing the project",
   add_project_member: "adding a project member",
   remove_project_member: "removing a project member",
+
+  list_datasets: "looking up datasets",
+  create_dataset: "adding the dataset",
+  update_dataset: "updating the dataset",
+  delete_dataset: "removing the dataset",
 
   get_my_profile: "reading your profile",
   update_my_profile: "updating your profile",

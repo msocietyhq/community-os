@@ -1,4 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { user } from "./auth";
 
 export const datasetCategoryEnum = pgEnum("dataset_category", [
   "religious_infrastructure",
@@ -22,6 +23,7 @@ export const datasets = pgTable("datasets", {
   lastUpdated: timestamp("last_updated"),
   tags: text("tags").array().notNull().default([]),
   repoUrl: text("repo_url"),
+  createdBy: text("created_by").references(() => user.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
