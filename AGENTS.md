@@ -40,4 +40,5 @@ set, so the HTTP API and web app can start. The Telegram bot then fails
 - Checks: `bun lint`, `bun type-check`, `cd apps/api && bun test`,
   `cd packages/shared && bun test`
 - DB: `bun db:migrate` then `bun db:seed` (idempotent). Extensions: `vector`
-  and ParadeDB `pg_search`.
+  and Neon `lakebase_text` (member search — ParadeDB `pg_search` was removed
+  by Neon on 2026-09-21, see issue #57).

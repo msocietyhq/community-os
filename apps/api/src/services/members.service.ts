@@ -1,4 +1,4 @@
-import { eq, and, or, ilike, isNull, count, asc, desc, sql } from "drizzle-orm";
+import { eq, and, ilike, isNull, count, asc, desc } from "drizzle-orm";
 import { db } from "../db";
 import { members, MEMBER_SELF_COLUMNS } from "../db/schema/members";
 import { user } from "../db/schema/auth";
@@ -7,6 +7,7 @@ import { bot } from "../bot/bot";
 import { env } from "../env";
 import { paginatedResult, listOffset } from "../lib/pagination";
 import { isPresentChatMember } from "../lib/telegram-membership";
+import { buildMemberSearchConditions } from "./members-search";
 import { photoUrlSql } from "./photos.service";
 import type {
   CreateMemberInput,
@@ -24,47 +25,12 @@ export const membersService = {
   },
 
   async list(query: MemberListQuery) {
-    const conditions: ReturnType<typeof eq>[] = [];
+    const conditions: ReturnType<typeof eq>[] = [
+      ...buildMemberSearchConditions(query),
+    ];
 
     if (query.role) {
       conditions.push(eq(user.role, query.role));
-    }
-
-    if (query.q) {
-      const pattern = `%${query.q}%`;
-      conditions.push(
-        or(
-          // BM25 for members table fields (indexed, case-insensitive)
-          sql`${members.bio} @@@ ${query.q}::text`,
-          sql`${members.currentTitle} @@@ ${query.q}::text`,
-          sql`${members.currentCompany} @@@ ${query.q}::text`,
-          sql`${members.education} @@@ ${query.q}::text`,
-          sql`${members.githubHandle} @@@ ${query.q}::text`,
-          sql`${members.skills} @@@ ${query.q}::text`,
-          sql`${members.interests} @@@ ${query.q}::text`,
-          // ILIKE for user table fields (separate table, not in BM25 index)
-          ilike(user.name, pattern),
-          ilike(user.telegramUsername, pattern),
-        )!,
-      );
-    }
-
-    const skillsArr = query.skills
-      ?.split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (skillsArr?.length) {
-      conditions.push(sql`${members.skills} @@@ ${skillsArr.join(" ")}::text`);
-    }
-
-    const interestsArr = query.interests
-      ?.split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (interestsArr?.length) {
-      conditions.push(
-        sql`${members.interests} @@@ ${interestsArr.join(" ")}::text`,
-      );
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
