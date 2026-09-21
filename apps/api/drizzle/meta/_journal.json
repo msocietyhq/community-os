@@ -190,6 +190,13 @@
       "when": 1789719265359,
       "tag": "0026_many_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1789972076112,
+      "tag": "0027_boring_queen_noir",
+      "breakpoints": true
     }
   ]
 }

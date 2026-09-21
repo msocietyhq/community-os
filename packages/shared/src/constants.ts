@@ -136,6 +136,18 @@ export const FUND_TRANSACTION_TYPES = [
 ] as const;
 export type FundTransactionType = (typeof FUND_TRANSACTION_TYPES)[number];
 
+export const FUND_TRANSACTION_REFERENCE_TYPES = [
+  "event",
+  "project",
+  "provisioned_resource",
+  "cause",
+] as const;
+export type FundTransactionReferenceType =
+  (typeof FUND_TRANSACTION_REFERENCE_TYPES)[number];
+
+export const FUND_CAUSE_STATUSES = ["active", "closed"] as const;
+export type FundCauseStatus = (typeof FUND_CAUSE_STATUSES)[number];
+
 export const REPUTATION_TRIGGER_TYPES = ["keyword"] as const;
 export type ReputationTriggerType = (typeof REPUTATION_TRIGGER_TYPES)[number];
 
@@ -152,6 +164,8 @@ export const AUDIT_ACTIONS = [
   "role_change",
   "reset",
   "undo",
+  "reveal",
+  "rotate",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -166,6 +180,7 @@ export const AUDIT_ENTITY_TYPES = [
   "reputation",
   "bot_setting",
   "ai_provider",
+  "resource_secret",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
