@@ -1,9 +1,13 @@
 import {
+  bootstrapPreviewEnvironmentSchema,
+  ciPreviewEnvironmentSchema,
   createDevEnvironmentSchema,
   createSharedSecretSchema,
   issueAgentKeySchema,
+  issueProjectBootstrapTokenSchema,
   rotateSharedSecretSchema,
   storeDevEnvironmentVarSchema,
+  upsertProjectInfraConfigSchema,
 } from "@community-os/shared/validators";
 import { Elysia } from "elysia";
 
@@ -15,4 +19,9 @@ export const devEnvironmentModel = new Elysia({
   "devEnvironment.agentKey.issue": issueAgentKeySchema,
   "sharedSecret.create": createSharedSecretSchema,
   "sharedSecret.rotate": rotateSharedSecretSchema,
+  "projectInfraConfig.upsert": upsertProjectInfraConfigSchema,
+  "projectBootstrapToken.issue": issueProjectBootstrapTokenSchema,
+  "devEnvironment.ci.ensure": ciPreviewEnvironmentSchema,
+  "devEnvironment.ci.teardown": ciPreviewEnvironmentSchema,
+  "devEnvironment.bootstrap": bootstrapPreviewEnvironmentSchema,
 });

@@ -39,3 +39,39 @@ export const rotateSharedSecretSchema = z.object({
   value: z.string().min(1).max(8192),
 });
 export type RotateSharedSecretInput = z.infer<typeof rotateSharedSecretSchema>;
+
+// --- Preview-environment provisioning (issue #52) ---
+
+export const upsertProjectInfraConfigSchema = z.object({
+  neonProjectId: z.string().min(1).max(200).optional(),
+  railwayProjectId: z.string().min(1).max(200).optional(),
+  railwayServiceId: z.string().min(1).max(200).optional(),
+});
+export type UpsertProjectInfraConfigInput = z.infer<
+  typeof upsertProjectInfraConfigSchema
+>;
+
+export const issueProjectBootstrapTokenSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+});
+export type IssueProjectBootstrapTokenInput = z.infer<
+  typeof issueProjectBootstrapTokenSchema
+>;
+
+/** Body for the reusable GitHub Actions workflow's ensure/teardown calls. */
+export const ciPreviewEnvironmentSchema = z.object({
+  repoFullName: z.string().min(1).max(200),
+  prNumber: z.number().int().positive(),
+  prAuthorGithubLogin: z.string().min(1).max(100).optional(),
+});
+export type CiPreviewEnvironmentInput = z.infer<
+  typeof ciPreviewEnvironmentSchema
+>;
+
+/** Body a project's own Railway service sends itself at boot, via the preflight script. */
+export const bootstrapPreviewEnvironmentSchema = z.object({
+  prNumber: z.number().int().positive(),
+});
+export type BootstrapPreviewEnvironmentInput = z.infer<
+  typeof bootstrapPreviewEnvironmentSchema
+>;

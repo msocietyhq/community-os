@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun --external @huggingface/transformers --external onnxruntime-node",
-    "start": "bun run dist/index.js",
+    "preflight": "bun run src/scripts/preflight.ts",
+    "start": "bun run preflight && bun --env-file=.env.runtime run dist/index.js",
     "type-check": "tsgo --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run src/db/migrate.ts",

@@ -2,6 +2,7 @@ import {
   pgTable,
   uuid,
   text,
+  integer,
   timestamp,
   pgEnum,
   unique,
@@ -31,6 +32,14 @@ export const devEnvironments = pgTable("dev_environments", {
     .references(() => user.id, { onDelete: "cascade" }),
   label: text("label"),
   status: devEnvironmentStatusEnum("status").default("active"),
+  /**
+   * Set only for CI-provisioned PR preview environments (issue #52). Used to
+   * find-or-create idempotently on repeated `ci/ensure` calls for the same
+   * PR (e.g. every push), instead of relying on `label`'s free-text shape.
+   */
+  prNumber: integer("pr_number"),
+  /** Neon branch backing this environment's DATABASE_URL, so teardown can delete it. */
+  neonBranchId: text("neon_branch_id"),
   expiresAt: timestamp("expires_at"),
   revokedAt: timestamp("revoked_at"),
   revokedBy: text("revoked_by").references(() => user.id),

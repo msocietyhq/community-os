@@ -3,6 +3,7 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
+  timingSafeEqual,
 } from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
@@ -59,11 +60,39 @@ export function decrypt(payload: EncryptedPayload, hexKey: string): string {
   return plaintext.toString("utf8");
 }
 
+const TOKEN_BYTES = 32;
+
+/** A random bearer token, prefixed so its purpose is recognizable at a glance. */
+export function generateToken(prefix: string): string {
+  return `${prefix}${randomBytes(TOKEN_BYTES).toString("base64url")}`;
+}
+
+/**
+ * One-way hash of a bearer token, for storage and lookup — we never store
+ * the raw token, only enough to recognize it when presented again.
+ */
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+/**
+ * Constant-time string comparison for a shared bearer secret (e.g. the
+ * org-wide CI service token), so a mismatch can't be timed to learn how much
+ * of the prefix matched. Not for password hashes — this is a plain-value
+ * compare, not a KDF.
+ */
+export function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
 const AGENT_KEY_PREFIX = "devenv_";
 
 /** A bearer token for an agent key. Shown to the caller once, at mint time. */
 export function generateAgentKeyToken(): string {
-  return `${AGENT_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+  return generateToken(AGENT_KEY_PREFIX);
 }
 
 /**
@@ -71,5 +100,17 @@ export function generateAgentKeyToken(): string {
  * store the raw token, only enough to recognize it when redeemed again.
  */
 export function hashAgentKeyToken(token: string): string {
-  return createHash("sha256").update(token, "utf8").digest("hex");
+  return hashToken(token);
+}
+
+const PROJECT_BOOTSTRAP_TOKEN_PREFIX = "projboot_";
+
+/** A long-lived, maintainer-rotatable bearer token for one project's PR previews. */
+export function generateProjectBootstrapToken(): string {
+  return generateToken(PROJECT_BOOTSTRAP_TOKEN_PREFIX);
+}
+
+/** One-way hash of a project bootstrap token — same rationale as agent keys. */
+export function hashProjectBootstrapToken(token: string): string {
+  return hashToken(token);
 }

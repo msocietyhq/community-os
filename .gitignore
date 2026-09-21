@@ -9,6 +9,8 @@ dist/
 .env
 .env.local
 .env.*.local
+# Written at boot by apps/api's preflight script (issue #52) — never committed.
+.env.runtime
 
 # IDE
 .vscode/

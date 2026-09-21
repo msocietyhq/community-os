@@ -1,14 +1,38 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 import { db } from "../db";
 import {
   devEnvironments,
   devEnvironmentVars,
+  members,
+  projectInfraConfigs,
   sharedSecrets,
 } from "../db/schema";
 import { env } from "../env";
+import { neonClient, runMigrationsOn } from "../integrations/neon";
 import { decrypt, encrypt } from "../lib/crypto";
 import { AppError } from "../lib/errors";
 import { createAuditEntry } from "../middleware/audit";
+
+/**
+ * Fallback owner for CI-provisioned preview environments whose PR author
+ * isn't (or can't be resolved to) a community-os user — e.g. an external
+ * contributor. Seeded once via migration; see issue #52 / ADR-008. Every
+ * `dev_environments.owner_id` must be non-null, so this exists rather than
+ * making the column nullable.
+ */
+export const SYSTEM_USER_ID = "system-bootstrap";
+
+/** The PR author, if they're a known member (matched by GitHub login); else the system user. */
+async function resolvePreviewOwner(githubLogin?: string): Promise<string> {
+  if (githubLogin) {
+    const [match] = await db
+      .select({ userId: members.userId })
+      .from(members)
+      .where(ilike(members.githubHandle, githubLogin));
+    if (match) return match.userId;
+  }
+  return SYSTEM_USER_ID;
+}
 
 async function getEnvironment(id: string) {
   const [row] = await db
@@ -240,5 +264,119 @@ export const devEnvironmentsService = {
     });
 
     return { environmentId, projectId: environment.projectId, vars };
+  },
+
+  /**
+   * Finds-or-creates the PR preview environment for (projectId, prNumber),
+   * so it's safe to call on every `ci/ensure` (every PR open/push): a
+   * still-active environment is returned as-is, with no new Neon branch.
+   * A missing or torn-down one gets a fresh branch, freshly migrated.
+   */
+  async ensurePreviewEnvironment(input: {
+    projectId: string;
+    prNumber: number;
+    prAuthorGithubLogin?: string;
+  }) {
+    const [existing] = await db
+      .select()
+      .from(devEnvironments)
+      .where(
+        and(
+          eq(devEnvironments.projectId, input.projectId),
+          eq(devEnvironments.prNumber, input.prNumber),
+          eq(devEnvironments.status, "active"),
+        ),
+      )
+      .orderBy(desc(devEnvironments.createdAt))
+      .limit(1);
+
+    if (existing) return existing;
+
+    const [infraConfig] = await db
+      .select()
+      .from(projectInfraConfigs)
+      .where(eq(projectInfraConfigs.projectId, input.projectId));
+
+    if (!infraConfig?.neonProjectId) {
+      throw new AppError(
+        400,
+        "INFRA_NOT_CONFIGURED",
+        "This project has no Neon project configured — set one up in the project's infra settings first",
+      );
+    }
+
+    const ownerId = await resolvePreviewOwner(input.prAuthorGithubLogin);
+    const branchName = `pr-${input.prNumber}`;
+
+    const { branchId, databaseUrl } = await neonClient.createBranch(
+      infraConfig.neonProjectId,
+      branchName,
+    );
+    await runMigrationsOn(databaseUrl);
+
+    const environment = await devEnvironmentsService.create({
+      projectId: input.projectId,
+      ownerId,
+      label: branchName,
+    });
+
+    const [updated] = await db
+      .update(devEnvironments)
+      .set({ prNumber: input.prNumber, neonBranchId: branchId })
+      .where(eq(devEnvironments.id, environment.id))
+      .returning();
+
+    await devEnvironmentsService.storeVar({
+      environmentId: environment.id,
+      key: "DATABASE_URL",
+      value: databaseUrl,
+      performedBy: ownerId,
+    });
+
+    return updated ?? environment;
+  },
+
+  /** Deletes the PR's Neon branch and revokes its environment. A no-op if none exists. */
+  async teardownPreviewEnvironment(input: {
+    projectId: string;
+    prNumber: number;
+  }) {
+    const [existing] = await db
+      .select()
+      .from(devEnvironments)
+      .where(
+        and(
+          eq(devEnvironments.projectId, input.projectId),
+          eq(devEnvironments.prNumber, input.prNumber),
+          eq(devEnvironments.status, "active"),
+        ),
+      );
+
+    if (!existing) return null;
+
+    if (existing.neonBranchId) {
+      const [infraConfig] = await db
+        .select()
+        .from(projectInfraConfigs)
+        .where(eq(projectInfraConfigs.projectId, input.projectId));
+
+      if (infraConfig?.neonProjectId) {
+        try {
+          await neonClient.deleteBranch(
+            infraConfig.neonProjectId,
+            existing.neonBranchId,
+          );
+        } catch (err) {
+          // Don't let an already-gone (or unreachable) Neon branch block
+          // revoking our own record of the environment.
+          console.error(
+            `Failed to delete Neon branch ${existing.neonBranchId}:`,
+            err,
+          );
+        }
+      }
+    }
+
+    return devEnvironmentsService.revoke(existing.id, existing.ownerId);
   },
 };
