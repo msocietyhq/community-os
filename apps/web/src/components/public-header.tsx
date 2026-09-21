@@ -57,6 +57,12 @@ export function PublicHeader({
           >
             Projects
           </Link>
+          <Link
+            to="/datasets"
+            className="hidden sm:block text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Datasets
+          </Link>
           {!isLoading && user && (
             <Link
               to="/dashboard"
