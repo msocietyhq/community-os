@@ -1,5 +1,5 @@
 {
-  "id": "9ed202c1-6320-4275-b579-c1f9bd58401f",
+  "id": "a74dc02f-44ba-42ca-8415-9850c0c3e51b",
   "prevId": "7d0e873c-f6bc-491c-89b8-f58f43426370",
   "version": "7",
   "dialect": "postgresql",
@@ -2098,24 +2098,6 @@
           "notNull": false,
           "default": "'active'"
         },
-        "pr_number": {
-          "name": "pr_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "neon_branch_id": {
-          "name": "neon_branch_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "railway_environment_id": {
-          "name": "railway_environment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "expires_at": {
           "name": "expires_at",
           "type": "timestamp",
@@ -2311,96 +2293,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.project_infra_configs": {
-      "name": "project_infra_configs",
-      "schema": "",
-      "columns": {
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "neon_project_id": {
-          "name": "neon_project_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "railway_project_id": {
-          "name": "railway_project_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "railway_service_id": {
-          "name": "railway_service_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "railway_source_environment_id": {
-          "name": "railway_source_environment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "project_infra_configs_project_id_projects_id_fk": {
-          "name": "project_infra_configs_project_id_projects_id_fk",
-          "tableFrom": "project_infra_configs",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "project_infra_configs_created_by_user_id_fk": {
-          "name": "project_infra_configs_created_by_user_id_fk",
-          "tableFrom": "project_infra_configs",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3822,6 +3714,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3838,7 +3736,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "datasets_created_by_user_id_fk": {
+          "name": "datasets_created_by_user_id_fk",
+          "tableFrom": "datasets",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -1,6 +1,6 @@
 {
-  "id": "d7411dea-ce17-4eba-b8a6-781310fb740d",
-  "prevId": "9ed202c1-6320-4275-b579-c1f9bd58401f",
+  "id": "875e7804-011d-4285-bcb6-81bb54eeaeb3",
+  "prevId": "a74dc02f-44ba-42ca-8415-9850c0c3e51b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3919,6 +3919,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3935,7 +3941,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "datasets_created_by_user_id_fk": {
+          "name": "datasets_created_by_user_id_fk",
+          "tableFrom": "datasets",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
