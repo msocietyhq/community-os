@@ -32,8 +32,8 @@ const labels = (page: { keyboard: { inline_keyboard: unknown[][] } }) =>
 describe("renderIndexPage", () => {
   test("packs settings two per row, then navigation and history", () => {
     const page = renderIndexPage("behaviour", snapshot);
-    // 5 behaviour settings over 3 rows, then a nav row, then history.
-    expect(page.keyboard.inline_keyboard).toHaveLength(5);
+    // 11 behaviour settings over 6 rows, then a nav row, then history.
+    expect(page.keyboard.inline_keyboard).toHaveLength(8);
     expect(page.text).toContain("Behaviour");
   });
 
@@ -89,6 +89,16 @@ describe("renderIndexPage", () => {
     expect(labels(page)).toContain("SSH public key");
     expect(labels(page)).toContain("Model");
     expect(page.text).toContain("Model — <code>Haiku 4.5</code>");
+  });
+
+  // topicDrift.consecutiveOffTopic is a "text" control outside the computer
+  // group, so it needs `previewOnIndex` to show its real value rather than
+  // collapsing to default/custom like a welcome template does.
+  test("a previewOnIndex text setting shows its real value, not default/custom", () => {
+    const configured = { ...snapshot, "topicDrift.consecutiveOffTopic": 6 };
+    const page = renderIndexPage("behaviour", configured);
+    expect(page.text).toContain("Topic drift streak — <code>6 messages</code>");
+    expect(page.text).not.toContain("Topic drift streak — <code>custom</code>");
   });
 
   test("renders every group without throwing", () => {
