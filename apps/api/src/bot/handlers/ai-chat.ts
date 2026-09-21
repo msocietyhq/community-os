@@ -34,11 +34,57 @@ import { getSettings } from "../../services/bot-settings.service";
 import { inQuietHours } from "../lib/chime-in";
 import { shouldSendDenial } from "../lib/dm-access";
 import { resolveUser } from "../lib/auth";
-import { buildConversationContext } from "../lib/conversation-context";
 import {
+  buildConversationContext,
   HISTORY_MESSAGE_LIMIT,
   HISTORY_WINDOW_MS,
+  type ChatHistoryFetcher,
+  type ConversationMessage,
 } from "../lib/conversation-context";
+import { getMessagesByIds } from "../../services/messages.service";
+
+type RecentChatMessageRow = Awaited<
+  ReturnType<typeof getRecentChatMessages>
+>[number];
+
+function rowToConversationMessage(
+  row: RecentChatMessageRow,
+): ConversationMessage {
+  return {
+    id: row.messageId,
+    text:
+      row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
+    from: row.fromUsername
+      ? `@${row.fromUsername}`
+      : (row.fromFirstName ?? "unknown"),
+    at: row.date.toISOString(),
+    senderId: row.fromUserId ?? undefined,
+    ...(row.replyToMessageId == null
+      ? {}
+      : { replyToId: row.replyToMessageId }),
+  };
+}
+
+/**
+ * Resolves an out-of-window reply parent by primary-key lookup — the same
+ * lookup the `chat_history` tool's `message_ids` mode uses. Lets both the
+ * main agent and the chime-in judge see a parent that aged out of the
+ * rolling window instead of only what Telegram happened to embed inline.
+ */
+const fetchChatHistory: ChatHistoryFetcher = async (messageId, chatId) => {
+  if (chatId === undefined) return null;
+  const [message] = await getMessagesByIds(chatId, [messageId]);
+  if (!message) return null;
+  return {
+    id: message.messageId,
+    text: message.text ?? "",
+    from: message.from,
+    at: message.date.toISOString(),
+    ...(message.replyToMessageId == null
+      ? {}
+      : { replyToId: message.replyToMessageId }),
+  };
+};
 
 export const aiChatHandler = new Composer<BotContext>();
 
@@ -192,22 +238,12 @@ aiChatHandler.on("message:text", async (ctx) => {
       text: query,
       from: meta.from.username ? `@${meta.from.username}` : meta.from.firstName,
       at: meta.date,
+      replyToId: meta.replyTo?.messageId,
       isGroupChat: isGroup,
       topicId: ctx.message.message_thread_id,
     },
-    recentMessages.map((row) => ({
-      id: row.messageId,
-      text:
-        row.text ?? row.caption ?? (row.mediaType ? `[${row.mediaType}]` : ""),
-      from: row.fromUsername
-        ? `@${row.fromUsername}`
-        : (row.fromFirstName ?? "unknown"),
-      at: row.date.toISOString(),
-      senderId: row.fromUserId ?? undefined,
-      ...(row.replyToMessageId == null
-        ? {}
-        : { replyToId: row.replyToMessageId }),
-    })),
+    recentMessages.map(rowToConversationMessage),
+    fetchChatHistory,
   );
   if (meta.replyTo && !conversation.parentMessage) {
     const replyFrom = meta.replyTo.from;
@@ -430,7 +466,7 @@ async function shouldChimeIn(
   if (!offCooldown(lastChimeAt(chatId), now, cooldownMs)) return false;
 
   // Judged with surrounding conversation — "yeah probably" is unjudgeable alone.
-  const context = await getRecentChatMessages(
+  const recentMessages = await getRecentChatMessages(
     chatId,
     ctx.message!.message_thread_id ?? null,
     ONE_HOUR_MS,
@@ -438,24 +474,28 @@ async function shouldChimeIn(
     ctx.message!.message_id,
   );
 
+  // Same builder and fetcher the main agent path uses, so the judge sees
+  // equivalent chat/topic/reply context rather than a hand-built stand-in.
+  const conversation = await buildConversationContext(
+    {
+      chatId,
+      messageId: ctx.message!.message_id,
+      text,
+      from: ctx.from?.username
+        ? `@${ctx.from.username}`
+        : (ctx.from?.first_name ?? "unknown"),
+      at: now,
+      replyToId: ctx.message!.reply_to_message?.message_id,
+      isGroupChat: true,
+      topicId: ctx.message!.message_thread_id,
+    },
+    recentMessages.map(rowToConversationMessage),
+    fetchChatHistory,
+  );
+
   const decision = await judgeChimeIn({
     message: text,
-    transcript: formatGroupHistory({
-      chatId,
-      currentMessage: {
-        id: 0,
-        text,
-        from: "unknown",
-        at: new Date(now).toISOString(),
-      },
-      recentHistory: context.map((row) => ({
-        id: row.messageId,
-        text: row.text ?? row.caption ?? "",
-        from: row.fromUsername ?? row.fromFirstName ?? "unknown",
-        at: row.date.toISOString(),
-      })),
-      metadata: { isGroupChat: true },
-    }),
+    transcript: formatGroupHistory(conversation),
     chatId,
     telegramUserId: ctx.from?.id ?? null,
     minConfidence: settings["chimeIn.minConfidence"],
