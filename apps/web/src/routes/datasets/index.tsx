@@ -185,11 +185,11 @@ function DatasetsPage() {
       {/* Filters */}
       {presentCategories.length > 1 && (
         <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-          <div className="inline-flex flex-wrap rounded-lg border border-white/10 overflow-hidden">
+          <div className="inline-flex max-w-full rounded-lg border border-white/10 overflow-hidden overflow-x-auto">
             <button
               type="button"
               onClick={() => setCategory("")}
-              className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-b border-white/10 last:border-r-0 whitespace-nowrap ${
+              className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-white/10 last:border-r-0 whitespace-nowrap ${
                 category === ""
                   ? "bg-white/15 text-white"
                   : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200"
@@ -204,7 +204,7 @@ function DatasetsPage() {
                   key={c}
                   type="button"
                   onClick={() => setCategory(c)}
-                  className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-b border-white/10 last:border-r-0 whitespace-nowrap ${
+                  className={`px-4 py-2.5 text-sm font-medium transition-colors border-r border-white/10 last:border-r-0 whitespace-nowrap ${
                     category === c
                       ? meta.active
                       : `bg-white/5 text-gray-400 ${meta.hover}`
