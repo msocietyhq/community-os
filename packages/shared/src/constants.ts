@@ -189,7 +189,6 @@ export const AUDIT_ENTITY_TYPES = [
   "shared_secret",
   "agent_key",
   "project_infra_config",
-  "project_bootstrap_token",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

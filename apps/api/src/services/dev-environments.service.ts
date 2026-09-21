@@ -9,6 +9,7 @@ import {
 } from "../db/schema";
 import { env } from "../env";
 import { neonClient, runMigrationsOn } from "../integrations/neon";
+import { railwayClient } from "../integrations/railway";
 import { decrypt, encrypt } from "../lib/crypto";
 import { AppError } from "../lib/errors";
 import { createAuditEntry } from "../middleware/audit";
@@ -270,7 +271,11 @@ export const devEnvironmentsService = {
    * Finds-or-creates the PR preview environment for (projectId, prNumber),
    * so it's safe to call on every `ci/ensure` (every PR open/push): a
    * still-active environment is returned as-is, with no new Neon branch.
-   * A missing or torn-down one gets a fresh branch, freshly migrated.
+   * A missing or torn-down one gets a fresh branch, freshly migrated, and —
+   * when the project has a Railway service linked too — a matching Railway
+   * PR environment provisioned and deployed with the full var bundle
+   * (DATABASE_URL plus every shared secret). See ADR-009: this is what lets
+   * a maintainer never touch Neon or Railway's own dashboards for this.
    */
   async ensurePreviewEnvironment(input: {
     projectId: string;
@@ -301,7 +306,7 @@ export const devEnvironmentsService = {
       throw new AppError(
         400,
         "INFRA_NOT_CONFIGURED",
-        "This project has no Neon project configured — set one up in the project's infra settings first",
+        "This project has no Neon project configured — link one in the project's infra settings first",
       );
     }
 
@@ -320,12 +325,6 @@ export const devEnvironmentsService = {
       label: branchName,
     });
 
-    const [updated] = await db
-      .update(devEnvironments)
-      .set({ prNumber: input.prNumber, neonBranchId: branchId })
-      .where(eq(devEnvironments.id, environment.id))
-      .returning();
-
     await devEnvironmentsService.storeVar({
       environmentId: environment.id,
       key: "DATABASE_URL",
@@ -333,10 +332,54 @@ export const devEnvironmentsService = {
       performedBy: ownerId,
     });
 
+    const railwayFullyLinked =
+      infraConfig.railwayProjectId &&
+      infraConfig.railwayServiceId &&
+      infraConfig.railwaySourceEnvironmentId;
+
+    let railwayEnvironmentId: string | null = null;
+    if (railwayFullyLinked) {
+      const railwayEnvironment = await railwayClient.createEnvironment({
+        projectId: infraConfig.railwayProjectId!,
+        name: branchName,
+        sourceEnvironmentId: infraConfig.railwaySourceEnvironmentId!,
+      });
+      railwayEnvironmentId = railwayEnvironment.id;
+
+      const { vars } = await devEnvironmentsService.reveal(
+        environment.id,
+        ownerId,
+        { viaRailwaySync: true },
+      );
+      for (const [name, value] of Object.entries(vars)) {
+        await railwayClient.upsertVariable({
+          projectId: infraConfig.railwayProjectId!,
+          environmentId: railwayEnvironment.id,
+          serviceId: infraConfig.railwayServiceId!,
+          name,
+          value,
+        });
+      }
+      await railwayClient.deployService({
+        serviceId: infraConfig.railwayServiceId!,
+        environmentId: railwayEnvironment.id,
+      });
+    }
+
+    const [updated] = await db
+      .update(devEnvironments)
+      .set({
+        prNumber: input.prNumber,
+        neonBranchId: branchId,
+        railwayEnvironmentId,
+      })
+      .where(eq(devEnvironments.id, environment.id))
+      .returning();
+
     return updated ?? environment;
   },
 
-  /** Deletes the PR's Neon branch and revokes its environment. A no-op if none exists. */
+  /** Deletes the PR's Neon branch and Railway environment (if any), and revokes its environment. A no-op if none exists. */
   async teardownPreviewEnvironment(input: {
     projectId: string;
     prNumber: number;
@@ -374,6 +417,17 @@ export const devEnvironmentsService = {
             err,
           );
         }
+      }
+    }
+
+    if (existing.railwayEnvironmentId) {
+      try {
+        await railwayClient.deleteEnvironment(existing.railwayEnvironmentId);
+      } catch (err) {
+        console.error(
+          `Failed to delete Railway environment ${existing.railwayEnvironmentId}:`,
+          err,
+        );
       }
     }
 

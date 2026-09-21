@@ -4,11 +4,15 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(1),
   API_URL: z.string().url(),
+  // Must be a Railway WORKSPACE token, not a project token — project tokens
+  // are scoped to one existing environment and can't manage the PR
+  // environments this API creates directly. See ADR-009.
   RAILWAY_API_TOKEN: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_ZONE_ID: z.string().optional(),
+  // This platform's own Neon account key. See ADR-008/009.
   NEON_API_KEY: z.string().optional(),
-  // Shared by every endorsed-project repo's reusable preview-db.yml workflow
+  // Shared by every endorsed-project repo's reusable preview.yml workflow
   // (issue #52) — one org-wide credential, not per-repo, so a new project
   // needs zero GitHub secrets of its own to get PR preview databases.
   CI_SERVICE_TOKEN: z.string().optional(),

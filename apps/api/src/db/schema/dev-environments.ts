@@ -40,6 +40,8 @@ export const devEnvironments = pgTable("dev_environments", {
   prNumber: integer("pr_number"),
   /** Neon branch backing this environment's DATABASE_URL, so teardown can delete it. */
   neonBranchId: text("neon_branch_id"),
+  /** Railway environment created for this PR (when the project has Railway linked), so teardown can delete it. */
+  railwayEnvironmentId: text("railway_environment_id"),
   expiresAt: timestamp("expires_at"),
   revokedAt: timestamp("revoked_at"),
   revokedBy: text("revoked_by").references(() => user.id),

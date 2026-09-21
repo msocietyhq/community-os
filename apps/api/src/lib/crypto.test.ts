@@ -3,7 +3,6 @@ import {
   decrypt,
   encrypt,
   generateAgentKeyToken,
-  generateProjectBootstrapToken,
   hashAgentKeyToken,
   safeCompare,
 } from "./crypto";
@@ -63,13 +62,6 @@ describe("generateAgentKeyToken/hashAgentKeyToken", () => {
   test("the raw token is never reconstructable from the hash's shape", () => {
     const hash = hashAgentKeyToken(generateAgentKeyToken());
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
-  });
-});
-
-describe("generateProjectBootstrapToken", () => {
-  test("is prefixed distinctly from an agent key token", () => {
-    expect(generateProjectBootstrapToken()).toMatch(/^projboot_/);
-    expect(generateAgentKeyToken()).toMatch(/^devenv_/);
   });
 });
 

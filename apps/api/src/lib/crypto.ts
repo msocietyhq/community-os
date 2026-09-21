@@ -102,15 +102,3 @@ export function generateAgentKeyToken(): string {
 export function hashAgentKeyToken(token: string): string {
   return hashToken(token);
 }
-
-const PROJECT_BOOTSTRAP_TOKEN_PREFIX = "projboot_";
-
-/** A long-lived, maintainer-rotatable bearer token for one project's PR previews. */
-export function generateProjectBootstrapToken(): string {
-  return generateToken(PROJECT_BOOTSTRAP_TOKEN_PREFIX);
-}
-
-/** One-way hash of a project bootstrap token — same rationale as agent keys. */
-export function hashProjectBootstrapToken(token: string): string {
-  return hashToken(token);
-}

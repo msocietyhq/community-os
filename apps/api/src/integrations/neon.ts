@@ -47,6 +47,17 @@ async function neonRequest<T>(apiPath: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface NeonProject {
+  id: string;
+  name: string;
+}
+
+interface NeonProjectsListResponse {
+  projects: Array<{ id: string; name: string }>;
+}
+interface NeonProjectResponse {
+  project: { id: string; name: string };
+}
 interface NeonBranchResponse {
   branch: { id: string };
 }
@@ -61,6 +72,20 @@ interface NeonConnectionUriResponse {
 }
 
 export const neonClient = {
+  /** Every Neon project on this account — so an admin can link an existing one instead of typing an ID. */
+  async listProjects(): Promise<NeonProject[]> {
+    const data = await neonRequest<NeonProjectsListResponse>("/projects");
+    return data.projects.map((p) => ({ id: p.id, name: p.name }));
+  },
+
+  async createProject(name: string): Promise<NeonProject> {
+    const data = await neonRequest<NeonProjectResponse>("/projects", {
+      method: "POST",
+      body: JSON.stringify({ project: { name } }),
+    });
+    return data.project;
+  },
+
   /**
    * Forks `branchName` off the project's default branch with a read-write
    * compute endpoint, and returns a ready-to-use pooled connection string.

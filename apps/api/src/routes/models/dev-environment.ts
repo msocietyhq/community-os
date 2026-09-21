@@ -1,10 +1,10 @@
 import {
-  bootstrapPreviewEnvironmentSchema,
   ciPreviewEnvironmentSchema,
   createDevEnvironmentSchema,
+  createNeonProjectSchema,
+  createRailwayProjectSchema,
   createSharedSecretSchema,
   issueAgentKeySchema,
-  issueProjectBootstrapTokenSchema,
   rotateSharedSecretSchema,
   storeDevEnvironmentVarSchema,
   upsertProjectInfraConfigSchema,
@@ -20,8 +20,8 @@ export const devEnvironmentModel = new Elysia({
   "sharedSecret.create": createSharedSecretSchema,
   "sharedSecret.rotate": rotateSharedSecretSchema,
   "projectInfraConfig.upsert": upsertProjectInfraConfigSchema,
-  "projectBootstrapToken.issue": issueProjectBootstrapTokenSchema,
   "devEnvironment.ci.ensure": ciPreviewEnvironmentSchema,
   "devEnvironment.ci.teardown": ciPreviewEnvironmentSchema,
-  "devEnvironment.bootstrap": bootstrapPreviewEnvironmentSchema,
+  "neonProject.create": createNeonProjectSchema,
+  "railwayProject.create": createRailwayProjectSchema,
 });

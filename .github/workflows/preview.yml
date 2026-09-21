@@ -1,30 +1,30 @@
-# Reusable PR-preview-database workflow (issue #52).
+# Reusable PR-preview workflow (issue #52 / ADR-008 / ADR-009).
 #
 # Hosted once, here. A new MSOCIETY-endorsed project's repo needs none of
-# NEON_API_KEY / NEON_PROJECT_ID / RAILWAY_API_TOKEN / RAILWAY_PROJECT_ID /
-# RAILWAY_SERVICE as its own secrets — all live server-side, once, in
-# community-os's own API. The only thing a caller repo needs is this ~5-line
+# NEON_API_KEY / RAILWAY_API_TOKEN or any per-project identifier as its own
+# secrets — all live server-side, once, in community-os's own API, along
+# with the Neon/Railway project this project's maintainers linked via the
+# infra-config admin UI. The only thing a caller repo needs is this ~5-line
 # workflow (COMMUNITY_OS_CI_TOKEN is one org-level secret, inherited by
 # every current and future repo — nothing to set up per repo):
 #
-#   name: Preview DB
+#   name: Preview
 #   on:
 #     pull_request:
 #       types: [opened, synchronize, reopened, closed]
 #   jobs:
-#     preview-db:
-#       uses: msocietyhq/community-os/.github/workflows/preview-db.yml@main
+#     preview:
+#       uses: msocietyhq/community-os/.github/workflows/preview.yml@main
 #       secrets:
 #         COMMUNITY_OS_CI_TOKEN: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}
 #
-# This workflow only tells community-os's API to ensure/tear down a
-# dev_environment (and its backing Neon branch) — it never touches Railway
-# directly. Railway's own PR Environment feature (a native dashboard
-# feature, unrelated to this workflow) clones a bootstrap credential into
-# each PR's environment, which the app itself uses at boot (see
-# apps/api/src/scripts/preflight.ts) to self-configure via the
-# POST /api/v1/dev-environments/bootstrap endpoint.
-name: Preview Database Provisioning
+# This workflow just tells community-os's API to ensure/tear down a PR
+# preview — the API does everything else itself: forking the Neon branch,
+# and (when the project has a Railway project/service/source-environment
+# linked) creating the Railway environment, pushing every variable, and
+# triggering the deploy, all via its own Neon/Railway API credentials. No
+# Railway dashboard step, no app-side self-configure step — see ADR-009.
+name: Preview Provisioning
 
 on:
   workflow_call:

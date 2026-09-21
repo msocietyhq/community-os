@@ -11,7 +11,6 @@ import { authMiddleware } from "../middleware/auth";
 import { checkPermission, checkPermissionOn } from "../middleware/permissions";
 import { agentKeysService } from "../services/agent-keys.service";
 import { devEnvironmentsService } from "../services/dev-environments.service";
-import { projectBootstrapTokensService } from "../services/project-bootstrap-tokens.service";
 import { projectsService } from "../services/projects.service";
 import { devEnvironmentModel } from "./models/dev-environment";
 
@@ -327,45 +326,7 @@ export const devEnvironmentRoutes = new Elysia({
       detail: {
         tags: ["Dev Environments"],
         summary:
-          "CI-only: delete the PR preview environment's Neon branch (issue #52)",
-      },
-    },
-  )
-  .post(
-    "/bootstrap",
-    async ({ headers, body }) => {
-      const token = headers["x-bootstrap-token"];
-      if (!token) {
-        throw new AppError(
-          401,
-          "MISSING_BOOTSTRAP_TOKEN",
-          "X-Bootstrap-Token header required",
-        );
-      }
-      const { projectId } = await projectBootstrapTokensService.verify(token);
-
-      // The Railway environment self-configuring here should already have
-      // been created by `ci/ensure` on PR open/sync; find-or-create is a
-      // safety net if it boots before or without that CI step running.
-      const environment = await devEnvironmentsService.ensurePreviewEnvironment(
-        { projectId, prNumber: body.prNumber },
-      );
-      return devEnvironmentsService.reveal(
-        environment.id,
-        environment.ownerId,
-        {
-          viaBootstrapToken: true,
-        },
-      );
-    },
-    {
-      // Deliberately not `auth: true` — a Railway PR environment has no
-      // Better Auth session; the project bootstrap token is the credential.
-      body: "devEnvironment.bootstrap",
-      detail: {
-        tags: ["Dev Environments"],
-        summary:
-          "Self-configure: reveal a PR preview environment's env var bundle via its project bootstrap token",
+          "CI-only: tear down the PR preview environment's Neon branch and Railway environment (issue #52)",
       },
     },
   );

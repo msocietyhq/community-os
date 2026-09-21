@@ -2,7 +2,6 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermissionOn } from "../middleware/permissions";
-import { projectBootstrapTokensService } from "../services/project-bootstrap-tokens.service";
 import { projectInfraService } from "../services/project-infra.service";
 import { projectsService } from "../services/projects.service";
 import { devEnvironmentModel } from "./models/dev-environment";
@@ -12,10 +11,6 @@ import { devEnvironmentModel } from "./models/dev-environment";
 // param at the same segment breaks that merge for every route under
 // `/api/v1/projects/:id`, not just this file's.
 const projectIdParams = z.object({ id: z.string().uuid() });
-const tokenParams = z.object({
-  id: z.string().uuid(),
-  tokenId: z.string().min(1),
-});
 
 async function resolveProjectInfraSubject(
   projectId: string | undefined,
@@ -63,58 +58,111 @@ export const projectInfraRoutes = new Elysia({
       detail: {
         tags: ["Project Infra"],
         summary:
-          "Set which Neon/Railway project backs this project's PR previews",
-      },
-    },
-  )
-  .post(
-    "/bootstrap-tokens",
-    async ({ params: { id }, body, user }) =>
-      projectBootstrapTokensService.issue(id, body, user.id),
-    {
-      auth: true,
-      beforeHandle: checkPermissionOn("issue", ({ params, user }) =>
-        resolveProjectInfraSubject(params.id, user.id),
-      ),
-      params: projectIdParams,
-      body: "projectBootstrapToken.issue",
-      detail: {
-        tags: ["Project Infra"],
-        summary:
-          "Mint the bootstrap token this project's Railway service clones into every PR environment",
+          "Set which Neon/Railway project (and service/environment) backs this project's PR previews",
       },
     },
   )
   .get(
-    "/bootstrap-tokens",
-    async ({ params: { id } }) => ({
-      tokens: await projectBootstrapTokensService.list(id),
-    }),
+    "/neon-projects",
+    async () => ({ projects: await projectInfraService.listNeonProjects() }),
     {
       auth: true,
-      beforeHandle: checkPermissionOn("read", ({ params, user }) =>
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
         resolveProjectInfraSubject(params.id, user.id),
       ),
       params: projectIdParams,
       detail: {
         tags: ["Project Infra"],
-        summary: "List a project's bootstrap tokens (metadata only)",
+        summary:
+          "List Neon projects available to link (this platform's Neon account)",
       },
     },
   )
   .post(
-    "/bootstrap-tokens/:tokenId/revoke",
-    async ({ params: { tokenId }, user }) =>
-      projectBootstrapTokensService.revoke(tokenId, user.id),
+    "/neon-projects",
+    async ({ params: { id }, body, user }) =>
+      projectInfraService.createAndLinkNeonProject(id, body.name, user.id),
     {
       auth: true,
-      beforeHandle: checkPermissionOn("revoke", ({ params, user }) =>
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
         resolveProjectInfraSubject(params.id, user.id),
       ),
-      params: tokenParams,
+      params: projectIdParams,
+      body: "neonProject.create",
       detail: {
         tags: ["Project Infra"],
-        summary: "Revoke a bootstrap token",
+        summary: "Create a new Neon project and link it to this project",
+      },
+    },
+  )
+  .get(
+    "/railway-projects",
+    async () => ({
+      projects: await projectInfraService.listRailwayProjects(),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "List Railway projects available to link (this platform's Railway workspace)",
+      },
+    },
+  )
+  .post(
+    "/railway-projects",
+    async ({ params: { id }, body, user }) =>
+      projectInfraService.createAndLinkRailwayProject(id, body.name, user.id),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      body: "railwayProject.create",
+      detail: {
+        tags: ["Project Infra"],
+        summary: "Create a new Railway project and link it to this project",
+      },
+    },
+  )
+  .get(
+    "/railway-services",
+    async ({ params: { id } }) => ({
+      services: await projectInfraService.listRailwayServices(id),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "List services in the linked Railway project (to pick which one deploys PR previews)",
+      },
+    },
+  )
+  .get(
+    "/railway-environments",
+    async ({ params: { id } }) => ({
+      environments: await projectInfraService.listRailwayEnvironments(id),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "List environments in the linked Railway project (to pick which one PR previews clone from)",
       },
     },
   );

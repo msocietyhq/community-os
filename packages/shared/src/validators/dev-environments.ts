@@ -40,22 +40,32 @@ export const rotateSharedSecretSchema = z.object({
 });
 export type RotateSharedSecretInput = z.infer<typeof rotateSharedSecretSchema>;
 
-// --- Preview-environment provisioning (issue #52) ---
+// --- Preview-environment provisioning (issue #52 / ADR-009) ---
 
+// Undefined (key omitted) leaves a field as-is; null explicitly clears it —
+// needed so e.g. picking a different Railway project can reset the
+// service/source-environment fields that belonged to the old one.
+const clearableId = z.string().min(1).max(200).nullable().optional();
 export const upsertProjectInfraConfigSchema = z.object({
-  neonProjectId: z.string().min(1).max(200).optional(),
-  railwayProjectId: z.string().min(1).max(200).optional(),
-  railwayServiceId: z.string().min(1).max(200).optional(),
+  neonProjectId: clearableId,
+  railwayProjectId: clearableId,
+  railwayServiceId: clearableId,
+  railwaySourceEnvironmentId: clearableId,
 });
 export type UpsertProjectInfraConfigInput = z.infer<
   typeof upsertProjectInfraConfigSchema
 >;
 
-export const issueProjectBootstrapTokenSchema = z.object({
-  label: z.string().min(1).max(100).optional(),
+export const createNeonProjectSchema = z.object({
+  name: z.string().min(1).max(200),
 });
-export type IssueProjectBootstrapTokenInput = z.infer<
-  typeof issueProjectBootstrapTokenSchema
+export type CreateNeonProjectInput = z.infer<typeof createNeonProjectSchema>;
+
+export const createRailwayProjectSchema = z.object({
+  name: z.string().min(1).max(200),
+});
+export type CreateRailwayProjectInput = z.infer<
+  typeof createRailwayProjectSchema
 >;
 
 /** Body for the reusable GitHub Actions workflow's ensure/teardown calls. */
@@ -66,12 +76,4 @@ export const ciPreviewEnvironmentSchema = z.object({
 });
 export type CiPreviewEnvironmentInput = z.infer<
   typeof ciPreviewEnvironmentSchema
->;
-
-/** Body a project's own Railway service sends itself at boot, via the preflight script. */
-export const bootstrapPreviewEnvironmentSchema = z.object({
-  prNumber: z.number().int().positive(),
-});
-export type BootstrapPreviewEnvironmentInput = z.infer<
-  typeof bootstrapPreviewEnvironmentSchema
 >;

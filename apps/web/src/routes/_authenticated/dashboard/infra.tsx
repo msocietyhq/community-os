@@ -1,16 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { z } from "zod";
+import type { UpsertProjectInfraConfigInput } from "@community-os/shared/validators";
 import { api } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "../../../components/ui/dialog";
 
 const infraSearchSchema = z.object({
   projectId: z.string().uuid().optional().catch(undefined),
@@ -206,10 +200,6 @@ function ProjectInfraSections({
   return (
     <div className="space-y-6">
       <InfraConfigSection projectId={projectId} canManage={canManageInfra} />
-      <BootstrapTokensSection
-        projectId={projectId}
-        canManage={canManageInfra}
-      />
       <PrPreviewEnvironmentsSection
         projectId={projectId}
         canManage={canManageInfra}
@@ -226,11 +216,12 @@ function InfraConfigSection({
   canManage: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [neonProjectId, setNeonProjectId] = useState("");
-  const [railwayProjectId, setRailwayProjectId] = useState("");
-  const [railwayServiceId, setRailwayServiceId] = useState("");
+  const [creatingNeon, setCreatingNeon] = useState(false);
+  const [newNeonName, setNewNeonName] = useState("");
+  const [creatingRailway, setCreatingRailway] = useState(false);
+  const [newRailwayName, setNewRailwayName] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const configQuery = useQuery({
     queryKey: ["project-infra-config", projectId],
     queryFn: async () => {
       const res = await api.api.v1
@@ -240,397 +231,338 @@ function InfraConfigSection({
       return res.data;
     },
   });
+  const config = configQuery.data?.config ?? null;
 
-  useEffect(() => {
-    if (!data) return;
-    setNeonProjectId(data.config?.neonProjectId ?? "");
-    setRailwayProjectId(data.config?.railwayProjectId ?? "");
-    setRailwayServiceId(data.config?.railwayServiceId ?? "");
-  }, [data]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.api.v1
-        .projects({ id: projectId })
-        ["infra-config"].put({
-          neonProjectId: neonProjectId || undefined,
-          railwayProjectId: railwayProjectId || undefined,
-          railwayServiceId: railwayServiceId || undefined,
-        });
-      if (res.error) throw new Error("Failed to save infra config");
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["project-infra-config", projectId],
-      });
-    },
-  });
-
-  return (
-    <div className="bg-card rounded-xl border shadow-sm p-5">
-      <h2 className="text-sm font-semibold text-foreground">Infra Config</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        The Neon and Railway resources this project's PR preview environments
-        get provisioned into.
-      </p>
-
-      {isLoading ? (
-        <div className="mt-4 flex items-center gap-3">
-          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-muted-foreground">Loading...</span>
-        </div>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveMutation.mutate();
-          }}
-          className="mt-4 space-y-4"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label
-                htmlFor="neon-project-id"
-                className="text-sm font-medium text-foreground"
-              >
-                Neon Project ID
-              </label>
-              <input
-                id="neon-project-id"
-                type="text"
-                value={neonProjectId}
-                onChange={(e) => setNeonProjectId(e.target.value)}
-                disabled={!canManage}
-                placeholder="neon-project-id"
-                className="mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="railway-project-id"
-                className="text-sm font-medium text-foreground"
-              >
-                Railway Project ID
-              </label>
-              <input
-                id="railway-project-id"
-                type="text"
-                value={railwayProjectId}
-                onChange={(e) => setRailwayProjectId(e.target.value)}
-                disabled={!canManage}
-                placeholder="railway-project-id"
-                className="mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="railway-service-id"
-                className="text-sm font-medium text-foreground"
-              >
-                Railway Service ID
-              </label>
-              <input
-                id="railway-service-id"
-                type="text"
-                value={railwayServiceId}
-                onChange={(e) => setRailwayServiceId(e.target.value)}
-                disabled={!canManage}
-                placeholder="railway-service-id"
-                className="mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          {canManage && (
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={saveMutation.isPending}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saveMutation.isPending ? "Saving..." : "Save Config"}
-              </button>
-            </div>
-          )}
-        </form>
-      )}
-    </div>
-  );
-}
-
-function BootstrapTokensSection({
-  projectId,
-  canManage,
-}: {
-  projectId: string;
-  canManage: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const [newTokenOpen, setNewTokenOpen] = useState(false);
-  const [label, setLabel] = useState("");
-  const [issuedToken, setIssuedToken] = useState<string | null>(null);
-  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["project-bootstrap-tokens", projectId],
+  const neonProjectsQuery = useQuery({
+    queryKey: ["neon-projects", projectId],
     queryFn: async () => {
       const res = await api.api.v1
         .projects({ id: projectId })
-        ["infra-config"]["bootstrap-tokens"].get();
-      if (res.error) throw new Error("Failed to fetch bootstrap tokens");
+        ["infra-config"]["neon-projects"].get();
+      if (res.error) throw new Error("Failed to fetch Neon projects");
       return res.data;
     },
     enabled: canManage,
   });
 
-  const tokens = data?.tokens ?? [];
-
-  const issueMutation = useMutation({
-    mutationFn: async () => {
+  const railwayProjectsQuery = useQuery({
+    queryKey: ["railway-projects", projectId],
+    queryFn: async () => {
       const res = await api.api.v1
         .projects({ id: projectId })
-        ["infra-config"]["bootstrap-tokens"].post({
-          label: label || undefined,
-        });
-      if (res.error) throw new Error("Failed to issue bootstrap token");
+        ["infra-config"]["railway-projects"].get();
+      if (res.error) throw new Error("Failed to fetch Railway projects");
       return res.data;
     },
-    onSuccess: (result) => {
-      setIssuedToken(result?.token ?? null);
-      setLabel("");
-      queryClient.invalidateQueries({
-        queryKey: ["project-bootstrap-tokens", projectId],
-      });
-    },
+    enabled: canManage,
   });
 
-  const revokeMutation = useMutation({
-    mutationFn: async (tokenId: string) => {
+  const railwayServicesQuery = useQuery({
+    queryKey: ["railway-services", projectId],
+    queryFn: async () => {
       const res = await api.api.v1
         .projects({ id: projectId })
-        ["infra-config"]["bootstrap-tokens"]({ tokenId })
-        .revoke.post();
-      if (res.error) throw new Error("Failed to revoke bootstrap token");
+        ["infra-config"]["railway-services"].get();
+      if (res.error) throw new Error("Failed to fetch Railway services");
+      return res.data;
+    },
+    enabled: canManage && !!config?.railwayProjectId,
+  });
+
+  const railwayEnvironmentsQuery = useQuery({
+    queryKey: ["railway-environments", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"]["railway-environments"].get();
+      if (res.error) throw new Error("Failed to fetch Railway environments");
+      return res.data;
+    },
+    enabled: canManage && !!config?.railwayProjectId,
+  });
+
+  const invalidateConfig = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["project-infra-config", projectId],
+    });
+
+  const patchMutation = useMutation({
+    mutationFn: async (patch: UpsertProjectInfraConfigInput) => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"].put(patch);
+      if (res.error) throw new Error("Failed to update infra config");
+      return res.data;
+    },
+    onSuccess: invalidateConfig,
+  });
+
+  const createNeonMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"]["neon-projects"].post({ name });
+      if (res.error) throw new Error("Failed to create Neon project");
       return res.data;
     },
     onSuccess: () => {
-      setConfirmRevokeId(null);
+      setCreatingNeon(false);
+      setNewNeonName("");
+      invalidateConfig();
+      queryClient.invalidateQueries({ queryKey: ["neon-projects", projectId] });
+    },
+  });
+
+  const createRailwayMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"]["railway-projects"].post({ name });
+      if (res.error) throw new Error("Failed to create Railway project");
+      return res.data;
+    },
+    onSuccess: () => {
+      setCreatingRailway(false);
+      setNewRailwayName("");
+      invalidateConfig();
       queryClient.invalidateQueries({
-        queryKey: ["project-bootstrap-tokens", projectId],
+        queryKey: ["railway-projects", projectId],
       });
     },
   });
 
-  const closeDialog = () => {
-    setNewTokenOpen(false);
-    setLabel("");
-    setIssuedToken(null);
-    setCopied(false);
-  };
+  const selectClass =
+    "mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground disabled:opacity-60 disabled:cursor-not-allowed";
+  const inputClass =
+    "mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground";
 
-  if (!canManage) return null;
+  const fullyLinked = Boolean(
+    config?.neonProjectId &&
+      config?.railwayProjectId &&
+      config?.railwayServiceId &&
+      config?.railwaySourceEnvironmentId,
+  );
 
   return (
     <div className="bg-card rounded-xl border shadow-sm p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">
-            Bootstrap Tokens
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The credential this project's Railway service clones into every PR
-            preview environment.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setNewTokenOpen(true)}
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors flex-shrink-0"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 4.5v15m7.5-7.5h-15"
-            />
-          </svg>
-          New Token
-        </button>
-      </div>
+      <h2 className="text-sm font-semibold text-foreground">Infra Config</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Link a Neon project and a Railway project once — every PR preview after
+        that provisions and tears down automatically, with no more manual Neon
+        or Railway dashboard steps.
+      </p>
 
-      {isLoading ? (
+      {configQuery.isLoading ? (
         <div className="mt-4 flex items-center gap-3">
           <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-muted-foreground">Loading...</span>
         </div>
-      ) : tokens.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          No bootstrap tokens yet.
-        </p>
       ) : (
-        <div className="mt-4 divide-y divide-border">
-          {tokens.map((token) => (
-            <div
-              key={token.id}
-              className="flex items-center justify-between gap-3 py-3"
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label
+              htmlFor="neon-project-select"
+              className="text-sm font-medium text-foreground"
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground truncate">
-                    {token.label || "Untitled token"}
-                  </span>
-                  {token.revokedAt ? (
-                    <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-500">
-                      Revoked
-                    </span>
-                  ) : (
-                    <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500">
-                      Active
-                    </span>
-                  )}
-                </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Created {formatDate(token.createdAt)}
-                  {" · "}
-                  Last used {formatDate(token.lastUsedAt)}
-                </p>
+              Neon Project
+            </label>
+            {creatingNeon ? (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newNeonName}
+                  onChange={(e) => setNewNeonName(e.target.value)}
+                  placeholder="New Neon project name"
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={() => createNeonMutation.mutate(newNeonName)}
+                  disabled={!newNeonName || createNeonMutation.isPending}
+                  className="px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  {createNeonMutation.isPending ? "..." : "Create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreatingNeon(false)}
+                  className="px-3 py-2 text-xs font-medium rounded-lg border text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                >
+                  Cancel
+                </button>
               </div>
-              {!token.revokedAt && (
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {confirmRevokeId === token.id ? (
-                    <>
-                      <span className="text-xs text-muted-foreground">
-                        Revoke?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => revokeMutation.mutate(token.id)}
-                        disabled={revokeMutation.isPending}
-                        className="px-2.5 py-1 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
-                      >
-                        {revokeMutation.isPending ? "..." : "Yes"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmRevokeId(null)}
-                        className="px-2.5 py-1 text-xs font-medium rounded-md border text-foreground hover:bg-accent transition-colors"
-                      >
-                        No
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmRevokeId(token.id)}
-                      className="px-2.5 py-1 text-xs font-medium rounded-md border text-foreground hover:bg-accent transition-colors"
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+            ) : (
+              <div className="mt-1 flex items-center gap-2">
+                <select
+                  id="neon-project-select"
+                  value={config?.neonProjectId ?? ""}
+                  onChange={(e) =>
+                    patchMutation.mutate({
+                      neonProjectId: e.target.value || null,
+                    })
+                  }
+                  disabled={!canManage || neonProjectsQuery.isLoading}
+                  className={selectClass}
+                >
+                  <option value="">Not linked</option>
+                  {(neonProjectsQuery.data?.projects ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => setCreatingNeon(true)}
+                    className="px-3 py-2 text-xs font-medium rounded-lg border text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                  >
+                    New
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="railway-project-select"
+              className="text-sm font-medium text-foreground"
+            >
+              Railway Project
+            </label>
+            {creatingRailway ? (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newRailwayName}
+                  onChange={(e) => setNewRailwayName(e.target.value)}
+                  placeholder="New Railway project name"
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={() => createRailwayMutation.mutate(newRailwayName)}
+                  disabled={!newRailwayName || createRailwayMutation.isPending}
+                  className="px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  {createRailwayMutation.isPending ? "..." : "Create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreatingRailway(false)}
+                  className="px-3 py-2 text-xs font-medium rounded-lg border text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 flex items-center gap-2">
+                <select
+                  id="railway-project-select"
+                  value={config?.railwayProjectId ?? ""}
+                  onChange={(e) =>
+                    patchMutation.mutate({
+                      railwayProjectId: e.target.value || null,
+                      // Switching projects invalidates whatever service/env
+                      // was picked for the old one.
+                      railwayServiceId: null,
+                      railwaySourceEnvironmentId: null,
+                    })
+                  }
+                  disabled={!canManage || railwayProjectsQuery.isLoading}
+                  className={selectClass}
+                >
+                  <option value="">Not linked</option>
+                  {(railwayProjectsQuery.data?.projects ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => setCreatingRailway(true)}
+                    className="px-3 py-2 text-xs font-medium rounded-lg border text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                  >
+                    New
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {config?.railwayProjectId && (
+            <>
+              <div>
+                <label
+                  htmlFor="railway-service-select"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Railway Service
+                </label>
+                <select
+                  id="railway-service-select"
+                  value={config?.railwayServiceId ?? ""}
+                  onChange={(e) =>
+                    patchMutation.mutate({
+                      railwayServiceId: e.target.value || null,
+                    })
+                  }
+                  disabled={!canManage || railwayServicesQuery.isLoading}
+                  className={selectClass}
+                >
+                  <option value="">Select a service...</option>
+                  {(railwayServicesQuery.data?.services ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="railway-env-select"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Clones From (Source Environment)
+                </label>
+                <select
+                  id="railway-env-select"
+                  value={config?.railwaySourceEnvironmentId ?? ""}
+                  onChange={(e) =>
+                    patchMutation.mutate({
+                      railwaySourceEnvironmentId: e.target.value || null,
+                    })
+                  }
+                  disabled={!canManage || railwayEnvironmentsQuery.isLoading}
+                  className={selectClass}
+                >
+                  <option value="">Select an environment...</option>
+                  {(railwayEnvironmentsQuery.data?.environments ?? [])
+                    .filter((e) => !e.isEphemeral)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      <Dialog open={newTokenOpen} onOpenChange={(v) => !v && closeDialog()}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>New Bootstrap Token</DialogTitle>
-            <DialogDescription>
-              {issuedToken
-                ? "Copy this token now — it will not be shown again."
-                : "Optionally label this token, then issue it."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-6 pb-6 space-y-4">
-            {issuedToken ? (
-              <>
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                    This is the only time this token will be shown. Copy it now
-                    and store it somewhere safe.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 px-3 py-2 text-xs bg-muted rounded-lg text-foreground break-all">
-                    {issuedToken}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(issuedToken);
-                      setCopied(true);
-                    }}
-                    className="px-3 py-2 text-xs font-medium rounded-lg border bg-card text-foreground hover:bg-accent transition-colors flex-shrink-0"
-                  >
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={closeDialog}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  issueMutation.mutate();
-                }}
-                className="space-y-4"
-              >
-                <div>
-                  <label
-                    htmlFor="token-label"
-                    className="text-sm font-medium text-foreground"
-                  >
-                    Label
-                  </label>
-                  <input
-                    id="token-label"
-                    type="text"
-                    value={label}
-                    onChange={(e) => setLabel(e.target.value)}
-                    placeholder="e.g. Railway PR previews"
-                    className="mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closeDialog}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border bg-card text-foreground hover:bg-accent transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={issueMutation.isPending}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {issueMutation.isPending ? "Issuing..." : "Issue Token"}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {!configQuery.isLoading && (
+        <p
+          className={`mt-4 text-xs ${fullyLinked ? "text-emerald-500" : "text-muted-foreground"}`}
+        >
+          {fullyLinked
+            ? "Fully automated — PR previews for this project provision and tear down with zero manual Neon/Railway steps."
+            : "Link a Neon project and a Railway project + service + source environment to fully automate PR previews."}
+        </p>
+      )}
     </div>
   );
 }
