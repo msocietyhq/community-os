@@ -67,6 +67,13 @@ export interface SettingDef<T> {
    * readonly setting whose value is produced by the system.
    */
   regenerable?: boolean;
+  /**
+   * Show the real value on the settings index instead of collapsing a
+   * `control: "text"` setting to default/custom/silent. For a short value
+   * worth seeing at a glance — the same reason the whole `computer` group is
+   * exempted — without exempting every text setting in the group it's in.
+   */
+  previewOnIndex?: boolean;
 }
 
 /**
@@ -176,6 +183,10 @@ Since this is your first message here, mind doing a short intro?
 1. Some background of your academics
 2. Your current job/situation
 3. Your tech interests/aspirations`;
+
+/** {topic} is replaced with the forum topic's Telegram name. */
+export const DEFAULT_TOPIC_DRIFT_REMINDER =
+  "Friendly nudge — this topic is for {topic}. Let's keep it on track here, or spin up a new topic for this 🙂";
 
 export const DEFAULT_MAINTENANCE_REPLY =
   "I'm paused right now — I'll be back shortly.";
@@ -365,6 +376,57 @@ export const BOT_SETTINGS = {
     group: "behaviour",
     control: "percent",
     format: (v) => `${Math.round(v * 100)}%`,
+  }),
+  "topicDrift.enabled": def<boolean>({
+    schema: z.boolean(),
+    default: true,
+    label: "Topic drift reminders",
+    description:
+      "Whether the bot nudges a forum topic back on track after several consecutive off-topic messages. Only runs in topics whose Telegram name is known — see Topic drift streak.",
+    group: "behaviour",
+    control: "toggle",
+    format: onOff,
+  }),
+  "topicDrift.cooldownMinutes": def<number>({
+    schema: z.number().min(0).max(1440),
+    default: 120,
+    label: "Topic drift cooldown",
+    description:
+      "Minimum gap between drift reminders in the same topic. Separate from the chime-in cooldown and per-topic, so a reminder in one topic never blocks one in another.",
+    group: "behaviour",
+    control: "duration",
+    format: (v) => `${v}m`,
+  }),
+  "topicDrift.minConfidence": def<number>({
+    schema: z.number().min(0).max(1),
+    default: 0.8,
+    label: "Topic drift confidence",
+    description:
+      "How sure the judge must be that a message is off-topic before it counts toward the streak. Higher means fewer, more confident reminders.",
+    group: "behaviour",
+    control: "percent",
+    format: (v) => `${Math.round(v * 100)}%`,
+  }),
+  "topicDrift.consecutiveOffTopic": def<number>({
+    schema: z.coerce.number().int().min(1).max(20),
+    default: 4,
+    label: "Topic drift streak",
+    description:
+      "How many consecutive off-topic messages in a topic trigger a reminder. Lower nudges sooner; higher tolerates more wandering before speaking up.",
+    group: "behaviour",
+    control: "text",
+    previewOnIndex: true,
+    format: (v) => `${v} messages`,
+  }),
+  "topicDrift.reminderText": def<string>({
+    schema: z.string().min(1).max(500),
+    default: DEFAULT_TOPIC_DRIFT_REMINDER,
+    label: "Topic drift reminder",
+    description:
+      "Sent in a topic once it has drifted off-subject. {topic} becomes the topic's Telegram name.",
+    group: "behaviour",
+    control: "text",
+    format: (v) => previewText(v),
   }),
   "memory.minConfidence": def<number>({
     schema: z.number().min(0).max(1),
