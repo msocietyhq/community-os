@@ -40,6 +40,7 @@ export type Subjects =
   | "SharedSecret"
   | SharedSecretSubject
   | "Venue"
+  | "Dataset"
   | "Fund"
   | "Reputation"
   | "Audit"
@@ -97,6 +98,11 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("create", "Venue");
     can("update", "Venue");
     can("delete", "Venue");
+    // Datasets
+    can("read", "Dataset");
+    can("create", "Dataset");
+    can("update", "Dataset");
+    can("delete", "Dataset");
     // Infra
     can("read", "Infra");
     can("provision", "Infra");
@@ -127,6 +133,7 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     can("update", "Project", { ownerId: user.id });
     can("delete", "Project", { ownerId: user.id });
     can("read", "Venue");
+    can("read", "Dataset");
     can("read", "Reputation");
     can("create", "Reputation");
     // Any project member can create their own dev environment; managing it

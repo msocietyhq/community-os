@@ -218,6 +218,13 @@
       "when": 1789990465927,
       "tag": "0030_lakebase_text_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790004236502,
+      "tag": "0031_magical_unus",
+      "breakpoints": true
     }
   ]
 }
