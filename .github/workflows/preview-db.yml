@@ -1,0 +1,81 @@
+name: Preview Database
+
+# Gives each PR its own Neon database branch, copy-on-write from the parent
+# branch, kept schema-current and torn down when the PR closes.
+#
+# Inert until NEON_API_KEY and NEON_PROJECT_ID are set as repo secrets — every
+# job below no-ops (skips entirely) without them, so this file is safe to
+# merge before that setup is done.
+#
+# NOTE: the exact `neondatabase/create-branch-action` / `delete-branch-action`
+# inputs/outputs below are written from documented usage, not verified against
+# a live run — this sandbox's network policy blocks neon.com, so I couldn't
+# fetch current docs or exercise this end-to-end. Sanity-check the action
+# versions and input names against https://neon.com/docs/guides/branching-github-actions
+# before relying on it, and watch the first real run closely.
+#
+# This only provisions the database side. The API/web preview deploy itself
+# is Railway's own "PR Environments" feature — a toggle in the Railway
+# project dashboard (requires the Railway GitHub App installed on this repo),
+# not a workflow file. Once that's on, wire this job's `db_url` output into
+# that PR environment's DATABASE_URL (Railway dashboard, or
+# `railway variables set DATABASE_URL=... --environment pr-<n>` from a CLI
+# authenticated against this project).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main, dev]
+
+jobs:
+  create-or-update:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip — preview DB secrets not configured
+        if: ${{ !secrets.NEON_API_KEY || !secrets.NEON_PROJECT_ID }}
+        run: echo "NEON_API_KEY / NEON_PROJECT_ID not set — skipping preview DB branch."
+
+      - name: Create or reset Neon branch for this PR
+        if: ${{ secrets.NEON_API_KEY && secrets.NEON_PROJECT_ID }}
+        id: neon-branch
+        uses: neondatabase/create-branch-action@v5
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch_name: preview/pr-${{ github.event.pull_request.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - uses: actions/checkout@v4
+        if: ${{ secrets.NEON_API_KEY && secrets.NEON_PROJECT_ID }}
+
+      - uses: oven-sh/setup-bun@v2
+        if: ${{ secrets.NEON_API_KEY && secrets.NEON_PROJECT_ID }}
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies
+        if: ${{ secrets.NEON_API_KEY && secrets.NEON_PROJECT_ID }}
+        run: bun install --frozen-lockfile
+
+      - name: Apply migrations to the preview branch
+        if: ${{ secrets.NEON_API_KEY && secrets.NEON_PROJECT_ID }}
+        working-directory: apps/api
+        env:
+          DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
+        run: bun run db:migrate
+
+  delete:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip — preview DB secrets not configured
+        if: ${{ !secrets.NEON_API_KEY || !secrets.NEON_PROJECT_ID }}
+        run: echo "NEON_API_KEY / NEON_PROJECT_ID not set — skipping preview DB cleanup."
+
+      - name: Delete this PR's Neon branch
+        if: ${{ secrets.NEON_API_KEY && secrets.NEON_PROJECT_ID }}
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch: preview/pr-${{ github.event.pull_request.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
