@@ -197,64 +197,113 @@ function escapeContent(text: string): string {
   return text.replace(/<\/(msg|quoted)>/gi, "&lt;/$1&gt;");
 }
 
-interface ReplyAttrs {
-  attrs: string;
+interface ReplyTarget {
+  name: string;
+  /** Formatted timestamp string, or null when none is available to show. */
+  at: string | null;
+  /** Set only when the parent is out of window — lets the agent fetch it. */
+  replyId: number | null;
   quoted: string | null;
+  /** True when the parent lives in another chat and cannot be fetched. */
+  external: boolean;
 }
 
 /**
- * Builds the reply attributes for a history message.
+ * Resolves who a row is replying to, and what's known about that parent.
  *
  * Nearly half of all messages are replies, and inside a forum topic almost
- * every message is. Without this the transcript flattens into a linear list and
- * the model can't tell who is answering whom.
+ * every message is. Without this the transcript flattens into a linear list
+ * and the model can't tell who is answering whom.
  *
  * When the parent is in the window it is referenced by time only — the full
  * message is already in the transcript. When it isn't, the parent's text is
  * quoted, since the model has no other way to see it.
  */
-function buildReplyAttrs(
+function resolveReplyTarget(
   row: TelegramMessageRow,
   byMessageId: Map<number, TelegramMessageRow>,
-): ReplyAttrs {
-  const none: ReplyAttrs = { attrs: "", quoted: null };
-
+): ReplyTarget | null {
   const parentId = row.replyToMessageId;
-  if (parentId === null || parentId === undefined) return none;
+  if (parentId === null || parentId === undefined) return null;
 
   // Telegram sets reply_to_message_id to the topic root for messages that are
   // merely posted in a forum topic rather than replying to anything.
   if (row.messageThreadId !== null && parentId === row.messageThreadId)
-    return none;
+    return null;
 
   const inWindow = byMessageId.get(parentId);
   if (inWindow) {
     const at = formatTelegramDate(Math.floor(inWindow.date.getTime() / 1000));
     return {
-      attrs: ` replying-to="${encodeXML(rowDisplayName(inWindow))}" replying-to-at="${at}"`,
+      name: rowDisplayName(inWindow),
+      at,
+      replyId: null,
       quoted: null,
+      external: false,
     };
   }
 
   const parent = parentFromRaw(row.raw);
   if (!parent) {
-    return { attrs: ` replying-to="an earlier message"`, quoted: null };
+    return {
+      name: "an earlier message",
+      at: null,
+      replyId: null,
+      quoted: null,
+      external: false,
+    };
   }
 
-  const when = parent.date
-    ? ` replying-to-at="${formatTelegramDateFull(parent.date)}, ${formatTelegramDate(parent.date)}"`
-    : "";
-
-  // The id lets the agent fetch the full text via chat_history when the
-  // quote below is truncated. External parents live elsewhere and can't be.
-  const ref = parent.external
-    ? ` from-another-chat="true"`
-    : ` reply-id="${parentId}"`;
+  const at = parent.date
+    ? `${formatTelegramDateFull(parent.date)}, ${formatTelegramDate(parent.date)}`
+    : null;
 
   return {
-    attrs: ` replying-to="${encodeXML(parent.name)}"${when}${ref}`,
+    name: parent.name,
+    at,
+    // The id lets the agent fetch the full text via chat_history when the
+    // quote below is truncated. External parents live elsewhere and can't be.
+    replyId: parent.external ? null : parentId,
     quoted: sanitizeSnippet(parent.snippet, HISTORY_REPLY_TEXT_MAX),
+    external: parent.external === true,
   };
+}
+
+interface ReplyAttrs {
+  attrs: string;
+  quoted: string | null;
+}
+
+/** Builds the XML reply attributes for a history message's envelope. */
+function buildReplyAttrs(
+  row: TelegramMessageRow,
+  byMessageId: Map<number, TelegramMessageRow>,
+): ReplyAttrs {
+  const target = resolveReplyTarget(row, byMessageId);
+  if (!target) return { attrs: "", quoted: null };
+
+  const when = target.at ? ` replying-to-at="${target.at}"` : "";
+  const ref = target.external
+    ? ` from-another-chat="true"`
+    : target.replyId !== null
+      ? ` reply-id="${target.replyId}"`
+      : "";
+
+  return {
+    attrs: ` replying-to="${encodeXML(target.name)}"${when}${ref}`,
+    quoted: target.quoted,
+  };
+}
+
+/**
+ * Names who a row is replying to, for transcripts that don't need the full
+ * envelope machinery above.
+ */
+function resolveReplyToName(
+  row: TelegramMessageRow,
+  byMessageId: Map<number, TelegramMessageRow>,
+): string | null {
+  return resolveReplyTarget(row, byMessageId)?.name ?? null;
 }
 
 /**
@@ -276,9 +325,12 @@ export function formatGroupHistory(
             text: m.text,
             caption: null,
             mediaType: null,
+            replyToMessageId: m.replyToId ?? null,
+            messageThreadId: null,
             date: new Date(m.at),
           }) as TelegramMessageRow,
       );
+  const byMessageId = new Map(messages.map((m) => [m.messageId, m]));
   const lines = messages.map((msg) => {
     const time = formatTelegramDate(Math.floor(msg.date.getTime() / 1000));
     const name = msg.fromUsername
@@ -288,71 +340,65 @@ export function formatGroupHistory(
       msg.text ??
       msg.caption ??
       (msg.mediaType ? `[${msg.mediaType}]` : "[message]");
-    return `${time} ${name}: ${content}`;
+    const replyTo = resolveReplyToName(msg, byMessageId);
+    const replyMarker = replyTo ? ` (replying to ${replyTo})` : "";
+    return `${time} ${name}${replyMarker}: ${content}`;
   });
   return `[Recent group conversation:]\n${lines.join("\n")}\n---`;
 }
 
+interface CurrentMessageReplyAttrs {
+  attrs: string;
+  quoted: string | null;
+}
+
 /**
- * Returns the query string prefixed with a compact context header containing
- * sender info, timestamp, and optional reply chain.
+ * Builds the reply attributes for the current message, mirroring
+ * `buildReplyAttrs` for history. Unlike history, the parent has already been
+ * resolved (in-window or fetched) by `buildConversationContext`, so this is
+ * always explicit about which message is being replied to rather than
+ * deferring to the transcript above it — this is the model's one chance to
+ * see who it's being addressed by, before the current message runs out.
+ */
+function buildCurrentMessageReplyAttrs(
+  context: ConversationContext,
+): CurrentMessageReplyAttrs {
+  const replyToId = context.currentMessage.replyToId;
+  if (replyToId === undefined) return { attrs: "", quoted: null };
+
+  const parent = context.parentMessage;
+  if (!parent) {
+    return {
+      attrs: ` replying-to="an earlier message" reply-id="${replyToId}"`,
+      quoted: null,
+    };
+  }
+
+  const parentUnix = Math.floor(Date.parse(parent.at) / 1000);
+  const when = ` replying-to-at="${formatTelegramDateFull(parentUnix)}, ${formatTelegramDate(parentUnix)}"`;
+
+  return {
+    attrs: ` replying-to="${encodeXML(parent.from)}"${when} reply-id="${replyToId}"`,
+    quoted: sanitizeSnippet(parent.text, REPLY_TEXT_MAX),
+  };
+}
+
+/**
+ * Wraps the current message in the same `<msg>` envelope every history entry
+ * gets, so the model has an equally strong signal for who it's currently
+ * talking to as it does for everyone else in the conversation.
  */
 export function buildEnrichedQuery(
   query: string,
-  meta: TelegramMeta,
-  chatId?: string,
-): string;
-export function buildEnrichedQuery(
-  query: string,
   context: ConversationContext,
-): string;
-export function buildEnrichedQuery(
-  query: string,
-  input: TelegramMeta | ConversationContext,
-  chatId?: string,
 ): string {
-  const meta: TelegramMeta =
-    "currentMessage" in input
-      ? {
-          messageId: input.currentMessage.id,
-          date: Math.floor(Date.parse(input.currentMessage.at) / 1000),
-          from: { id: 0, firstName: input.currentMessage.from },
-          chatType: input.metadata.isGroupChat ? "group" : "private",
-          ...(input.parentMessage
-            ? {
-                replyTo: {
-                  messageId: input.parentMessage.id,
-                  date: Math.floor(Date.parse(input.parentMessage.at) / 1000),
-                  from: { id: 0, firstName: input.parentMessage.from },
-                  text: input.parentMessage.text,
-                },
-              }
-            : {}),
-        }
-      : input;
-  const effectiveChatId =
-    "currentMessage" in input ? input.chatId || undefined : chatId;
-  const datePart = `${formatTelegramDateFull(meta.date)}, ${formatTelegramDate(meta.date)}`;
+  const currentUnix = Math.floor(Date.parse(context.currentMessage.at) / 1000);
+  const datePart = `${formatTelegramDateFull(currentUnix)} ${formatTelegramDate(currentUnix)}`;
+  const name = encodeXML(context.currentMessage.from);
+  const { attrs, quoted } = buildCurrentMessageReplyAttrs(context);
+  const quotedLine = quoted ? `<quoted>${quoted}</quoted>\n` : "";
 
-  let header: string;
-
-  const senderPart = displayName(meta.from);
-
-  if (meta.replyTo) {
-    const replyFrom = meta.replyTo.from
-      ? displayName(meta.replyTo.from)
-      : "someone";
-    const replyTime = formatTelegramDate(meta.replyTo.date);
-    let replyText = meta.replyTo.text ?? "(non-text message)";
-    if (replyText.length > REPLY_TEXT_MAX) {
-      replyText = `${replyText.slice(0, REPLY_TEXT_MAX)}…`;
-    }
-    header = `[${datePart} | ${senderPart} → replying to ${replyFrom} at ${replyTime}: "${replyText}"${effectiveChatId ? ` | chat_id: ${effectiveChatId}` : ""}]`;
-  } else {
-    header = `[${datePart} | ${senderPart}${effectiveChatId ? ` | chat_id: ${effectiveChatId}` : ""}]`;
-  }
-
-  return `${header}\n${query}`;
+  return `<msg from="${name}" at="${datePart}"${attrs}>\n${quotedLine}${escapeContent(query)}\n</msg>`;
 }
 
 function getDateString(date: Date): string {
