@@ -26,6 +26,7 @@ import {
   type RemoteExecConfig,
 } from "./exec";
 import { generateEd25519KeyPair } from "./ssh-keys";
+import { resolveBinary } from "./ssh-bin";
 import {
   BOT_SETTINGS,
   type SettingsSnapshot,
@@ -180,27 +181,33 @@ describe("normalizePrivateKey", () => {
   // Exec trims the stored key before writing the throwaway identity file.
   // OpenSSH 9.6 + OpenSSL 3 then fails with "Load key: error in libcrypto"
   // and never offers the key, so the VM answers Permission denied.
-  test("OpenSSH can load a generated key after normalizePrivateKey", async () => {
-    const pair = await generateEd25519KeyPair();
-    const dir = await mkdtemp(join(tmpdir(), "exec-key-"));
-    const keyPath = join(dir, "id");
-    try {
-      await writeFile(keyPath, normalizePrivateKey(pair.privateKey.trim()), {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      await chmod(keyPath, 0o600);
-      const result = Bun.spawnSync(["ssh-keygen", "-y", "-f", keyPath], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      expect(result.stderr.toString()).not.toContain("libcrypto");
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).toContain("ssh-ed25519");
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
+  //
+  // Skipped where openssh-client isn't installed (e.g. Railway's Nixpacks
+  // Bun image) rather than failing to spawn ssh-keygen outright.
+  test.skipIf(!resolveBinary("ssh-keygen"))(
+    "OpenSSH can load a generated key after normalizePrivateKey",
+    async () => {
+      const pair = await generateEd25519KeyPair();
+      const dir = await mkdtemp(join(tmpdir(), "exec-key-"));
+      const keyPath = join(dir, "id");
+      try {
+        await writeFile(keyPath, normalizePrivateKey(pair.privateKey.trim()), {
+          encoding: "utf8",
+          mode: 0o600,
+        });
+        await chmod(keyPath, 0o600);
+        const result = Bun.spawnSync(["ssh-keygen", "-y", "-f", keyPath], {
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        expect(result.stderr.toString()).not.toContain("libcrypto");
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.toString()).toContain("ssh-ed25519");
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("clampExecTimeoutMs", () => {
