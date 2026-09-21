@@ -1,5 +1,5 @@
 {
-  "id": "14d895ab-cac8-4807-964b-74a18602fa57",
+  "id": "59a533c6-0be3-4ebe-971d-1b26d6a7f45d",
   "prevId": "fc0dbf58-895c-48dc-bb42-b3f67b00f341",
   "version": "7",
   "dialect": "postgresql",
@@ -1858,100 +1858,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.fund_causes": {
-      "name": "fund_causes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_amount": {
-          "name": "target_amount",
-          "type": "numeric(10, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "fund_cause_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'active'"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "fund_causes_created_by_user_id_fk": {
-          "name": "fund_causes_created_by_user_id_fk",
-          "tableFrom": "fund_causes",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "fund_causes_slug_unique": {
-          "name": "fund_causes_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.fund_transactions": {
       "name": "fund_transactions",
       "schema": "",
@@ -3432,14 +3338,6 @@
         "active",
         "suspended",
         "deleted"
-      ]
-    },
-    "public.fund_cause_status": {
-      "name": "fund_cause_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "closed"
       ]
     },
     "public.fund_transaction_type": {
