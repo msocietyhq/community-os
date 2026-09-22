@@ -87,7 +87,15 @@ jobs:
                 --arg author "${{ github.event.pull_request.user.login }}" \
                 '{repoFullName: $repo, prNumber: $pr, prAuthorGithubLogin: $author}')")"
           database_url="$(jq -r '.databaseUrl' <<< "$response")"
-          echo "::add-mask::$database_url"
+          # Deliberately not masked: GitHub Actions silently drops a job
+          # output whose value was passed through `::add-mask::` ("Skip
+          # output ... since it may contain secret"), which is precisely
+          # how this was broken before — the caller's `migrate` job saw an
+          # empty DATABASE_URL despite `ensure` succeeding. Masking and
+          # exporting a value as an output are mutually exclusive in
+          # Actions; ADR-011 already accepts this value's exposure (scoped
+          # to one 30-day branch, already visible in this PR's own Railway
+          # environment variables regardless), so unmasked is correct here.
           echo "database_url=$database_url" >> "$GITHUB_OUTPUT"
 
   teardown:
