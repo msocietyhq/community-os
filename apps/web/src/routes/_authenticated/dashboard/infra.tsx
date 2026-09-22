@@ -5,6 +5,13 @@ import { z } from "zod";
 import type { UpsertProjectInfraConfigInput } from "@community-os/shared/validators";
 import { api } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../../../components/ui/dialog";
 
 const infraSearchSchema = z.object({
   projectId: z.string().uuid().optional().catch(undefined),
@@ -200,6 +207,10 @@ function ProjectInfraSections({
   return (
     <div className="space-y-6">
       <InfraConfigSection projectId={projectId} canManage={canManageInfra} />
+      <EnvironmentOverridesSection
+        projectId={projectId}
+        canManage={canManageInfra}
+      />
       <PrPreviewEnvironmentsSection
         projectId={projectId}
         canManage={canManageInfra}
@@ -565,6 +576,329 @@ function InfraConfigSection({
             : "Link a Neon project and a Railway project + service + source environment to fully automate PR previews."}
         </p>
       )}
+    </div>
+  );
+}
+
+interface SharedSecretSummary {
+  id: string;
+  key: string;
+  description: string | null;
+  rotatedAt: string | Date | null;
+  createdAt: string | Date | null;
+}
+
+function EnvironmentOverridesSection({
+  projectId,
+  canManage,
+}: {
+  projectId: string;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [overrideKey, setOverrideKey] = useState<string | null>(null);
+  const [overrideValue, setOverrideValue] = useState("");
+  const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
+
+  const configQuery = useQuery({
+    queryKey: ["project-infra-config", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"].get();
+      if (res.error) throw new Error("Failed to fetch infra config");
+      return res.data;
+    },
+  });
+  const config = configQuery.data?.config ?? null;
+  const railwayLinked = Boolean(
+    config?.railwayProjectId &&
+      config?.railwayServiceId &&
+      config?.railwaySourceEnvironmentId,
+  );
+
+  const variablesQuery = useQuery({
+    queryKey: ["railway-variable-names", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1
+        .projects({ id: projectId })
+        ["infra-config"]["railway-variables"].get();
+      if (res.error) throw new Error("Failed to fetch variable names");
+      return res.data;
+    },
+    enabled: railwayLinked,
+  });
+
+  const secretsQuery = useQuery({
+    queryKey: ["shared-secrets", projectId],
+    queryFn: async () => {
+      const res = await api.api.v1["shared-secrets"].get({
+        query: { projectId },
+      });
+      if (res.error) throw new Error("Failed to fetch shared secrets");
+      return res.data;
+    },
+  });
+
+  const invalidateSecrets = () =>
+    queryClient.invalidateQueries({ queryKey: ["shared-secrets", projectId] });
+
+  const createMutation = useMutation({
+    mutationFn: async (input: { key: string; value: string }) => {
+      const res = await api.api.v1["shared-secrets"].post({
+        projectId,
+        key: input.key,
+        value: input.value,
+      });
+      if (res.error) throw new Error("Failed to create override");
+      return res.data;
+    },
+    onSuccess: () => {
+      closeOverrideDialog();
+      invalidateSecrets();
+    },
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: async (input: { id: string; value: string }) => {
+      const res = await api.api.v1["shared-secrets"]({
+        id: input.id,
+      }).rotate.post({ value: input.value });
+      if (res.error) throw new Error("Failed to update override");
+      return res.data;
+    },
+    onSuccess: () => {
+      closeOverrideDialog();
+      invalidateSecrets();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.api.v1["shared-secrets"]({ id }).delete();
+      if (res.error) throw new Error("Failed to remove override");
+      return res.data;
+    },
+    onSuccess: () => {
+      setConfirmRemoveKey(null);
+      invalidateSecrets();
+    },
+  });
+
+  const closeOverrideDialog = () => {
+    setOverrideKey(null);
+    setOverrideValue("");
+  };
+
+  if (!canManage) return null;
+
+  const secrets: SharedSecretSummary[] = secretsQuery.data?.secrets ?? [];
+  const secretByKey = new Map(secrets.map((s) => [s.key, s]));
+  const variableNames = variablesQuery.data?.variableNames ?? [];
+  // Union: production's own keys, plus any override that doesn't correspond
+  // to an existing production variable (a platform-only addition).
+  const allKeys = Array.from(
+    new Set([...variableNames, ...secrets.map((s) => s.key)]),
+  ).sort();
+
+  const editingExisting = overrideKey ? secretByKey.get(overrideKey) : null;
+
+  return (
+    <div className="bg-card rounded-xl border shadow-sm p-5">
+      <h2 className="text-sm font-semibold text-foreground">
+        Environment Variable Overrides
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Every PR preview clones its variables from the linked Railway source
+        environment. Override a key here to have this platform manage it instead
+        — pushed into every PR preview, taking priority over whatever Railway
+        would otherwise clone. Values are never shown once saved.
+      </p>
+
+      {!railwayLinked ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Link a Railway project, service, and source environment above to
+          manage variable overrides.
+        </p>
+      ) : variablesQuery.isLoading || secretsQuery.isLoading ? (
+        <div className="mt-4 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading...</span>
+        </div>
+      ) : allKeys.length === 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          The linked source environment has no variables yet.
+        </p>
+      ) : (
+        <div className="mt-4 divide-y divide-border">
+          {allKeys.map((key) => {
+            const isDatabaseUrl = key === "DATABASE_URL";
+            const secret = secretByKey.get(key);
+            const isOverridden = Boolean(secret);
+            const inProduction = variableNames.includes(key);
+
+            return (
+              <div
+                key={key}
+                className="flex items-center justify-between gap-3 py-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground font-mono truncate">
+                      {key}
+                    </span>
+                    {isDatabaseUrl ? (
+                      <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-500">
+                        Auto-generated per PR
+                      </span>
+                    ) : isOverridden ? (
+                      <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500">
+                        Platform override
+                      </span>
+                    ) : (
+                      <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                        Cloned from Railway
+                      </span>
+                    )}
+                    {!inProduction && !isDatabaseUrl && (
+                      <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                        Not in Railway
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {!isDatabaseUrl && (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {confirmRemoveKey === key ? (
+                      <>
+                        <span className="text-xs text-muted-foreground">
+                          Remove?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            secret && deleteMutation.mutate(secret.id)
+                          }
+                          disabled={deleteMutation.isPending}
+                          className="px-2.5 py-1 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                        >
+                          {deleteMutation.isPending ? "..." : "Yes"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemoveKey(null)}
+                          className="px-2.5 py-1 text-xs font-medium rounded-md border text-foreground hover:bg-accent transition-colors"
+                        >
+                          No
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOverrideKey(key);
+                            setOverrideValue("");
+                          }}
+                          className="px-2.5 py-1 text-xs font-medium rounded-md border text-foreground hover:bg-accent transition-colors"
+                        >
+                          {isOverridden ? "Rotate" : "Override"}
+                        </button>
+                        {isOverridden && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmRemoveKey(key)}
+                            className="px-2.5 py-1 text-xs font-medium rounded-md border text-foreground hover:bg-accent transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Dialog
+        open={overrideKey !== null}
+        onOpenChange={(open) => !open && closeOverrideDialog()}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingExisting ? "Rotate" : "Override"} {overrideKey}
+            </DialogTitle>
+            <DialogDescription>
+              This value is pushed into every PR preview environment for this
+              project, replacing whatever Railway would otherwise clone for this
+              key.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!overrideKey) return;
+              if (editingExisting) {
+                rotateMutation.mutate({
+                  id: editingExisting.id,
+                  value: overrideValue,
+                });
+              } else {
+                createMutation.mutate({
+                  key: overrideKey,
+                  value: overrideValue,
+                });
+              }
+            }}
+            className="px-6 pb-6 space-y-4"
+          >
+            <div>
+              <label
+                htmlFor="override-value"
+                className="text-sm font-medium text-foreground"
+              >
+                Value
+              </label>
+              <input
+                id="override-value"
+                type="text"
+                value={overrideValue}
+                onChange={(e) => setOverrideValue(e.target.value)}
+                placeholder="New value"
+                autoComplete="off"
+                className="mt-1 w-full px-3 py-2 text-sm bg-card border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring transition-colors text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeOverrideDialog}
+                className="px-4 py-2 text-sm font-medium rounded-lg border bg-card text-foreground hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  !overrideValue ||
+                  createMutation.isPending ||
+                  rotateMutation.isPending
+                }
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {createMutation.isPending || rotateMutation.isPending
+                  ? "Saving..."
+                  : "Save"}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -129,4 +129,31 @@ export const projectInfraService = {
     }
     return railwayClient.listEnvironments(config.railwayProjectId);
   },
+
+  /**
+   * Variable *names* the linked source environment already has — never
+   * values (see `railwayClient.listVariableNames`). Lets an admin see what
+   * a PR preview will inherit from the clone, to decide which keys to
+   * override via a shared secret instead of leaving them as Railway's own.
+   * Requires project + service + source environment all linked already.
+   */
+  async listRailwayVariableNames(projectId: string) {
+    const config = await getRow(projectId);
+    if (
+      !config?.railwayProjectId ||
+      !config.railwayServiceId ||
+      !config.railwaySourceEnvironmentId
+    ) {
+      throw new AppError(
+        400,
+        "RAILWAY_NOT_FULLY_LINKED",
+        "Link a Railway project, service, and source environment first",
+      );
+    }
+    return railwayClient.listVariableNames({
+      projectId: config.railwayProjectId,
+      environmentId: config.railwaySourceEnvironmentId,
+      serviceId: config.railwayServiceId,
+    });
+  },
 };

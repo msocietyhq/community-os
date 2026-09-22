@@ -172,6 +172,24 @@ export const projectInfraRoutes = new Elysia({
     },
   )
   .get(
+    "/railway-variables",
+    async ({ params: { id } }) => ({
+      variableNames: await projectInfraService.listRailwayVariableNames(id),
+    }),
+    {
+      auth: true,
+      beforeHandle: checkPermissionOn("update", ({ params, user }) =>
+        resolveProjectInfraSubject(params.id, user.id),
+      ),
+      params: projectIdParams,
+      detail: {
+        tags: ["Project Infra"],
+        summary:
+          "Variable names (never values) the linked source environment already has — to decide which to override via a shared secret",
+      },
+    },
+  )
+  .get(
     "/usage",
     async ({ params: { id }, query }) => ({
       environments: await usageService.getUsageSummary(id, query.sinceDays),

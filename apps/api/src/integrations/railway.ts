@@ -180,6 +180,32 @@ export const railwayClient = {
     );
   },
 
+  /**
+   * Names only — never values. Used so an admin can see which keys an
+   * environment already has (to decide which ones the platform should
+   * take over vs. leave as whatever Railway clones) without this API ever
+   * displaying, storing, or logging a live production secret's value.
+   * Railway's `variables` query returns a name→value map; the values are
+   * discarded the moment this function reads them and never leave it.
+   */
+  async listVariableNames(input: {
+    projectId: string;
+    environmentId: string;
+    serviceId: string;
+  }): Promise<string[]> {
+    const data = await railwayRequest<{ variables: Record<string, string> }>(
+      `query Variables($projectId: String!, $environmentId: String!, $serviceId: String) {
+        variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId)
+      }`,
+      {
+        projectId: input.projectId,
+        environmentId: input.environmentId,
+        serviceId: input.serviceId,
+      },
+    );
+    return Object.keys(data.variables);
+  },
+
   /** Deploys the service's latest image/build into the given environment — call once all variables are set. */
   async deployService(input: {
     serviceId: string;
