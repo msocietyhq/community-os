@@ -28,6 +28,18 @@ function requireApiKey(): string {
   return env.NEON_API_KEY;
 }
 
+/** Carries the HTTP status and raw body so callers can react to a specific Neon error code (e.g. `BRANCH_ALREADY_EXISTS`) instead of string-matching a formatted message. */
+export class NeonApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "NeonApiError";
+  }
+}
+
 async function neonRequest<T>(apiPath: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${NEON_API_BASE}${apiPath}`, {
     ...init,
@@ -39,7 +51,9 @@ async function neonRequest<T>(apiPath: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(
+    throw new NeonApiError(
+      res.status,
+      body,
       `Neon API ${init?.method ?? "GET"} ${apiPath} failed: ${res.status} ${body}`,
     );
   }
@@ -60,6 +74,9 @@ interface NeonProjectResponse {
 }
 interface NeonBranchResponse {
   branch: { id: string };
+}
+interface NeonBranchListResponse {
+  branches: Array<{ id: string; name: string }>;
 }
 interface NeonDatabasesResponse {
   databases: Array<{ name: string }>;
@@ -127,43 +144,66 @@ export const neonClient = {
   /**
    * Forks `branchName` off the project's default branch with a read-write
    * compute endpoint, and returns a ready-to-use pooled connection string.
+   *
+   * If a branch with this name already exists (a prior `ensure` attempt
+   * forked it but failed on a later step — migrations, Railway — before
+   * that attempt's own `dev_environments` row was persisted), reuses it
+   * instead of erroring forever: there's no local record to short-circuit
+   * on, but the orphaned branch still blocks re-creation.
    */
   async createBranch(
     neonProjectId: string,
     branchName: string,
   ): Promise<NeonBranchResult> {
-    const { branch } = await neonRequest<NeonBranchResponse>(
-      `/projects/${neonProjectId}/branches`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          branch: { name: branchName },
-          endpoints: [{ type: "read_write" }],
-        }),
-      },
-    );
+    let branchId: string;
+    try {
+      const { branch } = await neonRequest<NeonBranchResponse>(
+        `/projects/${neonProjectId}/branches`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            branch: { name: branchName },
+            endpoints: [{ type: "read_write" }],
+          }),
+        },
+      );
+      branchId = branch.id;
+    } catch (err) {
+      const isAlreadyExists =
+        err instanceof NeonApiError &&
+        err.status === 409 &&
+        err.body.includes("BRANCH_ALREADY_EXISTS");
+      if (!isAlreadyExists) throw err;
+
+      const { branches } = await neonRequest<NeonBranchListResponse>(
+        `/projects/${neonProjectId}/branches`,
+      );
+      const existing = branches.find((b) => b.name === branchName);
+      if (!existing) throw err;
+      branchId = existing.id;
+    }
 
     const [{ databases }, { roles }] = await Promise.all([
       neonRequest<NeonDatabasesResponse>(
-        `/projects/${neonProjectId}/branches/${branch.id}/databases`,
+        `/projects/${neonProjectId}/branches/${branchId}/databases`,
       ),
       neonRequest<NeonRolesResponse>(
-        `/projects/${neonProjectId}/branches/${branch.id}/roles`,
+        `/projects/${neonProjectId}/branches/${branchId}/roles`,
       ),
     ]);
     const database = databases[0]?.name;
     const role = roles[0]?.name;
     if (!database || !role) {
       throw new Error(
-        `Neon branch ${branch.id} has no database/role to build a connection string from`,
+        `Neon branch ${branchId} has no database/role to build a connection string from`,
       );
     }
 
     const { uri } = await neonRequest<NeonConnectionUriResponse>(
-      `/projects/${neonProjectId}/connection_uri?branch_id=${branch.id}&database_name=${encodeURIComponent(database)}&role_name=${encodeURIComponent(role)}&pooled=true`,
+      `/projects/${neonProjectId}/connection_uri?branch_id=${branchId}&database_name=${encodeURIComponent(database)}&role_name=${encodeURIComponent(role)}&pooled=true`,
     );
 
-    return { branchId: branch.id, databaseUrl: uri };
+    return { branchId, databaseUrl: uri };
   },
 
   /** Idempotent-ish from the caller's side: deleting an already-gone branch 404s, which callers should treat as success. */
