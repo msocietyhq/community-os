@@ -287,23 +287,28 @@ export const devEnvironmentRoutes = new Elysia({
       const project = await projectsService.findByRepoFullName(
         input.repoFullName,
       );
-      const environment = await devEnvironmentsService.ensurePreviewEnvironment(
-        {
+      const { environment, databaseUrl } =
+        await devEnvironmentsService.ensurePreviewEnvironment({
           projectId: project.id,
           prNumber: input.prNumber,
           prAuthorGithubLogin: input.prAuthorGithubLogin,
-        },
-      );
-      return { environmentId: environment.id };
+        });
+      return { environmentId: environment.id, databaseUrl };
     },
     {
       // Deliberately not `auth: true` — GitHub Actions has no Better Auth
-      // session; the org-wide CI_SERVICE_TOKEN is the credential.
+      // session; the org-wide CI_SERVICE_TOKEN is the credential. The
+      // response's `databaseUrl` is a live credential too, scoped to just
+      // this one ephemeral 30-day PR branch (see ADR-011) — a much
+      // narrower blast radius than the account-wide NEON_API_KEY /
+      // RAILWAY_API_TOKEN this whole design keeps out of every repo, and
+      // no more exposed than the same value already sitting in this PR's
+      // own Railway environment variables.
       body: "devEnvironment.ci.ensure",
       detail: {
         tags: ["Dev Environments"],
         summary:
-          "CI-only: find-or-create the PR preview environment for a repo+PR (issue #52)",
+          "CI-only: find-or-create the PR preview environment for a repo+PR, returning its DATABASE_URL for the caller to migrate itself (issue #52)",
       },
     },
   )

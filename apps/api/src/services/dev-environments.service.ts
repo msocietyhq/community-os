@@ -8,7 +8,7 @@ import {
   sharedSecrets,
 } from "../db/schema";
 import { env } from "../env";
-import { neonClient, runMigrationsOn } from "../integrations/neon";
+import { neonClient } from "../integrations/neon";
 import { railwayClient } from "../integrations/railway";
 import { decrypt, encrypt } from "../lib/crypto";
 import { AppError } from "../lib/errors";
@@ -271,17 +271,24 @@ export const devEnvironmentsService = {
    * Finds-or-creates the PR preview environment for (projectId, prNumber),
    * so it's safe to call on every `ci/ensure` (every PR open/push): a
    * still-active environment is returned as-is, with no new Neon branch.
-   * A missing or torn-down one gets a fresh branch, freshly migrated, and —
-   * when the project has a Railway service linked too — a matching Railway
-   * PR environment provisioned and deployed with the full var bundle
-   * (DATABASE_URL plus every shared secret). See ADR-009: this is what lets
-   * a maintainer never touch Neon or Railway's own dashboards for this.
+   * A missing or torn-down one gets a fresh branch and — when the project
+   * has a Railway service linked too — a matching Railway PR environment
+   * provisioned and deployed with the full var bundle (DATABASE_URL plus
+   * every shared secret). See ADR-009: this is what lets a maintainer
+   * never touch Neon or Railway's own dashboards for this.
+   *
+   * Deliberately does NOT run migrations against the branch — see
+   * ADR-011. `databaseUrl` is returned so the calling repo's own CI can
+   * run its own migration tooling against it if the PR needs to.
    */
   async ensurePreviewEnvironment(input: {
     projectId: string;
     prNumber: number;
     prAuthorGithubLogin?: string;
-  }) {
+  }): Promise<{
+    environment: typeof devEnvironments.$inferSelect;
+    databaseUrl: string;
+  }> {
     const [existing] = await db
       .select()
       .from(devEnvironments)
@@ -295,7 +302,21 @@ export const devEnvironmentsService = {
       .orderBy(desc(devEnvironments.createdAt))
       .limit(1);
 
-    if (existing) return existing;
+    if (existing) {
+      const { vars } = await devEnvironmentsService.reveal(
+        existing.id,
+        existing.ownerId,
+        { viaCiEnsure: true },
+      );
+      if (!vars.DATABASE_URL) {
+        throw new AppError(
+          500,
+          "MISSING_DATABASE_URL",
+          "Active preview environment has no stored DATABASE_URL",
+        );
+      }
+      return { environment: existing, databaseUrl: vars.DATABASE_URL };
+    }
 
     const [infraConfig] = await db
       .select()
@@ -317,7 +338,6 @@ export const devEnvironmentsService = {
       infraConfig.neonProjectId,
       branchName,
     );
-    await runMigrationsOn(databaseUrl);
 
     const environment = await devEnvironmentsService.create({
       projectId: input.projectId,
@@ -376,7 +396,7 @@ export const devEnvironmentsService = {
       .where(eq(devEnvironments.id, environment.id))
       .returning();
 
-    return updated ?? environment;
+    return { environment: updated ?? environment, databaseUrl };
   },
 
   /** Deletes the PR's Neon branch and Railway environment (if any), and revokes its environment. A no-op if none exists. */
