@@ -28,6 +28,21 @@ function requireApiKey(): string {
   return env.NEON_API_KEY;
 }
 
+/**
+ * A PR preview branch's safety-net TTL: 30 days is Neon's own documented
+ * maximum expiration horizon (`expires_at` can't be set further out than
+ * that), so it's also the longest this can protect against an orphaned
+ * branch outliving a PR that never triggered `ci/teardown` — a workflow
+ * removed from a caller repo, a rotated CI token, teardown itself failing.
+ * The normal path is still `teardownPreviewEnvironment` deleting the branch
+ * immediately when the PR closes; this only bounds the worst case.
+ */
+function thirtyDaysFromNow(): string {
+  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .replace(/\.\d+Z$/, "Z");
+}
+
 /** Carries the HTTP status and raw body so callers can react to a specific Neon error code (e.g. `BRANCH_ALREADY_EXISTS`) instead of string-matching a formatted message. */
 export class NeonApiError extends Error {
   constructor(
@@ -162,7 +177,7 @@ export const neonClient = {
         {
           method: "POST",
           body: JSON.stringify({
-            branch: { name: branchName },
+            branch: { name: branchName, expires_at: thirtyDaysFromNow() },
             endpoints: [{ type: "read_write" }],
           }),
         },
@@ -181,6 +196,23 @@ export const neonClient = {
       const existing = branches.find((b) => b.name === branchName);
       if (!existing) throw err;
       branchId = existing.id;
+
+      // Reusing a branch orphaned by an earlier failed attempt — push its
+      // TTL back out rather than leaving whatever expiry it was created
+      // with, since this PR is evidently still active.
+      try {
+        await neonRequest(`/projects/${neonProjectId}/branches/${branchId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            branch: { expires_at: thirtyDaysFromNow() },
+          }),
+        });
+      } catch (patchErr) {
+        console.warn(
+          `Failed to refresh expiry on reused Neon branch ${branchId}:`,
+          patchErr,
+        );
+      }
     }
 
     const [{ databases }, { roles }] = await Promise.all([
