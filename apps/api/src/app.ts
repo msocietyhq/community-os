@@ -27,7 +27,7 @@ function extractValidationDetails(error: Error): string {
 }
 
 export const app = new Elysia()
-  .onError(({ code, error, set }) => {
+  .onError(({ code, error, set, request }) => {
     if (error instanceof AppError) {
       set.status = error.statusCode;
       return {
@@ -65,7 +65,13 @@ export const app = new Elysia()
       };
     }
 
-    // Fallback 500 — no stack traces in production
+    // Fallback 500 — the response stays sanitized, but this is the only
+    // branch without a known code, so log it or the real cause never
+    // surfaces anywhere.
+    console.error(
+      `[unhandled-error] ${request.method} ${new URL(request.url).pathname}:`,
+      error,
+    );
     set.status = 500;
     return {
       error: {
