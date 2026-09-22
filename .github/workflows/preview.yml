@@ -73,30 +73,34 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     outputs:
-      database_url: ${{ steps.ensure.outputs.database_url }}
+      database_url: ${{ steps.extract.outputs.database_url }}
     steps:
+      # Split from the extraction step below on purpose: GitHub Actions
+      # refuses to set a job/step output ("Skip output ... since it may
+      # contain secret") from any step whose script references `secrets.*`
+      # at all, regardless of the output value's actual content — it isn't
+      # about the value being masked (removing an `::add-mask::` call here
+      # didn't help; this step never had one and still tripped it). Writing
+      # the response to a file, then reading it back in a step with no
+      # `secrets.` reference of its own, avoids that block entirely.
       - name: Ensure PR preview environment
-        id: ensure
         run: |
-          response="$(curl --fail-with-body -sS -X POST "${{ inputs.api_url }}/api/v1/dev-environments/ci/ensure" \
+          curl --fail-with-body -sS -X POST "${{ inputs.api_url }}/api/v1/dev-environments/ci/ensure" \
             -H "Content-Type: application/json" \
             -H "X-CI-Service-Token: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}" \
             -d "$(jq -n \
                 --arg repo "${{ github.repository }}" \
                 --argjson pr ${{ github.event.pull_request.number }} \
                 --arg author "${{ github.event.pull_request.user.login }}" \
-                '{repoFullName: $repo, prNumber: $pr, prAuthorGithubLogin: $author}')")"
-          database_url="$(jq -r '.databaseUrl' <<< "$response")"
-          # Deliberately not masked: GitHub Actions silently drops a job
-          # output whose value was passed through `::add-mask::` ("Skip
-          # output ... since it may contain secret"), which is precisely
-          # how this was broken before — the caller's `migrate` job saw an
-          # empty DATABASE_URL despite `ensure` succeeding. Masking and
-          # exporting a value as an output are mutually exclusive in
-          # Actions; ADR-011 already accepts this value's exposure (scoped
-          # to one 30-day branch, already visible in this PR's own Railway
-          # environment variables regardless), so unmasked is correct here.
+                '{repoFullName: $repo, prNumber: $pr, prAuthorGithubLogin: $author}')" \
+            -o /tmp/preview-ensure-response.json
+
+      - name: Extract database_url
+        id: extract
+        run: |
+          database_url="$(jq -r '.databaseUrl' /tmp/preview-ensure-response.json)"
           echo "database_url=$database_url" >> "$GITHUB_OUTPUT"
+          rm -f /tmp/preview-ensure-response.json
 
   teardown:
     if: github.event.action == 'closed'
