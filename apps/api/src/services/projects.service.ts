@@ -331,33 +331,6 @@ export const projectsService = {
     return owners.map((o) => o.userId);
   },
 
-  /**
-   * Resolves a GitHub `owner/repo` string to its endorsed project — the
-   * lookup the reusable CI workflow uses (issue #52). Only endorsed
-   * projects get PR preview environments.
-   */
-  async findByRepoFullName(repoFullName: string) {
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(
-        and(
-          isNull(projects.deletedAt),
-          eq(projects.isEndorsed, true),
-          sql`${projects.repoUrl} ILIKE ${`%${repoFullName}`}`,
-        ),
-      );
-
-    if (!project) {
-      throw new AppError(
-        404,
-        "PROJECT_NOT_FOUND",
-        `No endorsed project found for repo ${repoFullName}`,
-      );
-    }
-    return project;
-  },
-
   /** This user's project_members.role for `projectId`, or "none" if they aren't a member. */
   async getMemberRole(
     projectId: string,

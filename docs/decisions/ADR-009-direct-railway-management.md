@@ -1,6 +1,6 @@
 # ADR-009: Manage Railway PR Environments Directly, Not Via Self-Configure
 
-**Status**: accepted
+**Status**: superseded by ADR-012 — PR preview provisioning was scrapped entirely. Kept as historical record.
 **Date**: 2026-09-21
 **Deciders**: Aziz
 

@@ -4,21 +4,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(1),
   API_URL: z.string().url(),
-  // Must be a Railway WORKSPACE token, not a project token — project tokens
-  // are scoped to one existing environment and can't manage the PR
-  // environments this API creates directly. See ADR-009.
-  RAILWAY_API_TOKEN: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_ZONE_ID: z.string().optional(),
-  // This platform's own Neon account key. See ADR-008/009.
-  NEON_API_KEY: z.string().optional(),
-  // Required by Neon's consumption-metrics endpoints (ADR-010's usage/cost
-  // foundation) — find it at console.neon.tech under your org's settings.
-  NEON_ORG_ID: z.string().optional(),
-  // Shared by every endorsed-project repo's reusable preview.yml workflow
-  // (issue #52) — one org-wide credential, not per-repo, so a new project
-  // needs zero GitHub secrets of its own to get PR preview databases.
-  CI_SERVICE_TOKEN: z.string().optional(),
   // 32-byte AES-256-GCM key, hex-encoded (64 chars). Generate with
   // `openssl rand -hex 32`. Encrypts secrets generated during infra
   // provisioning (DB connection strings, deploy tokens) at rest.

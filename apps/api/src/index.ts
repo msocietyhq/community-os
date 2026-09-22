@@ -8,10 +8,6 @@ import { calibrateRecall } from "./services/recall-calibration";
 import { aiProfileService } from "./services/ai-profile.service";
 import { backfillMemories } from "./services/memory-backfill.service";
 import { unusableTiers } from "./services/ai.service";
-import {
-  startUsageScheduler,
-  stopUsageScheduler,
-} from "./services/usage-scheduler";
 import { env } from "./env";
 
 app.listen(env.PORT);
@@ -78,11 +74,8 @@ unusableTiers()
   })
   .catch((err) => console.error("[ai] tier check failed:", err));
 
-startUsageScheduler();
-
 const shutdown = async () => {
   console.log("Shutting down...");
-  stopUsageScheduler();
   await shutdownBot();
   app.stop();
   process.exit(0);

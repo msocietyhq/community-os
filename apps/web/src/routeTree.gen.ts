@@ -21,7 +21,6 @@ import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedDashboardSearchRouteImport } from './routes/_authenticated/dashboard/search'
 import { Route as AuthenticatedDashboardProjectsRouteImport } from './routes/_authenticated/dashboard/projects'
 import { Route as AuthenticatedDashboardMembersRouteImport } from './routes/_authenticated/dashboard/members'
-import { Route as AuthenticatedDashboardInfraRouteImport } from './routes/_authenticated/dashboard/infra'
 import { Route as AuthenticatedDashboardFundsRouteImport } from './routes/_authenticated/dashboard/funds'
 import { Route as AuthenticatedDashboardEventsRouteImport } from './routes/_authenticated/dashboard/events'
 
@@ -88,12 +87,6 @@ const AuthenticatedDashboardMembersRoute =
     path: '/dashboard/members',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedDashboardInfraRoute =
-  AuthenticatedDashboardInfraRouteImport.update({
-    id: '/dashboard/infra',
-    path: '/dashboard/infra',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedDashboardFundsRoute =
   AuthenticatedDashboardFundsRouteImport.update({
     id: '/dashboard/funds',
@@ -117,7 +110,6 @@ export interface FileRoutesByFullPath {
   '/projects/': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
-  '/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
   '/dashboard/members': typeof AuthenticatedDashboardMembersRoute
   '/dashboard/projects': typeof AuthenticatedDashboardProjectsRoute
   '/dashboard/search': typeof AuthenticatedDashboardSearchRoute
@@ -133,7 +125,6 @@ export interface FileRoutesByTo {
   '/projects': typeof ProjectsIndexRoute
   '/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
-  '/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
   '/dashboard/members': typeof AuthenticatedDashboardMembersRoute
   '/dashboard/projects': typeof AuthenticatedDashboardProjectsRoute
   '/dashboard/search': typeof AuthenticatedDashboardSearchRoute
@@ -151,7 +142,6 @@ export interface FileRoutesById {
   '/projects/': typeof ProjectsIndexRoute
   '/_authenticated/dashboard/events': typeof AuthenticatedDashboardEventsRoute
   '/_authenticated/dashboard/funds': typeof AuthenticatedDashboardFundsRoute
-  '/_authenticated/dashboard/infra': typeof AuthenticatedDashboardInfraRoute
   '/_authenticated/dashboard/members': typeof AuthenticatedDashboardMembersRoute
   '/_authenticated/dashboard/projects': typeof AuthenticatedDashboardProjectsRoute
   '/_authenticated/dashboard/search': typeof AuthenticatedDashboardSearchRoute
@@ -169,7 +159,6 @@ export interface FileRouteTypes {
     | '/projects/'
     | '/dashboard/events'
     | '/dashboard/funds'
-    | '/dashboard/infra'
     | '/dashboard/members'
     | '/dashboard/projects'
     | '/dashboard/search'
@@ -185,7 +174,6 @@ export interface FileRouteTypes {
     | '/projects'
     | '/dashboard/events'
     | '/dashboard/funds'
-    | '/dashboard/infra'
     | '/dashboard/members'
     | '/dashboard/projects'
     | '/dashboard/search'
@@ -202,7 +190,6 @@ export interface FileRouteTypes {
     | '/projects/'
     | '/_authenticated/dashboard/events'
     | '/_authenticated/dashboard/funds'
-    | '/_authenticated/dashboard/infra'
     | '/_authenticated/dashboard/members'
     | '/_authenticated/dashboard/projects'
     | '/_authenticated/dashboard/search'
@@ -306,13 +293,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardMembersRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/dashboard/infra': {
-      id: '/_authenticated/dashboard/infra'
-      path: '/dashboard/infra'
-      fullPath: '/dashboard/infra'
-      preLoaderRoute: typeof AuthenticatedDashboardInfraRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/dashboard/funds': {
       id: '/_authenticated/dashboard/funds'
       path: '/dashboard/funds'
@@ -333,7 +313,6 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedDashboardEventsRoute: typeof AuthenticatedDashboardEventsRoute
   AuthenticatedDashboardFundsRoute: typeof AuthenticatedDashboardFundsRoute
-  AuthenticatedDashboardInfraRoute: typeof AuthenticatedDashboardInfraRoute
   AuthenticatedDashboardMembersRoute: typeof AuthenticatedDashboardMembersRoute
   AuthenticatedDashboardProjectsRoute: typeof AuthenticatedDashboardProjectsRoute
   AuthenticatedDashboardSearchRoute: typeof AuthenticatedDashboardSearchRoute
@@ -343,7 +322,6 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardEventsRoute: AuthenticatedDashboardEventsRoute,
   AuthenticatedDashboardFundsRoute: AuthenticatedDashboardFundsRoute,
-  AuthenticatedDashboardInfraRoute: AuthenticatedDashboardInfraRoute,
   AuthenticatedDashboardMembersRoute: AuthenticatedDashboardMembersRoute,
   AuthenticatedDashboardProjectsRoute: AuthenticatedDashboardProjectsRoute,
   AuthenticatedDashboardSearchRoute: AuthenticatedDashboardSearchRoute,

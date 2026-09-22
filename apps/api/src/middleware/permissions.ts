@@ -6,7 +6,6 @@ import type {
   ProjectSubject,
   DevEnvironmentSubject,
   SharedSecretSubject,
-  ProjectInfraConfigSubject,
 } from "@community-os/shared";
 
 /**
@@ -42,8 +41,7 @@ type SubjectInstance =
   | MemberSubject
   | ProjectSubject
   | DevEnvironmentSubject
-  | SharedSecretSubject
-  | ProjectInfraConfigSubject;
+  | SharedSecretSubject;
 
 /**
  * Instance-level permission guard with ownership check. Fetches the resource

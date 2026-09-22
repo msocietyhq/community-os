@@ -27,11 +27,6 @@ export interface DevEnvironmentSubject extends ForcedSubject<"DevEnvironment"> {
 export interface SharedSecretSubject extends ForcedSubject<"SharedSecret"> {
   projectRole: ProjectMemberRole | "none";
 }
-/** Project infra config + its bootstrap tokens share one subject/role shape (issue #52). */
-export interface ProjectInfraConfigSubject
-  extends ForcedSubject<"ProjectInfraConfig"> {
-  projectRole: ProjectMemberRole | "none";
-}
 
 export type Subjects =
   | "Event"
@@ -44,8 +39,6 @@ export type Subjects =
   | DevEnvironmentSubject
   | "SharedSecret"
   | SharedSecretSubject
-  | "ProjectInfraConfig"
-  | ProjectInfraConfigSubject
   | "Venue"
   | "Dataset"
   | "Fund"
@@ -116,7 +109,6 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     // Dev environments & shared secrets — full control of any project's
     can("manage", "DevEnvironment");
     can("manage", "SharedSecret");
-    can("manage", "ProjectInfraConfig");
     // Funds
     can("read", "Fund");
     can("create", "Fund");
@@ -157,12 +149,6 @@ export function defineAbilityFor(user: { id: string; role: Role }) {
     });
     can("read", "SharedSecret", { projectRole: { $ne: "none" } });
     can("manage", "SharedSecret", {
-      projectRole: { $in: ["owner", "maintainer"] },
-    });
-    // Project infra config (which Neon/Railway project backs PR previews)
-    // and its bootstrap tokens — maintainer+ only, same as shared secrets.
-    can("read", "ProjectInfraConfig", { projectRole: { $ne: "none" } });
-    can("manage", "ProjectInfraConfig", {
       projectRole: { $in: ["owner", "maintainer"] },
     });
   }

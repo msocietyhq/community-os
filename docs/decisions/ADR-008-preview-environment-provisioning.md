@@ -1,6 +1,6 @@
 # ADR-008: Centralized PR Preview Environment Provisioning
 
-**Status**: accepted — the project-bootstrap-token/preflight design below (Railway self-configuring itself at boot) is **superseded by ADR-009**, which manages Railway directly via its API instead. Everything else here (Neon branch provisioning, the `CI_SERVICE_TOKEN`/`ci/ensure`/`ci/teardown` split, `dev_environments.owner_id` resolution, `project_infra_configs`) still stands.
+**Status**: superseded by ADR-012 — PR preview provisioning (this ADR and ADR-009/010/011) was scrapped entirely. The project-bootstrap-token/preflight design below was already superseded by ADR-009 before that; kept as historical record of the reasoning at each step.
 **Date**: 2026-09-21
 **Deciders**: Aziz
 
