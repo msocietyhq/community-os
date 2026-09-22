@@ -4,12 +4,14 @@
 // project's `neonProjectId` (a non-secret identifier, stored in
 // `project_infra_configs`) are needed to fork/delete a branch. Branch
 // forking copies the parent branch's schema and data, so a fresh branch is
-// already usable; migrations only need re-running when the PR itself adds
-// ones not yet on the parent (see `runMigrations`).
-import path from "node:path";
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
-import postgres from "postgres";
+// already usable as-is.
+//
+// This API does NOT run migrations against the forked branch — see
+// ADR-011. It only knows its own migration files, so doing so was either a
+// no-op (a schema-less PR) or, for any project other than community-os
+// itself, silently applying the wrong project's schema. The connection
+// string this returns is handed back to the calling repo's own CI, which
+// has the PR's checkout and its own migration tooling.
 import { env } from "../env";
 
 const NEON_API_BASE = "https://console.neon.tech/api/v2";
@@ -300,20 +302,3 @@ export const neonClient = {
     );
   },
 };
-
-const migrationsFolder = path.resolve(import.meta.dir, "../../drizzle");
-
-/**
- * Applies this repo's own Drizzle migrations against a freshly forked
- * branch. Needed when the PR that triggered provisioning adds migrations
- * that haven't landed on the parent branch yet — a branch fork alone only
- * copies what's already there.
- */
-export async function runMigrationsOn(databaseUrl: string): Promise<void> {
-  const client = postgres(databaseUrl, { max: 1 });
-  try {
-    await migrate(drizzle(client), { migrationsFolder });
-  } finally {
-    await client.end();
-  }
-}
