@@ -35,7 +35,7 @@
 #         COMMUNITY_OS_CI_TOKEN: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}
 #     migrate:
 #       needs: preview
-#       if: github.event.action != 'closed'
+#       if: success() && github.event.action != 'closed'
 #       runs-on: ubuntu-latest
 #       steps:
 #         - uses: actions/checkout@v4

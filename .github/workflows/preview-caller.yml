@@ -22,7 +22,10 @@ jobs:
 
   migrate:
     needs: preview
-    if: github.event.action != 'closed'
+    # A custom `if:` replaces the default implicit "needs succeeded" check,
+    # not add to it — without `success()` here, this would still run (with
+    # an empty DATABASE_URL) after `preview` itself failed.
+    if: success() && github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
