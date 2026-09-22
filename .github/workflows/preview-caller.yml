@@ -1,0 +1,16 @@
+# community-os is itself an endorsed project, so it uses its own reusable
+# workflow the same way any other project repo would (see preview.yml's
+# header comment for the copy-pasteable version other repos use). Calling it
+# by relative path — rather than `owner/repo/.github/workflows/...@ref` —
+# picks up whatever's on this same commit, not a separately-tagged release.
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  preview:
+    uses: ./.github/workflows/preview.yml
+    secrets:
+      COMMUNITY_OS_CI_TOKEN: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}

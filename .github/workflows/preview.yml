@@ -1,0 +1,69 @@
+# Reusable PR-preview workflow (issue #52 / ADR-008 / ADR-009).
+#
+# Hosted once, here. A new MSOCIETY-endorsed project's repo needs none of
+# NEON_API_KEY / RAILWAY_API_TOKEN or any per-project identifier as its own
+# secrets — all live server-side, once, in community-os's own API, along
+# with the Neon/Railway project this project's maintainers linked via the
+# infra-config admin UI. The only thing a caller repo needs is this ~5-line
+# workflow (COMMUNITY_OS_CI_TOKEN is one org-level secret, inherited by
+# every current and future repo — nothing to set up per repo):
+#
+#   name: Preview
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened, closed]
+#   jobs:
+#     preview:
+#       uses: msocietyhq/community-os/.github/workflows/preview.yml@main
+#       secrets:
+#         COMMUNITY_OS_CI_TOKEN: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}
+#
+# This workflow just tells community-os's API to ensure/tear down a PR
+# preview — the API does everything else itself: forking the Neon branch,
+# and (when the project has a Railway project/service/source-environment
+# linked) creating the Railway environment, pushing every variable, and
+# triggering the deploy, all via its own Neon/Railway API credentials. No
+# Railway dashboard step, no app-side self-configure step — see ADR-009.
+name: Preview Provisioning
+
+on:
+  workflow_call:
+    inputs:
+      api_url:
+        description: "community-os API base URL"
+        required: false
+        type: string
+        default: "https://api.msociety.dev"
+    secrets:
+      COMMUNITY_OS_CI_TOKEN:
+        required: true
+
+jobs:
+  ensure:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure PR preview environment
+        run: |
+          curl --fail-with-body -sS -X POST "${{ inputs.api_url }}/api/v1/dev-environments/ci/ensure" \
+            -H "Content-Type: application/json" \
+            -H "X-CI-Service-Token: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}" \
+            -d "$(jq -n \
+                --arg repo "${{ github.repository }}" \
+                --argjson pr ${{ github.event.pull_request.number }} \
+                --arg author "${{ github.event.pull_request.user.login }}" \
+                '{repoFullName: $repo, prNumber: $pr, prAuthorGithubLogin: $author}')"
+
+  teardown:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tear down PR preview environment
+        run: |
+          curl --fail-with-body -sS -X POST "${{ inputs.api_url }}/api/v1/dev-environments/ci/teardown" \
+            -H "Content-Type: application/json" \
+            -H "X-CI-Service-Token: ${{ secrets.COMMUNITY_OS_CI_TOKEN }}" \
+            -d "$(jq -n \
+                --arg repo "${{ github.repository }}" \
+                --argjson pr ${{ github.event.pull_request.number }} \
+                '{repoFullName: $repo, prNumber: $pr}')"
