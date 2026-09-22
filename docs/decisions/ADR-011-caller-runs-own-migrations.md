@@ -1,6 +1,6 @@
 # ADR-011: The Calling Repo Runs Its Own Migrations, Not This API
 
-**Status**: accepted
+**Status**: superseded by ADR-012 — PR preview provisioning was scrapped entirely before this ADR's own approach was fully working. Kept as historical record.
 **Date**: 2026-09-22
 **Deciders**: Aziz
 

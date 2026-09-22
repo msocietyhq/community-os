@@ -5,8 +5,6 @@ export * from "./events";
 export * from "./projects";
 export * from "./infra";
 export * from "./dev-environments";
-export * from "./project-infra";
-export * from "./usage";
 export * from "./funds";
 export * from "./reputation";
 export * from "./audit";

@@ -1,6 +1,6 @@
 # ADR-010: Usage and Cost Tracing Foundations for PR Previews
 
-**Status**: accepted
+**Status**: superseded by ADR-012 — PR preview provisioning was scrapped entirely, taking this foundation's only consumer with it. Kept as historical record.
 **Date**: 2026-09-21
 **Deciders**: Aziz
 

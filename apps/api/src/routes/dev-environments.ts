@@ -1,11 +1,6 @@
-import type {
-  CiPreviewEnvironmentInput,
-  CreateDevEnvironmentInput,
-} from "@community-os/shared/validators";
+import type { CreateDevEnvironmentInput } from "@community-os/shared/validators";
 import { Elysia } from "elysia";
 import { z } from "zod";
-import { env } from "../env";
-import { safeCompare } from "../lib/crypto";
 import { AppError } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
 import { checkPermission, checkPermissionOn } from "../middleware/permissions";
@@ -13,25 +8,6 @@ import { agentKeysService } from "../services/agent-keys.service";
 import { devEnvironmentsService } from "../services/dev-environments.service";
 import { projectsService } from "../services/projects.service";
 import { devEnvironmentModel } from "./models/dev-environment";
-
-/**
- * Gates the CI-only ensure/teardown routes: one org-wide credential (not a
- * Better Auth session — GitHub Actions has none), inherited by every
- * endorsed project's reusable workflow. See issue #52.
- */
-function requireCiServiceToken(headers: Record<string, string | undefined>) {
-  const token = headers["x-ci-service-token"];
-  if (!token) {
-    throw new AppError(
-      401,
-      "MISSING_CI_TOKEN",
-      "X-CI-Service-Token header required",
-    );
-  }
-  if (!env.CI_SERVICE_TOKEN || !safeCompare(token, env.CI_SERVICE_TOKEN)) {
-    throw new AppError(401, "INVALID_CI_TOKEN", "Invalid CI service token");
-  }
-}
 
 const idParams = z.object({ id: z.string().min(1) });
 const envKeyParams = z.object({
@@ -276,62 +252,6 @@ export const devEnvironmentRoutes = new Elysia({
       detail: {
         tags: ["Dev Environments"],
         summary: "Redeem an agent key for its environment's env var bundle",
-      },
-    },
-  )
-  .post(
-    "/ci/ensure",
-    async ({ headers, body }) => {
-      requireCiServiceToken(headers);
-      const input = body as CiPreviewEnvironmentInput;
-      const project = await projectsService.findByRepoFullName(
-        input.repoFullName,
-      );
-      const { environment, databaseUrl } =
-        await devEnvironmentsService.ensurePreviewEnvironment({
-          projectId: project.id,
-          prNumber: input.prNumber,
-          prAuthorGithubLogin: input.prAuthorGithubLogin,
-        });
-      return { environmentId: environment.id, databaseUrl };
-    },
-    {
-      // Deliberately not `auth: true` — GitHub Actions has no Better Auth
-      // session; the org-wide CI_SERVICE_TOKEN is the credential. The
-      // response's `databaseUrl` is a live credential too, scoped to just
-      // this one ephemeral 30-day PR branch (see ADR-011) — a much
-      // narrower blast radius than the account-wide NEON_API_KEY /
-      // RAILWAY_API_TOKEN this whole design keeps out of every repo, and
-      // no more exposed than the same value already sitting in this PR's
-      // own Railway environment variables.
-      body: "devEnvironment.ci.ensure",
-      detail: {
-        tags: ["Dev Environments"],
-        summary:
-          "CI-only: find-or-create the PR preview environment for a repo+PR, returning its DATABASE_URL for the caller to migrate itself (issue #52)",
-      },
-    },
-  )
-  .post(
-    "/ci/teardown",
-    async ({ headers, body }) => {
-      requireCiServiceToken(headers);
-      const input = body as CiPreviewEnvironmentInput;
-      const project = await projectsService.findByRepoFullName(
-        input.repoFullName,
-      );
-      await devEnvironmentsService.teardownPreviewEnvironment({
-        projectId: project.id,
-        prNumber: input.prNumber,
-      });
-      return { message: "Preview environment torn down" };
-    },
-    {
-      body: "devEnvironment.ci.teardown",
-      detail: {
-        tags: ["Dev Environments"],
-        summary:
-          "CI-only: tear down the PR preview environment's Neon branch and Railway environment (issue #52)",
       },
     },
   );
