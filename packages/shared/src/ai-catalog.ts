@@ -71,6 +71,16 @@ const OPENAI_REASONING = {
 };
 
 export const AI_CATALOG = {
+  "anthropic/haiku-5-5": model({
+    provider: "anthropic",
+    modelId: "claude-haiku-5-5",
+    label: "Haiku 5.5",
+    pricing: { input: 1.0, output: 5.0 },
+    cache: ANTHROPIC_CACHE,
+    cacheControl: ANTHROPIC_CACHE_CONTROL,
+    reasoning: ANTHROPIC_REASONING,
+    envKey: "ANTHROPIC_API_KEY",
+  }),
   "anthropic/haiku-4-5": model({
     provider: "anthropic",
     modelId: "claude-haiku-4-5",
